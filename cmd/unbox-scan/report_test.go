@@ -113,6 +113,18 @@ func TestReportTextZeroTotalSitesDoesNotClaimSuccess(t *testing.T) {
 	}
 }
 
+// 当两个 kind 的计数相等时，"按类型"块的顺序必须由 kind 名决定，而不是
+// 退化为 map 的随机迭代序——否则同一份输入两次运行会得到不同的输出顺序。
+func TestTextKindOrderDeterministicOnTies(t *testing.T) {
+	r := Report{ByKind: map[string]int{"cms": 1, "js": 1, "jar": 1, "http": 1}, TotalSites: 4}
+	want := r.Text()
+	for i := 0; i < 200; i++ {
+		if got := r.Text(); got != want {
+			t.Fatalf("第 %d 次渲染输出不一致：\n--- 首次 ---\n%s\n--- 本次 ---\n%s", i, want, got)
+		}
+	}
+}
+
 // 更一般地：整份报告全为零值时（既没有配置也没有站点也没有直播），
 // Text() 不能读起来像是体检成功但结果恰好全是 0。
 func TestReportTextAllZeroDoesNotClaimSuccess(t *testing.T) {

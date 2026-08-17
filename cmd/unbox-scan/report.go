@@ -75,7 +75,12 @@ func (r Report) Text() string {
 		for k := range r.ByKind {
 			kinds = append(kinds, k)
 		}
-		sort.Slice(kinds, func(i, j int) bool { return r.ByKind[kinds[i]] > r.ByKind[kinds[j]] })
+		sort.Slice(kinds, func(i, j int) bool {
+			if r.ByKind[kinds[i]] != r.ByKind[kinds[j]] {
+				return r.ByKind[kinds[i]] > r.ByKind[kinds[j]]
+			}
+			return kinds[i] < kinds[j]
+		})
 		b.WriteString("按类型\n")
 		for _, k := range kinds {
 			fmt.Fprintf(&b, "  %-8s %d\n", k, r.ByKind[k])

@@ -174,6 +174,12 @@ func TestResolvePartialFailureAggregatesErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("部分子节点失败时应返回汇总错误，实际 err 为 nil")
 	}
+	// 与姊妹测试 TestResolveAllChildrenFailReturnsError 保持同等强度：
+	// 不仅要求 err 非 nil，还要求错误文本确实点名了失败的那个 ref，
+	// 而不是随便什么错误都能让这条断言通过。
+	if !strings.Contains(err.Error(), srv.URL+"/bad") {
+		t.Errorf("汇总错误应包含 /bad 的失败信息，实际: %v", err)
+	}
 	total := 0
 	for _, c := range cfgs {
 		total += len(c.Sites)
@@ -387,6 +393,14 @@ func TestResolvePureCyclicIndexWithoutTerminalIsError(t *testing.T) {
 // 被直接跳过，x 的子节点 leaf（本应在 depth2 可达）永远不会被展开，
 // 断言会看到站点数为 0。用深度感知的 seen，浅路径应当重新展开 x，
 // leaf 在 depth2 被访问到（未超过 MaxDepth=3），站点数应为 1。
+//
+// 这个结构恰好也是"超深度分支绕过 seen/cache，对实际已成功的 ref 产生
+// 虚假深度错误"那个回归的复现场景：root->a->b->x->leaf 这条深路径会先
+// 在 depth4 把 leaf 判为超深（若实现有回归，会立即报错），而
+// root->x->leaf 这条浅路径随后会在 depth2 成功展开并收集 leaf。因此这里
+// 不能只在站点数不对时把 err 打印出来看看——必须显式断言 err == nil，
+// 否则"leaf 其实展开成功了，但 err 里却挂着一条关于它的虚假超深错误"
+// 这种情况会被放过。
 func TestResolveDiamondReachesShallowerLeaf(t *testing.T) {
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
@@ -415,12 +429,79 @@ func TestResolveDiamondReachesShallowerLeaf(t *testing.T) {
 	}
 
 	cfgs, err := r.Resolve(context.Background(), srv.URL+"/root")
+	if err != nil {
+		t.Errorf("leaf 经浅路径成功展开，err 应为 nil（不应有针对它的虚假深度错误），实际: %v", err)
+	}
 	total := 0
 	for _, c := range cfgs {
 		total += len(c.Sites)
 	}
 	if total != 1 {
 		t.Errorf("leaf 应当经由 root->x 这条更浅的路径被展开到，实际站点数 %d（err=%v）", total, err)
+	}
+}
+
+// TestResolveNoFalseDepthErrorWhenRefSucceedsViaAnotherPath 是"超深度分支
+// 绕过 seen/cache、对实际已成功的 ref 产生虚假深度错误"这个回归的专项
+// 回归测试，与 TestResolveDiamondReachesShallowerLeaf 的差异点在于：这里
+// 让同一个 ref（leaf）被两条彼此独立的超深路径同时拒绝（而不是一条），
+// 用来同时验证"去重"这件事——无论 leaf 被拒绝多少次，只要它最终经由
+// 另一条预算内路径成功过，就不应该出现任何深度相关的错误，而不是出现
+// 一条、两条或者更多条重复的虚假错误。
+//
+// 结构：
+//
+//	root --urls--> a1 --> b1 --> c1 --> leaf   (depth4，第一次超深拒绝)
+//	root --urls--> a2 --> b2 --> c2 --> leaf   (depth4，第二次超深拒绝，同一个 leaf)
+//	root --urls--> x  --> leaf                 (depth2，预算内，成功展开并收集)
+func TestResolveNoFalseDepthErrorWhenRefSucceedsViaAnotherPath(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/a1","name":"a1"},{"url":"%s/a2","name":"a2"},{"url":"%s/x","name":"x"}]}`, srv.URL, srv.URL, srv.URL)
+	})
+	mux.HandleFunc("/a1", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/b1","name":"b1"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/b1", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/c1","name":"c1"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/c1", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/leaf","name":"leaf"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/a2", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/b2","name":"b2"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/b2", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/c2","name":"c2"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/c2", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/leaf","name":"leaf"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/x", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/leaf","name":"leaf"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/leaf", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"sites":[{"key":"a","name":"站点A","type":1,"api":"http://x/api"}]}`)
+	})
+
+	r := NewResolver()
+	if r.MaxDepth != 3 {
+		t.Fatalf("本测试假定 NewResolver().MaxDepth == 3，实际 %d，请相应调整测试", r.MaxDepth)
+	}
+
+	cfgs, err := r.Resolve(context.Background(), srv.URL+"/root")
+	if err != nil {
+		t.Errorf("leaf 经 x 这条预算内路径成功展开，即便另外两条路径都因超深被拒绝过，err 也应为 nil，实际: %v", err)
+	}
+	total := 0
+	for _, c := range cfgs {
+		total += len(c.Sites)
+	}
+	if total != 1 {
+		t.Errorf("leaf 应当被展开且只收集一次，实际站点数 %d", total)
 	}
 }
 

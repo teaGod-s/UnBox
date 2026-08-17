@@ -51,13 +51,34 @@ func NewResolver() *Resolver {
 // 的分支上“成功但什么都没有”——例如 urls 条目全部为空字符串、或者一条
 // 从头到尾没有任何终端配置的纯环形索引链。这类情形不应该被当作
 // “成功 0 个配置”悄悄放过，这里统一兜底成一个具名错误。
+//
+// 深度超限的错误延迟到这里统一生成（而不是在 walk 里发现即报），原因
+// 见 walk 中 depthRejected 的说明：同一个 ref 完全可能同时存在至少一条
+// 预算内路径（真正展开成功）和至少一条超深度路径（在到达前就被拒绝），
+// 只有等整棵树都走完、seen 的最终状态确定下来之后，才能判断某个曾被
+// 深度拒绝过的 ref 是不是"实际上已经从别的路径成功过"——如果是，这条
+// 深度错误就是针对一个已成功节点的误报，不应该出现在汇总错误里。
 func (r *Resolver) Resolve(ctx context.Context, ref string) ([]*Config, error) {
 	seen := make(map[string]int)
 	cache := make(map[string]*fetchResult)
 	collected := make(map[string]bool)
+	depthRejected := make(map[string]bool)
 	var out []*Config
 	var errs []error
-	r.walk(ctx, ref, 0, seen, cache, collected, &out, &errs)
+	r.walk(ctx, ref, 0, seen, cache, collected, depthRejected, &out, &errs)
+
+	// 只为那些从未（经由任何路径）成功进入过 walk 主体的 ref 生成深度
+	// 超限错误。seen 在 walk 里是"通过了深度检查、真正开始处理这个 ref"
+	// 时才写入的（见 walk），因此 seen 中不存在某个 ref 就意味着它在
+	// 这次 Resolve 里没有任何一条路径真正到达过它——那才是真正意义上的
+	// "超出深度上限、彻底无法展开"。depthRejected 用集合去重，同一个
+	// ref 无论被多少条超深路径拒绝过，这里也只产生一条错误。
+	for rejectedRef := range depthRejected {
+		if _, ok := seen[rejectedRef]; !ok {
+			errs = append(errs, fmt.Errorf("超出最大展开深度 %d: %s", r.MaxDepth, rejectedRef))
+		}
+	}
+
 	aggErr := errors.Join(errs...)
 	if len(out) == 0 && aggErr == nil {
 		aggErr = fmt.Errorf("展开 %s 未产生任何可用配置", ref)
@@ -86,6 +107,8 @@ func (r *Resolver) fetchAndParse(ctx context.Context, ref string) *fetchResult {
 
 // walk 展开单个节点。失败不会中断兄弟节点的展开：每个失败节点的错误会
 // 被追加到 errs，由调用方（Resolve）统一汇总，而不是丢弃或提前返回。
+// 例外是深度超限——这类错误不在这里直接追加，见下方 depthRejected 的
+// 说明与 Resolve 里的统一生成逻辑。
 //
 // seen 记录每个 ref 已知的最小到达深度（而不是简单的“是否访问过”布尔
 // 值）。多仓聚合场景中，同一个配置 URL 完全可能同时被浅、深两条不同
@@ -97,15 +120,29 @@ func (r *Resolver) fetchAndParse(ctx context.Context, ref string) *fetchResult {
 // 更深的深度重复到达则跳过。深度是非负整数且每次重新展开都严格变浅，
 // 所以不会退化成无限递归。
 //
+// seen[ref] 的写入时机很关键：只要通过了深度检查、走到这一行，就说明
+// 这个 ref 这次是"真正开始处理"（无论后续 fetch/parse 是否成功），因此
+// seen 中存在某个 ref 可以准确表示"该 ref 至少有一条路径成功进入过
+// walk 主体"，这也是 Resolve 里过滤 depthRejected 时使用的判据。
+//
+// depthRejected 只记录"曾经因为深度超限而被拒绝、连 fetch 都没有尝试"
+// 的 ref 本身，不在这里就地生成错误。原因：同一个 ref 完全可能同时存在
+// 至少一条超深路径（会命中这里的深度检查）和至少一条预算内路径（会
+// 正常进入主体并成功展开、收集）——如果哪条路径先被走到是不确定的
+// （取决于 storeHouse/urls 数组顺序），在这里立即报错会对一个实际上已
+// 经成功展开的 ref 产生一条虚假的"超出最大展开深度"错误。是否真的要
+// 报这个错误，只有等整棵树都走完之后，看这个 ref 最终有没有任何一条
+// 路径进入过 seen 才能确定，因此推迟到 Resolve 里统一处理。
+//
 // cache 与 collected 用于处理"重新展开"带来的副作用：重新展开不代表
 // 要重新拉取（cache 让同一个 ref 只实际 Fetch/Parse 一次），也不代表
 // 要把同一个终端配置再收集一次（collected 保证每个 ref 只 append 进
 // out 一次）。cache/collected 都不影响是否继续下潜展开子节点——子节点
 // 的递归展开仍然无条件地在每次 walk 调用里发生，用的是这次调用实际
 // 拿到的深度预算。
-func (r *Resolver) walk(ctx context.Context, ref string, depth int, seen map[string]int, cache map[string]*fetchResult, collected map[string]bool, out *[]*Config, errs *[]error) {
+func (r *Resolver) walk(ctx context.Context, ref string, depth int, seen map[string]int, cache map[string]*fetchResult, collected map[string]bool, depthRejected map[string]bool, out *[]*Config, errs *[]error) {
 	if depth > r.MaxDepth {
-		*errs = append(*errs, fmt.Errorf("超出最大展开深度 %d: %s", r.MaxDepth, ref))
+		depthRejected[ref] = true
 		return
 	}
 	if prevDepth, ok := seen[ref]; ok && prevDepth <= depth {
@@ -163,7 +200,7 @@ func (r *Resolver) walk(ctx context.Context, ref string, depth int, seen map[str
 			}
 			continue
 		}
-		r.walk(ctx, h.SourceURL, depth+1, seen, cache, collected, out, errs)
+		r.walk(ctx, h.SourceURL, depth+1, seen, cache, collected, depthRejected, out, errs)
 	}
 	for _, u := range cfg.URLs {
 		if u.URL == "" {
@@ -172,6 +209,6 @@ func (r *Resolver) walk(ctx context.Context, ref string, depth int, seen map[str
 			}
 			continue
 		}
-		r.walk(ctx, u.URL, depth+1, seen, cache, collected, out, errs)
+		r.walk(ctx, u.URL, depth+1, seen, cache, collected, depthRejected, out, errs)
 	}
 }

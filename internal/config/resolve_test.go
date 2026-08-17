@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -420,6 +421,68 @@ func TestResolveDiamondReachesShallowerLeaf(t *testing.T) {
 	}
 	if total != 1 {
 		t.Errorf("leaf 应当经由 root->x 这条更浅的路径被展开到，实际站点数 %d（err=%v）", total, err)
+	}
+}
+
+// TestResolveDiamondTerminalCollectedOnce 是深度感知 seen（Fix2）引入的
+// 回归的专项回归测试：菱形引用结构中，如果被浅、深两条路径都能到达的
+// 那个节点本身就是终端配置（而不是像 TestResolveDiamondReachesShallowerLeaf
+// 里那样只是转发到另一个终端 leaf），"以更浅深度重新展开"绝不能变成
+// "把同一份终端配置再收集一次"，也不能变成"把同一个 ref 再拉取一次"。
+//
+// 结构：
+//
+//	root --urls--> a --urls--> b --urls--> x（depth3，先经深路径到达，x 本身含 sites）
+//	root --urls-----------------------------> x（depth1，更浅，重新展开）
+//
+// x 没有 urls/storeHouse，是纯终端节点。断言两件事：
+//   - 最终站点总数恰好为 1（不是 2）——终端配置不能因为经多路径可达
+//     就被重复收集；
+//   - /x 这个 HTTP 端点恰好被命中 1 次——同一个 ref 在一次 Resolve
+//     里最多只应被实际 Fetch 一次，用原子计数器统计而不是仅凭最终
+//     结果推断，避免"先重复拉取、再在收集阶段去重"这种对慢速订阅源
+//     仍然浪费网络请求的实现蒙混过关。
+func TestResolveDiamondTerminalCollectedOnce(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	var xHits int64
+
+	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {
+		// 先深路径（root->a），再浅路径（root->x），与
+		// TestResolveDiamondReachesShallowerLeaf 保持同样的触发顺序。
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/a","name":"a"},{"url":"%s/x","name":"x"}]}`, srv.URL, srv.URL)
+	})
+	mux.HandleFunc("/a", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/b","name":"b"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/b", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/x","name":"x"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/x", func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&xHits, 1)
+		fmt.Fprint(w, `{"sites":[{"key":"X","name":"站点X","type":1,"api":"http://x/api"}]}`)
+	})
+
+	r := NewResolver()
+	if r.MaxDepth != 3 {
+		t.Fatalf("本测试假定 NewResolver().MaxDepth == 3，实际 %d，请相应调整测试", r.MaxDepth)
+	}
+
+	cfgs, err := r.Resolve(context.Background(), srv.URL+"/root")
+	if err != nil {
+		t.Fatalf("展开不应报错: %v", err)
+	}
+	total := 0
+	for _, c := range cfgs {
+		total += len(c.Sites)
+	}
+	if total != 1 {
+		t.Errorf("同一个终端 ref 经深、浅两条路径都可达时，只应被收集一次，实际站点数 %d", total)
+	}
+	if got := atomic.LoadInt64(&xHits); got != 1 {
+		t.Errorf("同一个终端 ref 在一次 Resolve 中最多只应被拉取一次，实际拉取 %d 次", got)
 	}
 }
 

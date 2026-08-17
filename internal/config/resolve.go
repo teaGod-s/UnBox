@@ -29,6 +29,16 @@ func NewResolver() *Resolver {
 // 深度上限与已访问集合共同防止仓库互相引用导致的无限递归；命中已访问集合
 // （环引用）是正常的终止条件，不计入错误。
 //
+// 多仓聚合场景中，同一个配置 URL 完全可能同时被浅、深两条不同路径引用
+// （菱形结构），因此同一个 ref 在一次 Resolve 里可能被 walk 访问多次
+// （一次深、一次更浅，见 seen 的说明）。为了不重复拉取、也不重复收集，
+// Resolve 内部维护了两份按 ref 索引的记录：一份是拉取+解析结果的缓存
+// （同一个 ref 只实际 Fetch 一次，后续重访直接复用缓存结果，无论成功还是
+// 失败）；一份是"是否已作为终端配置收集过"的标记（同一个 ref 只会被
+// append 进 out 一次，即便它经由多条路径都可达）。重访时仍然会用新的、
+// 更浅的深度预算去继续展开该节点的子节点——这是允许多路径重访的本意，
+// 只是不再重复拉取节点自身、也不再重复收集它作为终端配置的那一份。
+//
 // 采用“部分成功 + 汇总错误”语义：out 是已成功展开的全部终端配置——即便
 // 部分子节点失败，已经成功展开的部分也会照常返回；aggErr 是所有失败节点
 // 错误的汇总（errors.Join），没有任何失败时为 nil。
@@ -43,14 +53,35 @@ func NewResolver() *Resolver {
 // “成功 0 个配置”悄悄放过，这里统一兜底成一个具名错误。
 func (r *Resolver) Resolve(ctx context.Context, ref string) ([]*Config, error) {
 	seen := make(map[string]int)
+	cache := make(map[string]*fetchResult)
+	collected := make(map[string]bool)
 	var out []*Config
 	var errs []error
-	r.walk(ctx, ref, 0, seen, &out, &errs)
+	r.walk(ctx, ref, 0, seen, cache, collected, &out, &errs)
 	aggErr := errors.Join(errs...)
 	if len(out) == 0 && aggErr == nil {
 		aggErr = fmt.Errorf("展开 %s 未产生任何可用配置", ref)
 	}
 	return out, aggErr
+}
+
+// fetchResult 缓存单个 ref 的拉取+解析结果：cfg 与 err 恰好一个非零值。
+type fetchResult struct {
+	cfg *Config
+	err error
+}
+
+// fetchAndParse 拉取并解析单个 ref，不涉及递归展开。
+func (r *Resolver) fetchAndParse(ctx context.Context, ref string) *fetchResult {
+	raw, err := r.Fetcher.Fetch(ctx, ref)
+	if err != nil {
+		return &fetchResult{err: fmt.Errorf("拉取 %s: %w", ref, err)}
+	}
+	cfg, err := Parse(raw)
+	if err != nil {
+		return &fetchResult{err: fmt.Errorf("解析 %s: %w", ref, err)}
+	}
+	return &fetchResult{cfg: cfg}
 }
 
 // walk 展开单个节点。失败不会中断兄弟节点的展开：每个失败节点的错误会
@@ -65,7 +96,14 @@ func (r *Resolver) Resolve(ctx context.Context, ref string) ([]*Config, error) {
 // 值得重新展开（更浅意味着其子树在深度预算内有更大的空间）；以相同或
 // 更深的深度重复到达则跳过。深度是非负整数且每次重新展开都严格变浅，
 // 所以不会退化成无限递归。
-func (r *Resolver) walk(ctx context.Context, ref string, depth int, seen map[string]int, out *[]*Config, errs *[]error) {
+//
+// cache 与 collected 用于处理"重新展开"带来的副作用：重新展开不代表
+// 要重新拉取（cache 让同一个 ref 只实际 Fetch/Parse 一次），也不代表
+// 要把同一个终端配置再收集一次（collected 保证每个 ref 只 append 进
+// out 一次）。cache/collected 都不影响是否继续下潜展开子节点——子节点
+// 的递归展开仍然无条件地在每次 walk 调用里发生，用的是这次调用实际
+// 拿到的深度预算。
+func (r *Resolver) walk(ctx context.Context, ref string, depth int, seen map[string]int, cache map[string]*fetchResult, collected map[string]bool, out *[]*Config, errs *[]error) {
 	if depth > r.MaxDepth {
 		*errs = append(*errs, fmt.Errorf("超出最大展开深度 %d: %s", r.MaxDepth, ref))
 		return
@@ -78,16 +116,20 @@ func (r *Resolver) walk(ctx context.Context, ref string, depth int, seen map[str
 	}
 	seen[ref] = depth
 
-	raw, err := r.Fetcher.Fetch(ctx, ref)
-	if err != nil {
-		*errs = append(*errs, fmt.Errorf("拉取 %s: %w", ref, err))
+	res, cached := cache[ref]
+	if !cached {
+		res = r.fetchAndParse(ctx, ref)
+		cache[ref] = res
+		if res.err != nil {
+			*errs = append(*errs, res.err)
+		}
+	}
+	if res.err != nil {
+		// 拉取/解析失败此前已经（且只）在首次遇到该 ref 时记入 errs，
+		// 命中缓存的重访不重复报错。
 		return
 	}
-	cfg, err := Parse(raw)
-	if err != nil {
-		*errs = append(*errs, fmt.Errorf("解析 %s: %w", ref, err))
-		return
-	}
+	cfg := res.cfg
 
 	isTerminal := len(cfg.Sites) > 0 || len(cfg.Lives) > 0
 	isIndex := len(cfg.StoreHouse) > 0 || len(cfg.URLs) > 0
@@ -95,32 +137,41 @@ func (r *Resolver) walk(ctx context.Context, ref string, depth int, seen map[str
 	// 四个判定集合皆为空：既不是终端配置也不是索引，静默传播下去只会
 	// 让上游误以为该节点“成功但什么都没有”。其它字段（spider/wallpaper/
 	// logo/hosts 等）不参与判定——即便存在，也不能替代 sites/lives 等
-	// 四个集合表示“有可用内容”。
+	// 四个集合表示“有可用内容”。只在首次遇到该 ref 时记这条错误，
+	// 避免重访时重复计入。
 	if !isTerminal && !isIndex {
-		*errs = append(*errs, fmt.Errorf("配置无任何可用内容（sites/lives/storeHouse/urls 均为空）: %s", ref))
+		if !cached {
+			*errs = append(*errs, fmt.Errorf("配置无任何可用内容（sites/lives/storeHouse/urls 均为空）: %s", ref))
+		}
 		return
 	}
 
-	if isTerminal {
+	if isTerminal && !collected[ref] {
 		*out = append(*out, cfg)
+		collected[ref] = true
 	}
 
 	// 索引结构，继续展开。单个子节点失败不中断其余兄弟节点的展开，
 	// 失败会被记录进 errs 而不是丢弃。条目本身的 sourceUrl/url 为空
 	// 字符串同样是一种失败（不是可以悄悄略过的“空位”），一并记录进
-	// errs，错误信息带上父节点 ref 便于定位是哪个节点里的坏条目。
+	// errs，错误信息带上父节点 ref 便于定位是哪个节点里的坏条目；
+	// 这条错误同样只在首次遇到该 ref 时记录一次。
 	for _, h := range cfg.StoreHouse {
 		if h.SourceURL == "" {
-			*errs = append(*errs, fmt.Errorf("storeHouse 条目 sourceUrl 为空，父节点: %s", ref))
+			if !cached {
+				*errs = append(*errs, fmt.Errorf("storeHouse 条目 sourceUrl 为空，父节点: %s", ref))
+			}
 			continue
 		}
-		r.walk(ctx, h.SourceURL, depth+1, seen, out, errs)
+		r.walk(ctx, h.SourceURL, depth+1, seen, cache, collected, out, errs)
 	}
 	for _, u := range cfg.URLs {
 		if u.URL == "" {
-			*errs = append(*errs, fmt.Errorf("urls 条目 url 为空，父节点: %s", ref))
+			if !cached {
+				*errs = append(*errs, fmt.Errorf("urls 条目 url 为空，父节点: %s", ref))
+			}
 			continue
 		}
-		r.walk(ctx, u.URL, depth+1, seen, out, errs)
+		r.walk(ctx, u.URL, depth+1, seen, cache, collected, out, errs)
 	}
 }

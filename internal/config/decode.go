@@ -8,6 +8,13 @@ import (
 	"io"
 )
 
+const (
+	// 防止深层嵌套编码导致栈溢出。实测样本最多嵌套 2–3 层。
+	maxDecodeDepth = 8
+	// 防止 gzip 炸弹。实测最大样本解码后 85 KB。
+	maxDecodedSize = 64 << 20 // 64 MB
+)
+
 // Decode 探测并剥离配置的加密/压缩层，返回明文字节。
 //
 // TVBox 生态的配置不携带任何加密方式标识，因此只能按特征逐一探测：
@@ -16,6 +23,14 @@ import (
 //   3. 裸 base64
 //   4. 明文
 func Decode(raw []byte) ([]byte, error) {
+	return decode(raw, 0)
+}
+
+func decode(raw []byte, depth int) ([]byte, error) {
+	if depth > maxDecodeDepth {
+		return nil, fmt.Errorf("编码嵌套超过最大深度 %d", maxDecodeDepth)
+	}
+
 	raw = bytes.TrimSpace(bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF}))
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("配置内容为空")
@@ -28,11 +43,15 @@ func Decode(raw []byte) ([]byte, error) {
 			return nil, fmt.Errorf("gzip 解压失败: %w", err)
 		}
 		defer r.Close()
-		out, err := io.ReadAll(r)
+		lr := io.LimitReader(r, maxDecodedSize+1)
+		out, err := io.ReadAll(lr)
 		if err != nil {
 			return nil, fmt.Errorf("gzip 读取失败: %w", err)
 		}
-		return Decode(out) // 解压后可能仍是 base64
+		if len(out) > maxDecodedSize {
+			return nil, fmt.Errorf("解码后内容超过 %d 字节限制", maxDecodedSize)
+		}
+		return decode(out, depth+1) // 解压后可能仍是 base64
 	}
 
 	// 2. 明文（已是 JSON）
@@ -43,13 +62,13 @@ func Decode(raw []byte) ([]byte, error) {
 	// 3. "<前缀>**<base64>"
 	if i := bytes.Index(raw, []byte("**")); i >= 0 && i < 64 {
 		if out, ok := tryBase64(raw[i+2:]); ok {
-			return Decode(out)
+			return decode(out, depth+1)
 		}
 	}
 
 	// 4. 裸 base64
 	if out, ok := tryBase64(raw); ok {
-		return Decode(out)
+		return decode(out, depth+1)
 	}
 
 	return nil, fmt.Errorf("无法识别的配置编码，前 32 字节: %q", raw[:min(32, len(raw))])

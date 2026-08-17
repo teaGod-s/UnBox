@@ -70,3 +70,66 @@ func TestDecodeRealSample(t *testing.T) {
 		t.Errorf("解码后未见 sites 字段")
 	}
 }
+
+// 测试深层嵌套 gzip 超过限制会返回错误而不是栈溢出
+func TestDecodeNestedGzipDepthLimit(t *testing.T) {
+	payload := []byte(`{"sites":[]}`)
+	// 嵌套 10 层 gzip（超过 maxDecodeDepth=8 的限制）
+	for i := 0; i < 10; i++ {
+		var buf bytes.Buffer
+		w := gzip.NewWriter(&buf)
+		w.Write(payload)
+		w.Close()
+		payload = buf.Bytes()
+	}
+	out, err := Decode(payload)
+	if err == nil {
+		t.Errorf("深层嵌套应当返回错误，但成功解码: %s", out)
+	}
+	// 验证错误信息中包含深度限制
+	if !bytes.Contains([]byte(err.Error()), []byte("深度")) {
+		t.Errorf("错误信息应当提及深度限制: %v", err)
+	}
+}
+
+// 测试 gzip 炸弹（压缩炸弹）会返回错误而不是耗尽内存
+func TestDecodeGzipBomb(t *testing.T) {
+	// 创建压缩炸弹：少量压缩数据解压到超过 maxDecodedSize 的大小
+	// gzip 对重复字节压缩效率极高，所以用少量零字节即可
+	var buf bytes.Buffer
+	w := gzip.NewWriter(&buf)
+	// 写入足以解压超过 64 MB 的压缩数据
+	// gzip 可以将 1 MB 的零压缩到几 KB，所以写 100 MB 的零会压缩到更小
+	zeroBlock := make([]byte, 100*1024*1024) // 100 MB of zeros
+	w.Write(zeroBlock)
+	w.Close()
+
+	out, err := Decode(buf.Bytes())
+	if err == nil {
+		t.Errorf("gzip 炸弹应当返回错误，但成功解码 %d 字节", len(out))
+	}
+	// 验证错误信息中包含大小限制
+	if !bytes.Contains([]byte(err.Error()), []byte("限制")) {
+		t.Errorf("错误信息应当提及大小限制: %v", err)
+	}
+}
+
+// 测试合法的嵌套编码（gzip 包装 base64 包装 JSON）仍能正常工作
+func TestDecodeLegitimateNesting(t *testing.T) {
+	payload := []byte(`{"sites":[]}`)
+	// 1. base64 编码
+	b64 := base64.StdEncoding.EncodeToString(payload)
+	// 2. gzip 压缩 base64 字符串
+	var buf bytes.Buffer
+	w := gzip.NewWriter(&buf)
+	w.Write([]byte(b64))
+	w.Close()
+	// 3. 解码应该能处理：gzip -> base64 -> JSON
+	out, err := Decode(buf.Bytes())
+	if err != nil {
+		t.Fatalf("合法嵌套编码应当解码成功: %v", err)
+	}
+	if !bytes.Contains(out, []byte("sites")) {
+		t.Errorf("解码结果不含预期内容: %s", out)
+	}
+}

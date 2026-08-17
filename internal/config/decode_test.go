@@ -95,13 +95,17 @@ func TestDecodeNestedGzipDepthLimit(t *testing.T) {
 // 测试 gzip 炸弹（压缩炸弹）会返回错误而不是耗尽内存
 func TestDecodeGzipBomb(t *testing.T) {
 	// 创建压缩炸弹：少量压缩数据解压到超过 maxDecodedSize 的大小
-	// gzip 对重复字节压缩效率极高，所以用少量零字节即可
+	// gzip 对重复字节压缩效率极高，所以用零字节循环写入即可
+	// 避免一次性分配 100 MB，改为分块写入（32 KB 块 × 3200 次 = 100 MB）
 	var buf bytes.Buffer
 	w := gzip.NewWriter(&buf)
-	// 写入足以解压超过 64 MB 的压缩数据
-	// gzip 可以将 1 MB 的零压缩到几 KB，所以写 100 MB 的零会压缩到更小
-	zeroBlock := make([]byte, 100*1024*1024) // 100 MB of zeros
-	w.Write(zeroBlock)
+	// 32 KB 的零字节块
+	chunk := bytes.Repeat([]byte{0}, 32*1024)
+	// 写入足以解压超过 64 MB 的数据（3200 × 32 KB = 100 MB）
+	// gzip 压缩效率约 1000:1，所以 100 MB 会压缩到 ~100 KB
+	for i := 0; i < 3200; i++ {
+		w.Write(chunk)
+	}
 	w.Close()
 
 	out, err := Decode(buf.Bytes())

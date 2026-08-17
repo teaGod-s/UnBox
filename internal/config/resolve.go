@@ -35,26 +35,48 @@ func NewResolver() *Resolver {
 //
 // 重要：out 非空时也可能同时返回非 nil 的 aggErr（不会因为已有部分成功
 // 就把失败吞掉），调用方需自行决定如何处理二者并存的情况。
+//
+// 兜底：整个展开过程走完后，若既没有任何终端配置（out 为空）、也没有
+// 任何单点错误被记录（aggErr 为 nil），说明这次展开在某个此前未预料到
+// 的分支上“成功但什么都没有”——例如 urls 条目全部为空字符串、或者一条
+// 从头到尾没有任何终端配置的纯环形索引链。这类情形不应该被当作
+// “成功 0 个配置”悄悄放过，这里统一兜底成一个具名错误。
 func (r *Resolver) Resolve(ctx context.Context, ref string) ([]*Config, error) {
-	seen := make(map[string]bool)
+	seen := make(map[string]int)
 	var out []*Config
 	var errs []error
 	r.walk(ctx, ref, 0, seen, &out, &errs)
-	return out, errors.Join(errs...)
+	aggErr := errors.Join(errs...)
+	if len(out) == 0 && aggErr == nil {
+		aggErr = fmt.Errorf("展开 %s 未产生任何可用配置", ref)
+	}
+	return out, aggErr
 }
 
 // walk 展开单个节点。失败不会中断兄弟节点的展开：每个失败节点的错误会
 // 被追加到 errs，由调用方（Resolve）统一汇总，而不是丢弃或提前返回。
-func (r *Resolver) walk(ctx context.Context, ref string, depth int, seen map[string]bool, out *[]*Config, errs *[]error) {
+//
+// seen 记录每个 ref 已知的最小到达深度（而不是简单的“是否访问过”布尔
+// 值）。多仓聚合场景中，同一个配置 URL 完全可能同时被浅、深两条不同
+// 路径引用（菱形结构），若用布尔集合，DFS 遍历顺序会决定哪条路径先
+// “占住” seen：一旦更深的路径先到，浅路径本可达的子树就会被误判为
+// “已访问”而永久跳过——展开结果因此依赖遍历顺序，是错误的。
+// 这里改为记录最小深度：只有以严格更浅的深度重新到达同一个 ref 时才
+// 值得重新展开（更浅意味着其子树在深度预算内有更大的空间）；以相同或
+// 更深的深度重复到达则跳过。深度是非负整数且每次重新展开都严格变浅，
+// 所以不会退化成无限递归。
+func (r *Resolver) walk(ctx context.Context, ref string, depth int, seen map[string]int, out *[]*Config, errs *[]error) {
 	if depth > r.MaxDepth {
 		*errs = append(*errs, fmt.Errorf("超出最大展开深度 %d: %s", r.MaxDepth, ref))
 		return
 	}
-	if seen[ref] {
-		// 环引用，正常终止条件，不算失败。
+	if prevDepth, ok := seen[ref]; ok && prevDepth <= depth {
+		// 已经以相同或更浅的深度展开过，不会有新的可展开空间。
+		// 若这是一个环引用（严格意义上的重复路径），这里也是它的
+		// 正常终止点，不算失败。
 		return
 	}
-	seen[ref] = true
+	seen[ref] = depth
 
 	raw, err := r.Fetcher.Fetch(ctx, ref)
 	if err != nil {
@@ -84,15 +106,21 @@ func (r *Resolver) walk(ctx context.Context, ref string, depth int, seen map[str
 	}
 
 	// 索引结构，继续展开。单个子节点失败不中断其余兄弟节点的展开，
-	// 失败会被记录进 errs 而不是丢弃。
+	// 失败会被记录进 errs 而不是丢弃。条目本身的 sourceUrl/url 为空
+	// 字符串同样是一种失败（不是可以悄悄略过的“空位”），一并记录进
+	// errs，错误信息带上父节点 ref 便于定位是哪个节点里的坏条目。
 	for _, h := range cfg.StoreHouse {
-		if h.SourceURL != "" {
-			r.walk(ctx, h.SourceURL, depth+1, seen, out, errs)
+		if h.SourceURL == "" {
+			*errs = append(*errs, fmt.Errorf("storeHouse 条目 sourceUrl 为空，父节点: %s", ref))
+			continue
 		}
+		r.walk(ctx, h.SourceURL, depth+1, seen, out, errs)
 	}
 	for _, u := range cfg.URLs {
-		if u.URL != "" {
-			r.walk(ctx, u.URL, depth+1, seen, out, errs)
+		if u.URL == "" {
+			*errs = append(*errs, fmt.Errorf("urls 条目 url 为空，父节点: %s", ref))
+			continue
 		}
+		r.walk(ctx, u.URL, depth+1, seen, out, errs)
 	}
 }

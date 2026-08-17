@@ -42,8 +42,21 @@ func TestResolveFollowsStoreHouseAndURLs(t *testing.T) {
 	}
 }
 
-// TestResolveDetectsCycle 验证仓库互相引用时不会无限递归：环引用命中时
-// 正常终止，不算作错误。
+// TestResolveDetectsCycle 验证仓库互相引用时不会无限递归；同时验证这个
+// "全程没有任何终端配置的纯环形引用" 会被 Fix1 的兜底判定为失败——
+// 而不是像最初实现那样被静默当作"成功但零配置"。
+//
+// 这里刻意不只断言 err != nil，而是拆成两条互补的断言：
+//   - err 必须包含 Fix1 兜底错误的特征串（"未产生任何可用配置"），
+//     证明这个环确实是被 seen（环检测）在环内拦下、而不是碰巧因为
+//     别的原因失败；
+//   - err 必须不包含"超出最大展开深度"。这一条是关键：如果环检测
+//     哪天被改坏、不再识别这个环，Resolve 也不会死循环（还有
+//     MaxDepth 兜底），而是会一路撞到深度上限、同样返回一个
+//     err != nil 的错误。只断言 err != nil 的话，环检测彻底失效
+//     这条测试依然会绿——它就不再是有效的回归闸门了。必须证明
+//     "err 非 nil"这件事的原因是环检测本身在生效，而不是别的
+//     兜底机制凑巧也报了错。
 func TestResolveDetectsCycle(t *testing.T) {
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
@@ -70,9 +83,14 @@ func TestResolveDetectsCycle(t *testing.T) {
 	case <-timeAfter():
 		t.Fatal("环引用导致无限递归")
 	}
-	// 环引用是正常终止条件，不应产生错误，也不会有任何终端配置。
-	if err != nil {
-		t.Errorf("环引用不应产生错误，实际: %v", err)
+	if err == nil {
+		t.Fatal("纯环形引用、全程无终端配置时应返回错误，实际 err 为 nil")
+	}
+	if !strings.Contains(err.Error(), "未产生任何可用配置") {
+		t.Errorf("错误应体现 Fix1 的兜底判定（证明这个环是被 seen 拦下的），实际: %v", err)
+	}
+	if strings.Contains(err.Error(), "超出最大展开深度") {
+		t.Errorf("这个环应当被 seen 直接拦下而不是撞到深度上限，实际: %v", err)
 	}
 	if len(cfgs) != 0 {
 		t.Errorf("环引用链路中没有终端配置，实际得到 %d 个", len(cfgs))
@@ -264,6 +282,144 @@ func TestResolveMaxDepthExceeded(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), srv.URL+"/n4") {
 		t.Errorf("错误信息应体现被拒绝的 n4 ref，实际: %v", err)
+	}
+}
+
+// TestResolveMixedNodeCollectsAndExpands 锁定“混合节点”（同一份配置同时
+// 含 sites 与 storeHouse/urls）的行为：既作为终端配置被收集，也继续展开
+// 其索引部分，两者互不排斥。防止后续重构把这两种行为改成互斥的。
+func TestResolveMixedNodeCollectsAndExpands(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	mux.HandleFunc("/mixed", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"sites":[{"key":"a","name":"站点A","type":1,"api":"http://x/api"}],"urls":[{"url":"%s/leaf","name":"线路1"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/leaf", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"sites":[{"key":"b","name":"站点B","type":1,"api":"http://x/api"}]}`)
+	})
+
+	r := NewResolver()
+	cfgs, err := r.Resolve(context.Background(), srv.URL+"/mixed")
+	if err != nil {
+		t.Fatalf("混合节点不应报错: %v", err)
+	}
+	if len(cfgs) != 2 {
+		t.Fatalf("应当同时收集混合节点自身与其展开出的 leaf，配置数应为 2，实际 %d", len(cfgs))
+	}
+	total := 0
+	for _, c := range cfgs {
+		total += len(c.Sites)
+	}
+	if total != 2 {
+		t.Errorf("站点总数应为 2（混合节点自身 1 个 + leaf 1 个），实际 %d", total)
+	}
+}
+
+// TestResolveAllEmptyURLEntriesIsError 验证条目非空但 url 全是空字符串
+// 时（`{"urls":[{"url":""},{"url":""}]}`），不会被静默判定为“成功 0 个
+// 配置”，而是返回错误。
+func TestResolveAllEmptyURLEntriesIsError(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	mux.HandleFunc("/index", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"urls":[{"url":"","name":"空1"},{"url":"","name":"空2"}]}`)
+	})
+
+	r := NewResolver()
+	cfgs, err := r.Resolve(context.Background(), srv.URL+"/index")
+	if err == nil {
+		t.Fatal("urls 条目全部为空字符串时应返回错误，实际 err 为 nil")
+	}
+	if len(cfgs) != 0 {
+		t.Errorf("不应产生任何终端配置，实际 %d 个", len(cfgs))
+	}
+}
+
+// TestResolvePureCyclicIndexWithoutTerminalIsError 验证 Fix1 的兜底不是
+// 只对最简单的两节点环生效。TestResolveDetectsCycle 已经覆盖了两节点环
+// （A↔B）这个最基础的情形，这里换成三节点环（root→a→b→root，环长度
+// 不同，全程同样没有任何终端配置），确认"纯环形索引、无终端配置 =>
+// 返回错误"这个行为不依赖环的具体长度，而不是与既有测试断言重复的
+// 同一场景。
+func TestResolvePureCyclicIndexWithoutTerminalIsError(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/a","name":"a"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/a", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/b","name":"b"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/b", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/root","name":"root"}]}`, srv.URL)
+	})
+
+	r := NewResolver()
+	cfgs, err := r.Resolve(context.Background(), srv.URL+"/root")
+	if err == nil {
+		t.Fatal("三节点纯环形索引、全程无终端配置时应返回错误，实际 err 为 nil")
+	}
+	if len(cfgs) != 0 {
+		t.Errorf("不应产生任何终端配置，实际 %d 个", len(cfgs))
+	}
+}
+
+// TestResolveDiamondReachesShallowerLeaf 验证 seen 改为深度感知后，菱形
+// 引用结构中，一个先经深路径访问过的节点，若之后又能以更浅的深度到达，
+// 会被重新展开，而不是被更深路径先占住的访问记录永久挡住。
+//
+// 结构：
+//
+//	root(depth0) --urls--> a(depth1) --urls--> b(depth2) --urls--> x(depth3)
+//	root(depth0) --urls--------------------------------------------> x(depth1，更浅)
+//	x --urls--> leaf(终端，含 sites)
+//
+// mux 的 handler 里 root 先声明指向 a 的边、再声明指向 x 的边，因此按
+// urls 数组顺序，DFS 会先沿 root→a→b→x 这条深路径在 depth3 访问到 x；
+// 若用旧的布尔 seen，随后 root→x 这条 depth1 的浅路径会因为“x 已访问”
+// 被直接跳过，x 的子节点 leaf（本应在 depth2 可达）永远不会被展开，
+// 断言会看到站点数为 0。用深度感知的 seen，浅路径应当重新展开 x，
+// leaf 在 depth2 被访问到（未超过 MaxDepth=3），站点数应为 1。
+func TestResolveDiamondReachesShallowerLeaf(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {
+		// 先深路径（root->a），再浅路径（root->x）。
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/a","name":"a"},{"url":"%s/x","name":"x"}]}`, srv.URL, srv.URL)
+	})
+	mux.HandleFunc("/a", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/b","name":"b"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/b", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/x","name":"x"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/x", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"urls":[{"url":"%s/leaf","name":"leaf"}]}`, srv.URL)
+	})
+	mux.HandleFunc("/leaf", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"sites":[{"key":"a","name":"站点A","type":1,"api":"http://x/api"}]}`)
+	})
+
+	r := NewResolver()
+	if r.MaxDepth != 3 {
+		t.Fatalf("本测试假定 NewResolver().MaxDepth == 3，实际 %d，请相应调整测试", r.MaxDepth)
+	}
+
+	cfgs, err := r.Resolve(context.Background(), srv.URL+"/root")
+	total := 0
+	for _, c := range cfgs {
+		total += len(c.Sites)
+	}
+	if total != 1 {
+		t.Errorf("leaf 应当经由 root->x 这条更浅的路径被展开到，实际站点数 %d（err=%v）", total, err)
 	}
 }
 

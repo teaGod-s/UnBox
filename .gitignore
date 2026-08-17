@@ -20,3 +20,7 @@ Thumbs.db
 # local
 *.local.json
 /tmp/
+
+# IDE
+.idea/
+.vscode/

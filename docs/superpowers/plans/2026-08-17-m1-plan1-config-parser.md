@@ -495,17 +495,12 @@ func TestDecodeRealSample(t *testing.T) {
 		t.Fatalf("真实样本解码失败: %v", err)
 	}
 	if !bytes.Contains(out, []byte(`"sites"`)) {
-		t.Errorf("解码后未见 sites 字段，前 120 字节: %s", out[:min(120, len(out))])
+		t.Errorf("解码后未见 sites 字段")
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 ```
+
+**注意**：不要定义 `min` 函数。Go 1.21+ 内置 `min` 支持 int，实现与测试中均直接使用内置版本。若在 `_test.go` 中定义 `func min`，`decode.go` 的非测试构建会因找不到该函数而失败。
 
 - [ ] **Step 2：运行测试确认失败**
 
@@ -620,66 +615,6 @@ git commit -m "feat: 探测式配置解码器，支持 **base64/gzip/裸base64/�
 - [ ] **Step 1：写失败测试**
 
 创建 `internal/config/parse_test.go`：
-```go
-package config
-
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
-
-// 全部 7 个真实样本必须解析通过。这是 M1 的硬性验收标准。
-func TestParseAllRealSamples(t *testing.T) {
-	cases := []struct {
-		file      string
-		wantKind  string // "index" = 多仓/聚合索引, "config" = 终端配置
-	}{
-		{"01-storehouse.json", "index"},
-		{"02-urls-aggregate.json", "index"},
-		{"line-1.raw", "config"},
-		{"line-2.raw", "config"},
-		{"line-3.raw", "config"},
-		{"line-4.raw", "config"},
-		{"line-6.raw", "config"},
-		{"line-9.raw", "config"},
-		{"line-12.raw", "config"},
-	}
-
-	for _, c := range cases {
-		t.Run(c.file, func(t *testing.T) {
-			raw, err := os.ReadFile(filepath.Join("../../testdata/configs", c.file))
-			if err != nil {
-				t.Skipf("样本缺失: %v", err)
-			}
-			cfg, err := Parse(raw)
-			if err != nil {
-				t.Fatalf("解析失败: %v", err)
-			}
-			switch c.kindOf() {
-			case "index":
-				if len(cfg.StoreHouse) == 0 && len(cfg.URLs) == 0 {
-					t.Error("索引类配置应含 storeHouse 或 urls")
-				}
-			case "config":
-				if len(cfg.Sites) == 0 && len(cfg.Lives) == 0 {
-					t.Error("终端配置应含 sites 或 lives")
-				}
-			}
-		})
-	}
-}
-
-func (c struct {
-	file     string
-	wantKind string
-}) kindOf() string {
-	return c.wantKind
-}
-```
-
-**注意**：上面的匿名结构体方法写法在 Go 中非法。改用如下正确写法：
-
 ```go
 package config
 

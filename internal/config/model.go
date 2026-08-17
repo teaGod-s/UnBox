@@ -1,6 +1,8 @@
 // Package config 解析 TVBox 及其衍生分支的订阅配置。
 package config
 
+import "encoding/json"
+
 // SiteType 是 TVBox 配置中 site.type 字段的取值。
 type SiteType int
 
@@ -51,6 +53,31 @@ type Live struct {
 	Channels []Channel `json:"channels"`
 }
 
+// LiveList 是 Config.Lives 的容错切片类型。
+//
+// TVBox 的 lives 字段在真实源里可能出现 [[]]、[{}] 这类畸形形态；若直接用
+// []Live 反序列化，单个畸形项会让整份配置解析失败（encoding/json 对结构体
+// 字段要么全成要么全败），导致全部 sites 一并丢失。这里逐元素解析并跳过
+// 无法解析成 Live 对象的项，把「单个坏直播组」的代价限制在丢那一组。
+type LiveList []Live
+
+func (l *LiveList) UnmarshalJSON(data []byte) error {
+	var raw []json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	out := make([]Live, 0, len(raw))
+	for _, item := range raw {
+		var live Live
+		if err := json.Unmarshal(item, &live); err != nil {
+			continue
+		}
+		out = append(out, live)
+	}
+	*l = out
+	return nil
+}
+
 // StoreHouse 是多仓订阅中的一个仓库入口。
 type StoreHouse struct {
 	SourceName string `json:"sourceName"`
@@ -63,7 +90,7 @@ type Config struct {
 	Wallpaper string   `json:"wallpaper"`
 	Logo      string   `json:"logo"`
 	Sites     []Site   `json:"sites"`
-	Lives     []Live   `json:"lives"`
+	Lives     LiveList `json:"lives"`
 	Hosts     []string `json:"hosts"`
 	// StoreHouse 与 URLs 用于多仓/聚合结构，二者非空时表示这是索引而非终端配置。
 	StoreHouse []StoreHouse `json:"storeHouse"`

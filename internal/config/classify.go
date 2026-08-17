@@ -29,7 +29,7 @@ func (s Support) String() string {
 func Classify(s Site) (kind string, sup Support) {
 	api := strings.ToLower(s.API)
 
-	// Strip query string and fragment to match on file extension
+	// 去掉 query string 与 fragment，只按文件扩展名做匹配。
 	if idx := strings.IndexAny(api, "?#"); idx >= 0 {
 		api = api[:idx]
 	}

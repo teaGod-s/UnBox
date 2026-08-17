@@ -27,7 +27,18 @@ func Lenient(raw []byte) []byte {
 		if inString {
 			switch {
 			case escaped:
-				out.WriteByte(c)
+				// Backslash already written; check if current byte is a control char
+				if c == '\t' {
+					out.WriteByte('t') // Will form \t
+				} else if c == '\n' {
+					out.WriteByte('n') // Will form \n
+				} else if c == '\r' {
+					out.WriteByte('r') // Will form \r
+				} else if c < 0x20 {
+					// Other control chars after backslash - discard
+				} else {
+					out.WriteByte(c) // Normal escaped character
+				}
 				escaped = false
 			case c == '\\':
 				out.WriteByte(c)
@@ -76,10 +87,7 @@ func Lenient(raw []byte) []byte {
 
 		// 尾随逗号：向前看，若下一个非空白字符是 } 或 ]，则丢弃该逗号
 		if c == ',' {
-			j := i + 1
-			for j < len(raw) && isSpace(raw[j]) {
-				j++
-			}
+			j := skipWhitespaceAndComments(raw, i+1)
 			if j < len(raw) && (raw[j] == '}' || raw[j] == ']') {
 				continue
 			}
@@ -89,6 +97,35 @@ func Lenient(raw []byte) []byte {
 	}
 
 	return out.Bytes()
+}
+
+func skipWhitespaceAndComments(raw []byte, i int) int {
+	for i < len(raw) {
+		if isSpace(raw[i]) {
+			i++
+		} else if i+1 < len(raw) && raw[i] == '/' && raw[i+1] == '/' {
+			// Skip line comment until newline
+			for i < len(raw) && raw[i] != '\n' {
+				i++
+			}
+			// Skip the newline if present
+			if i < len(raw) && raw[i] == '\n' {
+				i++
+			}
+		} else if i+1 < len(raw) && raw[i] == '/' && raw[i+1] == '*' {
+			// Skip block comment
+			i += 2
+			for i+1 < len(raw) && !(raw[i] == '*' && raw[i+1] == '/') {
+				i++
+			}
+			if i+1 < len(raw) {
+				i += 2 // Skip the */
+			}
+		} else {
+			break
+		}
+	}
+	return i
 }
 
 func isSpace(c byte) bool {

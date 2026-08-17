@@ -7,42 +7,48 @@ import (
 )
 
 type sampleCase struct {
-	file string
-	kind string // "index" 或 "config"
+	file           string
+	kind           string // "index" 或 "config"
+	wantSites      int
+	wantLives      int
+	wantStoreHouse int
+	wantURLs       int
 }
 
 func TestParseAllRealSamples(t *testing.T) {
 	cases := []sampleCase{
-		{"01-storehouse.json", "index"},
-		{"02-urls-aggregate.json", "index"},
-		{"line-1.raw", "config"},
-		{"line-2.raw", "config"},
-		{"line-3.raw", "config"},
-		{"line-4.raw", "config"},
-		{"line-6.raw", "config"},
-		{"line-9.raw", "config"},
-		{"line-12.raw", "config"},
+		{file: "01-storehouse.json", kind: "index", wantSites: 0, wantLives: 0, wantStoreHouse: 4, wantURLs: 0},
+		{file: "02-urls-aggregate.json", kind: "index", wantSites: 0, wantLives: 0, wantStoreHouse: 0, wantURLs: 24},
+		{file: "line-1.raw", kind: "config", wantSites: 55, wantLives: 7, wantStoreHouse: 0, wantURLs: 0},
+		{file: "line-2.raw", kind: "config", wantSites: 28, wantLives: 2, wantStoreHouse: 0, wantURLs: 0},
+		{file: "line-3.raw", kind: "config", wantSites: 96, wantLives: 10, wantStoreHouse: 0, wantURLs: 0},
+		{file: "line-4.raw", kind: "config", wantSites: 44, wantLives: 2, wantStoreHouse: 0, wantURLs: 0},
+		{file: "line-6.raw", kind: "config", wantSites: 98, wantLives: 12, wantStoreHouse: 0, wantURLs: 0},
+		{file: "line-9.raw", kind: "config", wantSites: 71, wantLives: 1, wantStoreHouse: 0, wantURLs: 0},
+		{file: "line-12.raw", kind: "config", wantSites: 173, wantLives: 9, wantStoreHouse: 0, wantURLs: 0},
 	}
 
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join("../../testdata/configs", c.file))
 			if err != nil {
-				t.Skipf("样本缺失: %v", err)
+				t.Fatalf("样本缺失: %v", err)
 			}
 			cfg, err := Parse(raw)
 			if err != nil {
 				t.Fatalf("解析失败: %v", err)
 			}
-			switch c.kind {
-			case "index":
-				if len(cfg.StoreHouse) == 0 && len(cfg.URLs) == 0 {
-					t.Error("索引类配置应含 storeHouse 或 urls")
-				}
-			case "config":
-				if len(cfg.Sites) == 0 && len(cfg.Lives) == 0 {
-					t.Error("终端配置应含 sites 或 lives")
-				}
+			if got := len(cfg.Sites); got != c.wantSites {
+				t.Errorf("%s: sites 数量 = %d, 期望 %d", c.file, got, c.wantSites)
+			}
+			if got := len(cfg.Lives); got != c.wantLives {
+				t.Errorf("%s: lives 数量 = %d, 期望 %d", c.file, got, c.wantLives)
+			}
+			if got := len(cfg.StoreHouse); got != c.wantStoreHouse {
+				t.Errorf("%s: storeHouse 数量 = %d, 期望 %d", c.file, got, c.wantStoreHouse)
+			}
+			if got := len(cfg.URLs); got != c.wantURLs {
+				t.Errorf("%s: urls 数量 = %d, 期望 %d", c.file, got, c.wantURLs)
 			}
 		})
 	}

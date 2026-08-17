@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -52,11 +53,64 @@ func (f *Fetcher) Fetch(ctx context.Context, ref string) ([]byte, error) {
 		return f.fetchHTTP(ctx, ref)
 
 	case strings.HasPrefix(ref, "file://"):
-		return os.ReadFile(strings.TrimPrefix(ref, "file://"))
+		return os.ReadFile(localPath(ref))
 
 	default:
-		return os.ReadFile(ref)
+		if scheme, ok := unsupportedScheme(ref); ok {
+			return nil, fmt.Errorf("不支持的协议 %q，仅支持 http、https、file 及裸本地路径: %s", scheme, ref)
+		}
+		return os.ReadFile(localPath(ref))
 	}
+}
+
+// localPath 将 file:// URL 或裸本地路径转换为可交给 os.ReadFile 的路径。
+//
+// file:// URL 的规范形式在不同平台上并不统一：Windows 下常见的形式
+// 是 "file:///C:/x/y.json"（三个斜杠），若只是简单去掉 "file://" 前缀，
+// 会留下一个多余的前导斜杠 "/C:/x/y.json"，这在 Windows 上不是合法路径。
+// POSIX 下 "file:///tmp/x.json" 的前导斜杠则是路径本身的一部分，必须保留。
+// 因此只在紧跟着看起来像盘符（单个 ASCII 字母 + 冒号）时才去掉前导斜杠。
+func localPath(ref string) string {
+	if !strings.HasPrefix(ref, "file://") {
+		return ref
+	}
+	p := strings.TrimPrefix(ref, "file://")
+	if len(p) >= 3 && p[0] == '/' && isASCIILetter(p[1]) && p[2] == ':' {
+		p = p[1:]
+	}
+	// 真实订阅路径和 Windows 路径都可能含空格（%20 等），file:// URL 中
+	// 这些字符会被百分号编码。用 net/url 而非手写逻辑解码；解码失败时
+	// 回退到原始值而不是报错，因为此时原始值大概率本就是未编码的路径。
+	if decoded, err := url.PathUnescape(p); err == nil {
+		p = decoded
+	}
+	return p
+}
+
+// unsupportedScheme 检测 ref 是否形如 "<scheme>://..."，但不是 Fetch
+// 支持的协议之一。仅在存在 "://" 时才判定为协议，这样像 Windows 路径
+// "C:\x\y.json"（冒号后紧跟反斜杠而不是双斜杠）之类的裸路径不会被
+// 误判为协议。
+func unsupportedScheme(ref string) (string, bool) {
+	i := strings.Index(ref, "://")
+	if i <= 0 {
+		return "", false
+	}
+	scheme := ref[:i]
+	for j := 0; j < len(scheme); j++ {
+		if !isASCIILetter(scheme[j]) {
+			return "", false
+		}
+	}
+	switch strings.ToLower(scheme) {
+	case "http", "https", "file", "clan":
+		return "", false
+	}
+	return scheme, true
+}
+
+func isASCIILetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
 func (f *Fetcher) fetchHTTP(ctx context.Context, ref string) ([]byte, error) {

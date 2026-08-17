@@ -151,3 +151,86 @@ func TestFetchNonOKStatusRejected(t *testing.T) {
 		t.Errorf("错误信息应包含状态码 404: %v", err)
 	}
 }
+
+// TestLocalPath 是纯字符串函数的表驱动测试，必须在所有平台上都能跑通，
+// 因此不使用 runtime.GOOS 做条件跳过——localPath 的行为不依赖宿主 OS。
+func TestLocalPath(t *testing.T) {
+	cases := []struct {
+		name string
+		ref  string
+		want string
+	}{
+		{
+			name: "windows 三斜杠盘符形式去掉多余前导斜杠",
+			ref:  "file:///C:/x/y.json",
+			want: "C:/x/y.json",
+		},
+		{
+			name: "posix 三斜杠绝对路径保留前导斜杠",
+			ref:  "file:///tmp/x.json",
+			want: "/tmp/x.json",
+		},
+		{
+			name: "两斜杠形式的相对 host+path 不做处理",
+			ref:  "file://tmp/x.json",
+			want: "tmp/x.json",
+		},
+		{
+			name: "无 scheme 的裸路径原样返回",
+			ref:  "/plain/path/x.json",
+			want: "/plain/path/x.json",
+		},
+		{
+			name: "无 scheme 的裸 windows 路径原样返回",
+			ref:  `C:\x\y.json`,
+			want: `C:\x\y.json`,
+		},
+		{
+			name: "posix 路径中的百分号编码空格被解码",
+			ref:  "file:///tmp/a%20b.json",
+			want: "/tmp/a b.json",
+		},
+		{
+			name: "windows 盘符路径中的百分号编码空格被解码",
+			ref:  "file:///C:/Program%20Files/x.json",
+			want: "C:/Program Files/x.json",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := localPath(tc.ref)
+			if got != tc.want {
+				t.Errorf("localPath(%q) = %q, want %q", tc.ref, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFetchUnsupportedSchemeRejected(t *testing.T) {
+	f := NewFetcher()
+	_, err := f.Fetch(context.Background(), "ftp://example.com/a.json")
+	if err == nil {
+		t.Fatal("不支持的协议应当返回明确 error，而不是被当作本地路径处理")
+	}
+	if !strings.Contains(err.Error(), "ftp") {
+		t.Errorf("错误信息应指名不支持的协议 ftp: %v", err)
+	}
+	if strings.Contains(err.Error(), "no such file or directory") {
+		t.Errorf("错误信息不应是文件系统错误（应先识别出是不支持的协议）: %v", err)
+	}
+}
+
+func TestFetchWindowsBarePathTreatedAsPathNotScheme(t *testing.T) {
+	f := NewFetcher()
+	_, err := f.Fetch(context.Background(), `C:\nonexistent\dir\x.json`)
+	if err == nil {
+		t.Fatal("不存在的路径应当返回 error")
+	}
+	if strings.Contains(err.Error(), "不支持的协议") {
+		t.Errorf("Windows 盘符裸路径不应被误判为协议: %v", err)
+	}
+	if !os.IsNotExist(err) {
+		t.Errorf("错误应是文件系统的“文件不存在”错误，实际: %v", err)
+	}
+}

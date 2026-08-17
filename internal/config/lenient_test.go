@@ -94,3 +94,35 @@ func TestLenientBackslashFollowedByControlChar(t *testing.T) {
 		t.Errorf("字符串内容被破坏: %q", m["name"])
 	}
 }
+
+func TestLenientControlBytesAfterBackslash(t *testing.T) {
+	// Regression test: backslash followed by various non-TAB/LF/CR control bytes should not produce dangling backslash
+
+	// Test 0x08 (backspace) after backslash
+	in := []byte("{\"name\":\"x\\\x08y\"}")
+	out := Lenient(in)
+	var m map[string]string
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("backslash+0x08 处理失败: %v\n输出: %s", err, out)
+	}
+	if !strings.Contains(m["name"], "x") {
+		t.Errorf("内容被破坏: %q", m["name"])
+	}
+
+	// Test 0x0C (formfeed) after backslash
+	in = []byte("{\"name\":\"x\\\x0Cy\"}")
+	out = Lenient(in)
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("backslash+0x0C 处理失败: %v\n输出: %s", err, out)
+	}
+	if !strings.Contains(m["name"], "x") {
+		t.Errorf("内容被破坏: %q", m["name"])
+	}
+
+	// Test backslash as final byte of buffer - should not panic
+	in = []byte("\"test\\")
+	out = Lenient(in)
+	if out == nil {
+		t.Errorf("输出为 nil")
+	}
+}

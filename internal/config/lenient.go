@@ -27,21 +27,27 @@ func Lenient(raw []byte) []byte {
 		if inString {
 			switch {
 			case escaped:
-				// Backslash already written; check if current byte is a control char
+				// Previous char was \; decide whether to write it based on current char
 				if c == '\t' {
-					out.WriteByte('t') // Will form \t
+					out.WriteByte('\\')
+					out.WriteByte('t')
 				} else if c == '\n' {
-					out.WriteByte('n') // Will form \n
+					out.WriteByte('\\')
+					out.WriteByte('n')
 				} else if c == '\r' {
-					out.WriteByte('r') // Will form \r
+					out.WriteByte('\\')
+					out.WriteByte('r')
 				} else if c < 0x20 {
-					// Other control chars after backslash - discard
+					// Other control chars after backslash - discard both backslash and control char
+					// (don't write anything)
 				} else {
-					out.WriteByte(c) // Normal escaped character
+					// Normal character - write backslash and character
+					out.WriteByte('\\')
+					out.WriteByte(c)
 				}
 				escaped = false
 			case c == '\\':
-				out.WriteByte(c)
+				// Defer writing the backslash until we see what follows
 				escaped = true
 			case c == '"':
 				out.WriteByte(c)

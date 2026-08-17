@@ -91,17 +91,31 @@ func localPath(ref string) string {
 // 支持的协议之一。仅在存在 "://" 时才判定为协议，这样像 Windows 路径
 // "C:\x\y.json"（冒号后紧跟反斜杠而不是双斜杠）之类的裸路径不会被
 // 误判为协议。
+//
+// 按 RFC 3986 验证 scheme：首字符必须是 ASCII 字母，后续字符可以是
+// ASCII 字母、ASCII 数字、加号、减号、点号。不符合规范的 ref 返回
+// ("", false) 以作为裸路径处理。
 func unsupportedScheme(ref string) (string, bool) {
 	i := strings.Index(ref, "://")
 	if i <= 0 {
 		return "", false
 	}
 	scheme := ref[:i]
-	for j := 0; j < len(scheme); j++ {
-		if !isASCIILetter(scheme[j]) {
+
+	// 验证 scheme 首字符必须是 ASCII 字母
+	if !isASCIILetter(scheme[0]) {
+		return "", false
+	}
+
+	// 验证后续字符：ASCII 字母、数字、+、-、.
+	for j := 1; j < len(scheme); j++ {
+		b := scheme[j]
+		if !isASCIILetter(b) && !isASCIIDigit(b) && b != '+' && b != '-' && b != '.' {
 			return "", false
 		}
 	}
+
+	// 检查是否在已支持的协议列表中
 	switch strings.ToLower(scheme) {
 	case "http", "https", "file", "clan":
 		return "", false
@@ -111,6 +125,10 @@ func unsupportedScheme(ref string) (string, bool) {
 
 func isASCIILetter(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+func isASCIIDigit(b byte) bool {
+	return b >= '0' && b <= '9'
 }
 
 func (f *Fetcher) fetchHTTP(ctx context.Context, ref string) ([]byte, error) {

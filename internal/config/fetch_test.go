@@ -231,6 +231,128 @@ func TestFetchWindowsBarePathTreatedAsPathNotScheme(t *testing.T) {
 		t.Errorf("Windows 盘符裸路径不应被误判为协议: %v", err)
 	}
 	if !os.IsNotExist(err) {
-		t.Errorf("错误应是文件系统的“文件不存在”错误，实际: %v", err)
+		t.Errorf("错误应是文件系统的\"文件不存在\"错误，实际: %v", err)
+	}
+}
+
+// TestUnsupportedScheme 直接测试 unsupportedScheme 函数，验证其按
+// RFC 3986 正确识别 scheme：首字符必须是 ASCII 字母，后续可以是
+// ASCII 字母、数字、加号、减号、点号。已支持的协议应返回 ("", false)。
+func TestUnsupportedScheme(t *testing.T) {
+	cases := []struct {
+		name       string
+		ref        string
+		wantScheme string
+		wantOK     bool
+	}{
+		// 不支持的有效 scheme，按 RFC 3986 规范
+		{
+			name:       "s3 协议含数字",
+			ref:        "s3://bucket/key.json",
+			wantScheme: "s3",
+			wantOK:     true,
+		},
+		{
+			name:       "svn+ssh 协议含加号",
+			ref:        "svn+ssh://host/repo",
+			wantScheme: "svn+ssh",
+			wantOK:     true,
+		},
+		{
+			name:       "git-lfs 协议含减号",
+			ref:        "git-lfs://x",
+			wantScheme: "git-lfs",
+			wantOK:     true,
+		},
+		{
+			name:       "复合协议穷尽四类后续字符",
+			ref:        "a1.b+c-d://x",
+			wantScheme: "a1.b+c-d",
+			wantOK:     true,
+		},
+		{
+			name:       "ftp 协议不支持",
+			ref:        "ftp://example.com/a.json",
+			wantScheme: "ftp",
+			wantOK:     true,
+		},
+
+		// 已支持的协议
+		{
+			name:       "http 协议支持",
+			ref:        "http://x",
+			wantScheme: "",
+			wantOK:     false,
+		},
+		{
+			name:       "https 协议支持",
+			ref:        "https://x",
+			wantScheme: "",
+			wantOK:     false,
+		},
+		{
+			name:       "file 协议支持",
+			ref:        "file:///tmp/x",
+			wantScheme: "",
+			wantOK:     false,
+		},
+		{
+			name:       "clan 协议支持",
+			ref:        "clan://x",
+			wantScheme: "",
+			wantOK:     false,
+		},
+
+		// 非 scheme 的裸路径
+		{
+			name:       "首字符是数字，不是合法 scheme 首字符",
+			ref:        "3s://x",
+			wantScheme: "",
+			wantOK:     false,
+		},
+		{
+			name:       "Windows 盘符路径",
+			ref:        `C:\x\y.json`,
+			wantScheme: "",
+			wantOK:     false,
+		},
+		{
+			name:       "POSIX 绝对路径",
+			ref:        "/tmp/x.json",
+			wantScheme: "",
+			wantOK:     false,
+		},
+		{
+			name:       "相对路径",
+			ref:        "x.json",
+			wantScheme: "",
+			wantOK:     false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			scheme, ok := unsupportedScheme(tc.ref)
+			if ok != tc.wantOK || (ok && scheme != tc.wantScheme) {
+				t.Errorf("unsupportedScheme(%q) = (%q, %v), want (%q, %v)",
+					tc.ref, scheme, ok, tc.wantScheme, tc.wantOK)
+			}
+		})
+	}
+}
+
+// TestFetchS3SchemeRejectsWithProperError 验证 s3:// 等不支持的协议
+// 返回"不支持的协议"错误，而不是文件系统错误（例如 "no such file or directory"）。
+func TestFetchS3SchemeRejectsWithProperError(t *testing.T) {
+	f := NewFetcher()
+	_, err := f.Fetch(context.Background(), "s3://bucket/key.json")
+	if err == nil {
+		t.Fatal("s3:// 协议应当返回明确 error")
+	}
+	if !strings.Contains(err.Error(), "不支持的协议") {
+		t.Errorf("错误信息应说明这是不支持的协议，实际: %v", err)
+	}
+	if strings.Contains(err.Error(), "no such file or directory") {
+		t.Errorf("错误信息不应包含文件系统错误，实际: %v", err)
 	}
 }

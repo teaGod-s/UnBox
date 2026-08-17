@@ -1,0 +1,22 @@
+# build artifacts
+/build/
+/bin/
+*.exe
+*.dll
+*.dylib
+*.so
+
+# frontend
+node_modules/
+frontend/dist/
+
+# wails
+frontend/bindings/
+
+# os
+.DS_Store
+Thumbs.db
+
+# local
+*.local.json
+/tmp/

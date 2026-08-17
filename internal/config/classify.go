@@ -29,6 +29,11 @@ func (s Support) String() string {
 func Classify(s Site) (kind string, sup Support) {
 	api := strings.ToLower(s.API)
 
+	// Strip query string and fragment to match on file extension
+	if idx := strings.IndexAny(api, "?#"); idx >= 0 {
+		api = api[:idx]
+	}
+
 	switch s.Type {
 	case SiteTypeCMS:
 		return "cms", SupportYes
@@ -40,9 +45,9 @@ func Classify(s Site) (kind string, sup Support) {
 		switch {
 		case strings.HasPrefix(api, "csp_"):
 			return "jar", SupportNo
-		case strings.Contains(api, ".js"):
+		case strings.HasSuffix(api, ".js"):
 			return "js", SupportYes
-		case strings.Contains(api, ".py"):
+		case strings.HasSuffix(api, ".py"):
 			return "python", SupportNo
 		case strings.HasPrefix(api, "http"):
 			return "http", SupportMaybe

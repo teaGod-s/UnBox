@@ -15,6 +15,11 @@ func TestClassify(t *testing.T) {
 		{Site{Type: SiteTypeCMS, API: "https://x.com/api.php"}, "cms", SupportYes},
 		{Site{Type: SiteTypeXPath, API: "https://x.com"}, "xpath", SupportNo},
 		{Site{Type: SiteTypeRemote, API: "http://127.0.0.1:9978"}, "remote", SupportMaybe},
+		// Regression tests for .json substring matching bug
+		{Site{Type: SiteTypeSpider, API: "https://example.com/data.json"}, "http", SupportMaybe},
+		{Site{Type: SiteTypeSpider, API: "https://example.com/api.json?token=1"}, "http", SupportMaybe},
+		{Site{Type: SiteTypeSpider, API: "https://example.com/spider.js?token=abc"}, "js", SupportYes},
+		{Site{Type: SiteTypeSpider, API: "https://example.com/spider.py?v=2"}, "python", SupportNo},
 	}
 	for _, c := range cases {
 		kind, sup := Classify(c.site)

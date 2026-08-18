@@ -305,6 +305,8 @@ package mpvproc
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/unbox/unbox/internal/player"
 )
 
 func TestEncodeCommand(t *testing.T) {
@@ -428,6 +430,7 @@ package mpvproc
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -737,12 +740,21 @@ git commit -m "feat(shell): Wails v3 应用壳与 Vue3 前端脚手架"
 在 `internal/shell/` 下新增一个不依赖 Wails 的纯函数，把「根据当前平台选择播放实现 + 解析 mpv 可执行文件路径」抽出来单测：
 
 ```go
-// 返回 (播放器构造函数, 平台) ；此函数不 import Wails，可被 go test 直接测。
-func pickPlayer() (kind string, err error)
+// pickPlayer 返回当前平台应使用的播放器实例；不 import Wails，可被 go test 直接测。
+func pickPlayer() (player.Player, error) {
+	if runtime.GOOS == "darwin" {
+		return mpvlib.New()
+	}
+	exe, err := exec.LookPath("mpv")
+	if err != nil {
+		return nil, fmt.Errorf("未找到 mpv 可执行文件: %w", err)
+	}
+	return mpvproc.New(exe)
+}
 ```
 
 Run: `go test ./internal/shell/ -count=1`
-Expected: PASS（在 Linux 上 `kind == "mpvproc"`，`mpv` 缺失时返回明确错误而非 panic）。
+Expected: PASS（在 Linux 上返回 `mpvproc` 实例；`mpv` 缺失时返回明确错误而非 panic）。
 
 - [ ] **Step 2: 在 shell 里接线**
 

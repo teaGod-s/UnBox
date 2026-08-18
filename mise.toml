@@ -1,5 +1,7 @@
 [tools]
 go = "1.26.3"
+node = "22"
+"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.9"
 
 [tasks.test]
 run = "go test ./..."
@@ -9,3 +11,15 @@ run = "go run ./cmd/unbox-scan"
 
 [tasks.build]
 run = "go build -o bin/ ./cmd/..."
+
+[tasks.dev]
+run = "wails3 dev"
+
+[tasks."build:linux"]
+run = "wails3 build -platform linux/amd64"
+
+[tasks."build:win"]
+run = "wails3 build -platform windows/amd64"
+
+[tasks."build:mac"]
+run = "wails3 build -platform darwin/universal"

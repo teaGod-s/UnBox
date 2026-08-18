@@ -115,8 +115,8 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	return nil
 }
 
-func (p *mpvProc) Play() error  { return p.send("set", "pause", false) }
-func (p *mpvProc) Pause() error { return p.send("set", "pause", true) }
+func (p *mpvProc) Play() error  { return p.send("set_property", "pause", false) }
+func (p *mpvProc) Pause() error { return p.send("set_property", "pause", true) }
 func (p *mpvProc) Seek(sec float64) error {
 	return p.send("seek", sec, "absolute")
 }
@@ -124,7 +124,7 @@ func (p *mpvProc) SetVolume(v int) error {
 	p.stateMu.Lock()
 	p.state.Volume = v
 	p.stateMu.Unlock()
-	return p.send("set", "volume", v)
+	return p.send("set_property", "volume", v)
 }
 func (p *mpvProc) SelectTrack(kind player.TrackKind, id int) error {
 	return errors.New("mpvproc: SelectTrack 未实现")

@@ -23,8 +23,8 @@ func New() (player.Player, error) {
 func (p *libmpvPlayer) Load(ctx context.Context, s player.Stream) error {
 	return errors.New("mpvlib: 尚未实现（M1 macOS 构建机就绪后补齐）")
 }
-func (p *libmpvPlayer) Play() error    { return errors.New("mpvlib: 未实现") }
-func (p *libmpvPlayer) Pause() error   { return errors.New("mpvlib: 未实现") }
+func (p *libmpvPlayer) Play() error  { return errors.New("mpvlib: 未实现") }
+func (p *libmpvPlayer) Pause() error { return errors.New("mpvlib: 未实现") }
 func (p *libmpvPlayer) Seek(sec float64) error {
 	return errors.New("mpvlib: 未实现")
 }

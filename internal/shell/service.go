@@ -52,10 +52,11 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 	if len(channels) == 0 {
 		return ImportResult{}, errors.New("订阅中没有可用直播频道")
 	}
+	lp := live.New(channels)
 	s.mu.Lock()
-	s.provider = live.New(channels)
+	s.provider = lp
 	s.mu.Unlock()
-	secs, _ := s.provider.Home(context.Background())
+	secs, _ := lp.Home(context.Background())
 	return ImportResult{Groups: len(secs), Channels: len(channels)}, nil
 }
 
@@ -82,10 +83,11 @@ func (s *ShellService) importPlaylist(raw []byte) (ImportResult, error) {
 	if len(channels) == 0 {
 		return ImportResult{}, errors.New("播放列表中没有可用频道")
 	}
+	lp := live.New(channels)
 	s.mu.Lock()
-	s.provider = live.New(channels)
+	s.provider = lp
 	s.mu.Unlock()
-	secs, _ := s.provider.Home(context.Background())
+	secs, _ := lp.Home(context.Background())
 	return ImportResult{Groups: len(secs), Channels: len(channels)}, nil
 }
 
@@ -128,10 +130,13 @@ func collectChannels(ctx context.Context, cfgs []*config.Config) []config.Channe
 }
 
 func (s *ShellService) Groups() ([]string, error) {
-	if s.provider == nil {
+	s.mu.RLock()
+	pv := s.provider
+	s.mu.RUnlock()
+	if pv == nil {
 		return nil, nil
 	}
-	secs, err := s.provider.Home(context.Background())
+	secs, err := pv.Home(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -143,10 +148,13 @@ func (s *ShellService) Groups() ([]string, error) {
 }
 
 func (s *ShellService) Channels(group string, page int) ([]ChannelInfo, error) {
-	if s.provider == nil {
+	s.mu.RLock()
+	pv := s.provider
+	s.mu.RUnlock()
+	if pv == nil {
 		return nil, nil
 	}
-	pg, err := s.provider.Browse(context.Background(), group, page)
+	pg, err := pv.Browse(context.Background(), group, page)
 	if err != nil {
 		return nil, err
 	}
@@ -154,10 +162,13 @@ func (s *ShellService) Channels(group string, page int) ([]ChannelInfo, error) {
 }
 
 func (s *ShellService) Search(q string) ([]ChannelInfo, error) {
-	if s.provider == nil {
+	s.mu.RLock()
+	pv := s.provider
+	s.mu.RUnlock()
+	if pv == nil {
 		return nil, nil
 	}
-	items, err := s.provider.Search(context.Background(), q)
+	items, err := pv.Search(context.Background(), q)
 	if err != nil {
 		return nil, err
 	}
@@ -180,10 +191,13 @@ func (s *ShellService) PlayChannel(id string) error {
 	if s.player == nil {
 		return errors.New("播放器未就绪")
 	}
-	if s.provider == nil {
+	s.mu.RLock()
+	pv := s.provider
+	s.mu.RUnlock()
+	if pv == nil {
 		return errors.New("未导入订阅")
 	}
-	st, err := s.provider.Resolve(context.Background(), id)
+	st, err := pv.Resolve(context.Background(), id)
 	if err != nil {
 		return err
 	}
@@ -191,7 +205,7 @@ func (s *ShellService) PlayChannel(id string) error {
 		return err
 	}
 	if s.store != nil {
-		if m, err := s.provider.Detail(context.Background(), id); err == nil {
+		if m, err := pv.Detail(context.Background(), id); err == nil {
 			_ = s.store.AddRecent(id, m.Title, m.Group, st.URL) // 尽力而为，失败不阻断播放
 		}
 	}
@@ -220,17 +234,20 @@ func (s *ShellService) SetVolume(v int) error {
 }
 
 func (s *ShellService) AddFavorite(id string) error {
-	if s.provider == nil {
+	s.mu.RLock()
+	pv := s.provider
+	s.mu.RUnlock()
+	if pv == nil {
 		return errors.New("未导入订阅")
 	}
 	if s.store == nil {
 		return errors.New("数据库未就绪，收藏不可用")
 	}
-	m, err := s.provider.Detail(context.Background(), id)
+	m, err := pv.Detail(context.Background(), id)
 	if err != nil {
 		return err
 	}
-	st, err := s.provider.Resolve(context.Background(), id)
+	st, err := pv.Resolve(context.Background(), id)
 	if err != nil {
 		return err
 	}

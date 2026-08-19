@@ -2,6 +2,7 @@ package shell
 
 import (
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/unbox/unbox/internal/config"
@@ -92,4 +93,22 @@ func TestChannelsNilStore(t *testing.T) {
 	if err != nil || len(chs) != 1 || chs[0].Favorited {
 		t.Fatalf("store 为 nil 时 Channels 应返回频道且 Favorited=false: %+v, %v", chs, err)
 	}
+}
+
+func TestConcurrentImportAndGroups(t *testing.T) {
+	svc := newTestService(t)
+	path := t.TempDir() + "/ch.m3u"
+	if err := os.WriteFile(path, []byte("#EXTM3U\n#EXTINF:-1 group-title=\"测试\",频道A\nhttp://x/a\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); _, _ = svc.ImportSubscription(path) }()
+	}
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); _, _ = svc.Groups() }()
+	}
+	wg.Wait()
 }

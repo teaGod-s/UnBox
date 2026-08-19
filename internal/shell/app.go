@@ -31,7 +31,7 @@ type ShellService struct {
 	player   player.Player
 	provider provider.Provider
 	store    *store.Store
-	mu       sync.Mutex // 守护 provider 重赋值
+	mu       sync.RWMutex // 守护 provider 读写
 }
 
 // Platform 返回当前运行平台（linux / darwin / windows）。

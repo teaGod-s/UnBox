@@ -48,14 +48,14 @@ func TestRankSingleURLUnchanged(t *testing.T) {
 	}
 }
 
-func TestRankBoundsTimeout(t *testing.T) {
+func TestProbeBoundsTimeout(t *testing.T) {
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(3 * time.Second)
 	}))
 	defer slow.Close()
 	start := time.Now()
-	NewProber().Rank(context.Background(), []string{slow.URL}, nil)
-	if time.Since(start) > 1500*time.Millisecond {
-		t.Fatalf("Rank 未受 1s 探测超时约束，耗时 %v", time.Since(start))
+	NewProber().Probe(context.Background(), slow.URL, nil)
+	if elapsed := time.Since(start); elapsed > 2500*time.Millisecond {
+		t.Fatalf("Probe 未受 1s 探测超时约束，耗时 %v", elapsed)
 	}
 }

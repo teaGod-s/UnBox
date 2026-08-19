@@ -10,9 +10,12 @@ import (
 	"context"
 	"errors"
 	"runtime"
+	"sync"
 
 	assets "github.com/unbox/unbox"
 	"github.com/unbox/unbox/internal/player"
+	"github.com/unbox/unbox/internal/provider"
+	"github.com/unbox/unbox/internal/store"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -22,8 +25,13 @@ const testStreamURL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
 
 // ShellService 是暴露给前端的壳层服务。
 // player 为 Task 5 起注入的播放器实例；为 nil 时表示「播放器未就绪」。
+// provider 为当前内容来源（初始为空，待前端 ImportSubscription 后重建）；
+// store 为收藏/最近/分组的持久化存储。
 type ShellService struct {
-	player player.Player
+	player   player.Player
+	provider provider.Provider
+	store    *store.Store
+	mu       sync.Mutex // 守护 provider 重赋值
 }
 
 // Platform 返回当前运行平台（linux / darwin / windows）。
@@ -49,13 +57,14 @@ func (s *ShellService) LoadTestStream() error {
 }
 
 // NewApp 创建 Unbox 桌面应用，应用级 Wails 选项细节全部收敛于此。
-// p 为启动时选出的播放器实例（可为 nil，表示未就绪）。
-func NewApp(p player.Player) *application.App {
+// p 为启动时选出的播放器实例（可为 nil，表示未就绪）；pv 为内容来源
+// （可为 nil，表示尚未导入订阅）；st 为持久化存储（可为 nil，表示收藏不可用）。
+func NewApp(p player.Player, pv provider.Provider, st *store.Store) *application.App {
 	return application.New(application.Options{
 		Name:        "unbox",
 		Description: "Unbox — IPTV 播放器",
 		Services: []application.Service{
-			application.NewService(&ShellService{player: p}),
+			application.NewService(NewShellService(pv, p, st)),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets.Frontend),

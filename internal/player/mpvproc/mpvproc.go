@@ -27,18 +27,26 @@ const ipcConnectTimeout = 5 * time.Second
 // cmdResponseTimeout 是单条命令等待 mpv 应答的超时。
 const cmdResponseTimeout = 5 * time.Second
 
+// response 是 readLoop 路由给 send 的一条命令应答，携带会话代际，
+// 供 send 丢弃跨会话串味的迟到应答。
+type response struct {
+	session int64
+	data    []byte
+}
+
 type mpvProc struct {
 	exePath string
 	ipcPath string // --input-ipc-server 暴露的 Unix socket 路径
 
-	// lifecycleMu 守护 cmd/conn/ipcPath 三个字段：只在锁内做快照/赋值，
+	// lifecycleMu 守护 cmd/conn/ipcPath/session：只在锁内做快照/赋值，
 	// 绝不在持锁时阻塞（不做 IO、不等应答），且不与 sendMu 嵌套。
 	lifecycleMu sync.Mutex
+	session     int64 // 会话代际：Load 每次自增，用于丢弃跨会话串味的迟到应答
 	cmd         *exec.Cmd
 	conn        net.Conn
 
-	sendMu    sync.Mutex  // 串行化命令：保证任一时刻只有一条命令在飞
-	responses chan []byte // readLoop 路由来的命令应答
+	sendMu    sync.Mutex    // 串行化命令：保证任一时刻只有一条命令在飞
+	responses chan response // readLoop 路由来的命令应答（带会话代际）
 	events    chan player.Event
 
 	stateMu sync.Mutex
@@ -56,7 +64,7 @@ func New(exePath string) (player.Player, error) {
 	}
 	return &mpvProc{
 		exePath:   exePath,
-		responses: make(chan []byte, 16),
+		responses: make(chan response, 16),
 		events:    make(chan player.Event, 64),
 		state:     player.State{Playing: player.StateStopped, Duration: -1},
 	}, nil
@@ -65,8 +73,6 @@ func New(exePath string) (player.Player, error) {
 func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	// 关闭旧会话（Close 幂等：无会话时直接返回 nil）。
 	_ = p.Close()
-	// 新会话从空 responses 开始，避免跨会话串味。
-	p.responses = make(chan []byte, 16)
 	sock, err := os.CreateTemp("", "unbox-mpv-*.sock")
 	if err != nil {
 		return err
@@ -105,6 +111,8 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	}
 
 	p.lifecycleMu.Lock()
+	p.session++
+	sess := p.session
 	p.cmd = cmd
 	p.conn = conn
 	p.ipcPath = ipcPath
@@ -113,7 +121,7 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	p.state = player.State{Playing: player.StatePlaying, Duration: -1, Volume: 80}
 	p.stateMu.Unlock()
 
-	go p.readLoop()
+	go p.readLoop(conn, sess)
 
 	// 观察 time-pos，让位置事件（EventPosition）可用。观察失败不影响播放，
 	// 故忽略错误。
@@ -175,10 +183,11 @@ func (p *mpvProc) send(args ...any) error {
 	p.sendMu.Lock()
 	defer p.sendMu.Unlock()
 
-	// 快照当前 conn 到局部变量；并发 Close 只关掉旧 conn，此处 Write 返回
+	// 快照当前 conn 与会话代际；并发 Close 只关掉旧 conn，此处 Write 返回
 	// error 而非 nil-deref。不持锁等应答。
 	p.lifecycleMu.Lock()
 	c := p.conn
+	sess := p.session
 	p.lifecycleMu.Unlock()
 	if c == nil {
 		return errors.New("mpvproc: 尚未 Load")
@@ -186,35 +195,69 @@ func (p *mpvProc) send(args ...any) error {
 	if _, err := c.Write([]byte(encodeCommand(args))); err != nil {
 		return err
 	}
-	select {
-	case line := <-p.responses:
-		var resp struct {
-			Error string `json:"error"`
+
+	timer := time.NewTimer(cmdResponseTimeout)
+	defer timer.Stop()
+	for {
+		select {
+		case r := <-p.responses:
+			if r.session != sess {
+				continue // 跨会话串味的迟到应答，丢弃继续等
+			}
+			var resp struct {
+				Error string `json:"error"`
+			}
+			if err := json.Unmarshal(r.data, &resp); err != nil {
+				return fmt.Errorf("解析 mpv 应答失败: %w", err)
+			}
+			if resp.Error != "" && resp.Error != "success" {
+				return errors.New(resp.Error)
+			}
+			return nil
+		case <-timer.C:
+			// 超时视为本会话连接已坏。仅在 p.conn 仍是自己写入的那条（指针同一）
+			// 时才拆解，否则说明 Load 已重入建立新会话，不得误杀后继。
+			p.lifecycleMu.Lock()
+			same := p.conn == c
+			var conn net.Conn
+			var cmd *exec.Cmd
+			var ipcPath string
+			if same {
+				conn = p.conn
+				cmd = p.cmd
+				ipcPath = p.ipcPath
+				p.conn = nil
+				p.cmd = nil
+				p.ipcPath = ""
+			}
+			p.lifecycleMu.Unlock()
+
+			if same {
+				if conn != nil {
+					_ = conn.Close()
+				}
+				if cmd != nil && cmd.Process != nil {
+					_ = cmd.Process.Kill()
+					_ = cmd.Wait()
+				}
+				if ipcPath != "" {
+					_ = os.Remove(ipcPath)
+				}
+				p.stateMu.Lock()
+				p.state.Playing = player.StateStopped
+				p.stateMu.Unlock()
+			}
+			return errors.New("mpvproc: 命令应答超时")
 		}
-		if err := json.Unmarshal(line, &resp); err != nil {
-			return fmt.Errorf("解析 mpv 应答失败: %w", err)
-		}
-		if resp.Error != "" && resp.Error != "success" {
-			return errors.New(resp.Error)
-		}
-		return nil
-	case <-time.After(cmdResponseTimeout):
-		// 超时视为连接已坏：关掉并置空，令 readLoop 退出、阻断迟到应答进入。
-		p.lifecycleMu.Lock()
-		if p.conn != nil {
-			_ = p.conn.Close()
-			p.conn = nil
-		}
-		p.lifecycleMu.Unlock()
-		return errors.New("mpvproc: 命令应答超时")
 	}
 }
 
 // readLoop 是连接上唯一的读取者。mpv 连接建立后不会主动发握手行，命令
 // 应答与异步事件在同一流上交错，必须由单一 reader 分路，否则多个带预读
 // 的 reader（bufio.Reader/Scanner）会互相抢字节。
-func (p *mpvProc) readLoop() {
-	sc := bufio.NewScanner(p.conn)
+// conn/sess 由 Load 传入并固定，保证每条命令应答都标上本会话代际。
+func (p *mpvProc) readLoop(conn net.Conn, sess int64) {
+	sc := bufio.NewScanner(conn)
 	// 单行可能较长（如音轨/字幕列表），给足缓冲：起始 64KB、上限 1MB，
 	// 避免 ReadBytes 默认 4096B 缓冲触顶误杀读循环。
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -242,7 +285,7 @@ func (p *mpvProc) readLoop() {
 		// Scan 覆盖底层数组后，等待应答的 send 会读到脏数据。
 		reply := append([]byte(nil), line...)
 		select {
-		case p.responses <- reply:
+		case p.responses <- response{session: sess, data: reply}:
 		default: // 无命令在等（理论上不应发生）
 		}
 	}

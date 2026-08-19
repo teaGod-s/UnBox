@@ -3,6 +3,7 @@ package mpvproc
 import (
 	"context"
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,5 +35,58 @@ func TestLoadPlayClose(t *testing.T) {
 	}
 	if err := p.Pause(); err != nil {
 		t.Fatalf("Pause: %v", err)
+	}
+}
+
+// TestConcurrentReload 并发交错 Load/Play/Pause/Seek/Close，令旧会话 send 与
+// 新会话 Load 重叠，验证：会话代际丢弃跨会话串味的迟到应答、指针同一性判断
+// 不误杀后继会话，且全程无 race/panic/死锁。末尾再做一次 Load+Play+Pause 确认
+// 实例仍可用。
+func TestConcurrentReload(t *testing.T) {
+	mpv, err := exec.LookPath("mpv")
+	if err != nil {
+		t.Skip("本机无 mpv，跳过集成测试")
+	}
+	p, err := New(mpv)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer p.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	const url = "https://example.com/none.m3u8"
+
+	// 初始会话。
+	if err := p.Load(ctx, player.Stream{URL: url}); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for g := 0; g < 3; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 3; i++ {
+				_ = p.Load(ctx, player.Stream{URL: url})
+				_ = p.Play()
+				_ = p.Pause()
+				_ = p.Seek(1)
+				_ = p.Close()
+			}
+		}()
+	}
+	wg.Wait()
+
+	// 结束后仍可用：串味被代际丢弃，无死锁。
+	if err := p.Load(ctx, player.Stream{URL: url}); err != nil {
+		t.Fatalf("末尾 Load: %v", err)
+	}
+	if err := p.Play(); err != nil {
+		t.Fatalf("末尾 Play: %v", err)
+	}
+	if err := p.Pause(); err != nil {
+		t.Fatalf("末尾 Pause: %v", err)
 	}
 }

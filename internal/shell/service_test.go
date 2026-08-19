@@ -69,3 +69,27 @@ func TestPlayChannelRequiresPlayer(t *testing.T) {
 		t.Fatal("player 为 nil 时 PlayChannel 应报错")
 	}
 }
+
+func TestGroupsBeforeImport(t *testing.T) {
+	s, err := store.Open(t.TempDir() + "/t.db")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+	svc := NewShellService(nil, nil, s)
+	gs, err := svc.Groups()
+	if err != nil || len(gs) != 0 {
+		t.Fatalf("导入前 Groups 应返回空且不报错: %v, %v", gs, err)
+	}
+}
+
+func TestChannelsNilStore(t *testing.T) {
+	channels := []config.Channel{
+		{Name: "CCTV-1", Group: "央视", URLs: []string{"http://x/1"}},
+	}
+	svc := NewShellService(live.New(channels), nil, nil)
+	chs, err := svc.Channels("央视", 0)
+	if err != nil || len(chs) != 1 || chs[0].Favorited {
+		t.Fatalf("store 为 nil 时 Channels 应返回频道且 Favorited=false: %+v, %v", chs, err)
+	}
+}

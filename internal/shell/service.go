@@ -128,6 +128,9 @@ func collectChannels(ctx context.Context, cfgs []*config.Config) []config.Channe
 }
 
 func (s *ShellService) Groups() ([]string, error) {
+	if s.provider == nil {
+		return nil, nil
+	}
 	secs, err := s.provider.Home(context.Background())
 	if err != nil {
 		return nil, err
@@ -140,6 +143,9 @@ func (s *ShellService) Groups() ([]string, error) {
 }
 
 func (s *ShellService) Channels(group string, page int) ([]ChannelInfo, error) {
+	if s.provider == nil {
+		return nil, nil
+	}
 	pg, err := s.provider.Browse(context.Background(), group, page)
 	if err != nil {
 		return nil, err
@@ -148,6 +154,9 @@ func (s *ShellService) Channels(group string, page int) ([]ChannelInfo, error) {
 }
 
 func (s *ShellService) Search(q string) ([]ChannelInfo, error) {
+	if s.provider == nil {
+		return nil, nil
+	}
 	items, err := s.provider.Search(context.Background(), q)
 	if err != nil {
 		return nil, err
@@ -158,7 +167,10 @@ func (s *ShellService) Search(q string) ([]ChannelInfo, error) {
 func (s *ShellService) toChannelInfo(items []provider.Item) []ChannelInfo {
 	out := make([]ChannelInfo, len(items))
 	for i, it := range items {
-		fav, _ := s.store.IsFavorite(it.ID)
+		var fav bool
+		if s.store != nil {
+			fav, _ = s.store.IsFavorite(it.ID)
+		}
 		out[i] = ChannelInfo{ID: it.ID, Name: it.Title, Group: it.Group, Logo: it.Logo, Favorited: fav}
 	}
 	return out
@@ -168,6 +180,9 @@ func (s *ShellService) PlayChannel(id string) error {
 	if s.player == nil {
 		return errors.New("播放器未就绪")
 	}
+	if s.provider == nil {
+		return errors.New("未导入订阅")
+	}
 	st, err := s.provider.Resolve(context.Background(), id)
 	if err != nil {
 		return err
@@ -175,26 +190,12 @@ func (s *ShellService) PlayChannel(id string) error {
 	if err := s.player.Load(context.Background(), st); err != nil {
 		return err
 	}
-	if err := s.store.AddRecent(id, stTitle(s.provider, id), stGroup(s.provider, id), st.URL); err != nil {
-		return err
+	if s.store != nil {
+		if m, err := s.provider.Detail(context.Background(), id); err == nil {
+			_ = s.store.AddRecent(id, m.Title, m.Group, st.URL) // 尽力而为，失败不阻断播放
+		}
 	}
 	return s.player.Play()
-}
-
-// stTitle/stGroup 从 provider 取频道名/分组用于最近记录（简化：直接解析 id）。
-func stTitle(p provider.Provider, id string) string {
-	m, err := p.Detail(context.Background(), id)
-	if err == nil {
-		return m.Title
-	}
-	return id
-}
-func stGroup(p provider.Provider, id string) string {
-	m, err := p.Detail(context.Background(), id)
-	if err == nil {
-		return m.Group
-	}
-	return ""
 }
 
 func (s *ShellService) Pause() error {
@@ -219,6 +220,12 @@ func (s *ShellService) SetVolume(v int) error {
 }
 
 func (s *ShellService) AddFavorite(id string) error {
+	if s.provider == nil {
+		return errors.New("未导入订阅")
+	}
+	if s.store == nil {
+		return errors.New("数据库未就绪，收藏不可用")
+	}
 	m, err := s.provider.Detail(context.Background(), id)
 	if err != nil {
 		return err
@@ -230,9 +237,17 @@ func (s *ShellService) AddFavorite(id string) error {
 	return s.store.AddFavorite(id, m.Title, m.Group, st.URL)
 }
 
-func (s *ShellService) RemoveFavorite(id string) error { return s.store.RemoveFavorite(id) }
+func (s *ShellService) RemoveFavorite(id string) error {
+	if s.store == nil {
+		return errors.New("数据库未就绪，收藏不可用")
+	}
+	return s.store.RemoveFavorite(id)
+}
 
 func (s *ShellService) ListFavorites() ([]ChannelInfo, error) {
+	if s.store == nil {
+		return nil, errors.New("数据库未就绪，收藏不可用")
+	}
 	favs, err := s.store.ListFavorites()
 	if err != nil {
 		return nil, err
@@ -244,8 +259,17 @@ func (s *ShellService) ListFavorites() ([]ChannelInfo, error) {
 	return out, nil
 }
 
-func (s *ShellService) AddGroup(name string) error { return s.store.AddGroup(name) }
+func (s *ShellService) AddGroup(name string) error {
+	if s.store == nil {
+		return errors.New("数据库未就绪，收藏不可用")
+	}
+	return s.store.AddGroup(name)
+}
+
 func (s *ShellService) ListGroups() ([]string, error) {
+	if s.store == nil {
+		return nil, errors.New("数据库未就绪，收藏不可用")
+	}
 	gs, err := s.store.ListGroups()
 	if err != nil {
 		return nil, err

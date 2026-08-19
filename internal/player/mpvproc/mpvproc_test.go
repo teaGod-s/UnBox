@@ -90,3 +90,26 @@ func TestConcurrentReload(t *testing.T) {
 		t.Fatalf("末尾 Pause: %v", err)
 	}
 }
+
+func TestSendEventTerminalBlocksUntilRead(t *testing.T) {
+	ch := make(chan player.Event) // 无缓冲：无人读取时必然阻塞
+	done := make(chan struct{})
+	go func() {
+		sendEvent(ch, player.Event{Kind: player.EventEOF})
+		close(done)
+	}()
+	select {
+	case <-done:
+		t.Fatal("终端事件在无人读取时被丢弃了（不应发生）")
+	case <-time.After(20 * time.Millisecond):
+		// 预期：阻塞在发送上，done 未关闭
+	}
+	<-ch // 读取后放行
+	<-done
+}
+
+func TestSendEventPositionDropsWhenFull(t *testing.T) {
+	ch := make(chan player.Event, 1)
+	ch <- player.Event{Kind: player.EventPosition}          // 占满
+	sendEvent(ch, player.Event{Kind: player.EventPosition}) // 应丢弃而非阻塞
+}

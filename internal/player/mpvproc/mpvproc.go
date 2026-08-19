@@ -274,10 +274,7 @@ func (p *mpvProc) readLoop(conn net.Conn, sess int64) {
 					p.state.Position = evt.Position
 					p.stateMu.Unlock()
 				}
-				select {
-				case p.events <- evt:
-				default: // 事件通道满则丢弃，避免阻塞读循环
-				}
+				sendEvent(p.events, evt)
 			}
 			continue
 		}
@@ -287,6 +284,20 @@ func (p *mpvProc) readLoop(conn net.Conn, sess int64) {
 		select {
 		case p.responses <- response{session: sess, data: reply}:
 		default: // 无命令在等（理论上不应发生）
+		}
+	}
+}
+
+// sendEvent 把事件发往通道：终端事件（EOF/Error）阻塞发送保证送达
+// （失败自动切换依赖它们），其余事件通道满则丢弃以避免阻塞读循环。
+func sendEvent(ch chan<- player.Event, evt player.Event) {
+	switch evt.Kind {
+	case player.EventEOF, player.EventError:
+		ch <- evt
+	default:
+		select {
+		case ch <- evt:
+		default:
 		}
 	}
 }

@@ -16,23 +16,27 @@ body {
 body {
   background: #06070f;
   color: #e8eaf0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .container {
-  text-align: center;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: 0.9rem 1.1rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  overflow: hidden;
 }
 
 .title {
-  font-size: 3rem;
+  font-size: 1.5rem;
   margin: 0;
 }
 
 .subtitle {
   color: #8b91a3;
-  margin: 0.5rem 0 2rem;
+  margin: 0.2rem 0 0.9rem;
 }
 
 .status {
@@ -87,4 +91,212 @@ body {
   margin: 1rem 0 0;
   max-width: 24rem;
   overflow-wrap: break-word;
+}
+
+/* ---- 订阅导入 + 三栏布局（左分组 / 中频道 / 右播放+收藏） ---- */
+
+.import {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.import input {
+  flex: 1;
+  max-width: 30rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.95rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+}
+
+.import input::placeholder {
+  color: #6b7280;
+}
+
+.import .ok {
+  color: #7ee787;
+  font-size: 0.9rem;
+}
+
+.layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr) 250px;
+  gap: 0.75rem;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.6rem;
+  overflow-y: auto;
+  background: #0a0d1a;
+  border: 1px solid #23283a;
+  border-radius: 0.5rem;
+}
+
+.groups button {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.9rem;
+  color: #c6cbd9;
+  background: transparent;
+  border: none;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.groups button:hover {
+  background: #1b2137;
+}
+
+.groups button.active {
+  background: #2c3350;
+  color: #ffffff;
+}
+
+.groups hr {
+  width: 100%;
+  margin: 0.4rem 0;
+  border: none;
+  border-top: 1px solid #23283a;
+}
+
+.channels {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #0a0d1a;
+  border: 1px solid #23283a;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.search {
+  padding: 0.5rem;
+  border-bottom: 1px solid #23283a;
+}
+
+.search input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.95rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+}
+
+.search input::placeholder {
+  color: #6b7280;
+}
+
+.channels ul {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.channel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid #161a2b;
+}
+
+.channel .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel .group {
+  color: #8b91a3;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.channel button,
+.import button,
+.controls button {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.9rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.channel button:hover,
+.import button:hover:not(:disabled),
+.controls button:hover {
+  background: #232a45;
+}
+
+.import button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.player {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  overflow-y: auto;
+  background: #0a0d1a;
+  border: 1px solid #23283a;
+  border-radius: 0.5rem;
+}
+
+.player .now {
+  margin: 0;
+  color: #7ee787;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.controls input[type="range"] {
+  flex: 1;
+  accent-color: #7ee787;
+}
+
+.favhead {
+  margin: 0.5rem 0 0;
+  color: #8b91a3;
+}
+
+.favs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.favs li {
+  padding: 0.35rem 0.45rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favs li:hover {
+  background: #1b2137;
 }

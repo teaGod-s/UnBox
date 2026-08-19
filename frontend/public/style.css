@@ -58,3 +58,33 @@ body {
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
+
+.actions {
+  margin: 1.5rem 0 0;
+}
+
+.load {
+  padding: 0.5rem 1.25rem;
+  font-size: 1rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.load:hover:not(:disabled) {
+  background: #232a45;
+}
+
+.load:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #ff7b72;
+  margin: 1rem 0 0;
+  max-width: 24rem;
+  overflow-wrap: break-word;
+}

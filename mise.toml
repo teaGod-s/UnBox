@@ -16,10 +16,10 @@ run = "go build -o bin/ ./cmd/..."
 run = "wails3 dev"
 
 [tasks."build:linux"]
-run = "wails3 build -platform linux/amd64"
+run = "wails3 build GOOS=linux GOARCH=amd64"
 
 [tasks."build:win"]
-run = "wails3 build -platform windows/amd64"
+run = "wails3 build GOOS=windows GOARCH=amd64"
 
 [tasks."build:mac"]
-run = "wails3 build -platform darwin/universal"
+run = "wails3 build GOOS=darwin GOARCH=arm64"

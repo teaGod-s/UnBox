@@ -1,5 +1,4 @@
 # build artifacts
-/build/
 /bin/
 *.exe
 *.dll
@@ -12,6 +11,12 @@ frontend/dist/
 
 # wails
 frontend/bindings/
+.task/
+
+# wails generated build artifacts
+build/linux/appimage/build/
+build/linux/*.desktop
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 
 # os
 .DS_Store

@@ -75,9 +75,9 @@ func NewApp(p player.Player, pv provider.Provider, st *store.Store) *application
 	})
 }
 
-// OpenWindow 在 app 上创建并打开主窗口，窗口级 Wails 选项细节收敛于此。
-func OpenWindow(app *application.App) {
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
+// OpenWindow 在 app 上创建并打开主窗口，并返回窗口（供后续拿原生句柄嵌入播放）。
+func OpenWindow(app *application.App) *application.WebviewWindow {
+	return app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "Unbox",
 		Width:            1000,
 		Height:           618,

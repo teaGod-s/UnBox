@@ -8,12 +8,15 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/unbox/unbox/internal/player"
 	"github.com/unbox/unbox/internal/player/failover"
 	"github.com/unbox/unbox/internal/probe"
 	"github.com/unbox/unbox/internal/provider"
 	"github.com/unbox/unbox/internal/shell"
 	"github.com/unbox/unbox/internal/store"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func main() {
@@ -32,10 +35,29 @@ func main() {
 	// 初始 Provider 为空：等待前端 ImportSubscription 后重建。
 	var pv provider.Provider
 	app := shell.NewApp(pl, pv, st)
-	shell.OpenWindow(app)
+	win := shell.OpenWindow(app)
+
+	// 窗口显示后拿原生句柄注入 mpvproc，实现嵌入；拿不到则回退独立窗口。
+	if embed, ok := p.(player.Embedder); ok {
+		go embedWindow(embed, win)
+	}
+
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// embedWindow 轮询等待窗口 realize 后拿到 XID/HWND 并注入；超时则回退。
+func embedWindow(embed player.Embedder, win *application.WebviewWindow) {
+	for i := 0; i < 100; i++ {
+		if id := shell.NativeWindowID(win); id != 0 {
+			embed.SetEmbedWindow(id)
+			log.Printf("已启用窗口嵌入 (id=%d)", id)
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	log.Printf("未能在超时内获取原生窗口句柄，回退为独立窗口播放")
 }
 
 // appDataPath 返回数据库存放路径（用户配置目录下的 unbox/unbox.db）。

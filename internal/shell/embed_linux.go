@@ -3,16 +3,31 @@
 package shell
 
 /*
-#cgo pkg-config: gtk+-3.0 gdk-x11-3.0
+#cgo pkg-config: gtk4-x11
 #include <gtk/gtk.h>
-#include <gdk/gdkx.h>
+#include <gdk/x11/gdkx.h>
+
+typedef struct {
+	GtkWidget* widget;
+	unsigned long xid;
+} unbox_xid_result;
+
+static gboolean unbox_get_xid_cb(gpointer data) {
+	unbox_xid_result* r = (unbox_xid_result*)data;
+	GtkNative* native = gtk_widget_get_native(r->widget);
+	if (native != NULL) {
+		GdkSurface* surface = gtk_native_get_surface(native);
+		if (surface != NULL) {
+			r->xid = gdk_x11_surface_get_xid(surface);
+		}
+	}
+	return G_SOURCE_REMOVE;
+}
 
 static unsigned long unbox_window_xid(void* widget) {
-	GdkWindow* gdk = gtk_widget_get_window((GtkWidget*)widget);
-	if (gdk == NULL) {
-		return 0;
-	}
-	return gdk_x11_window_get_xid(gdk);
+	unbox_xid_result r = { (GtkWidget*)widget, 0 };
+	g_main_context_invoke(NULL, unbox_get_xid_cb, &r);
+	return r.xid;
 }
 */
 import "C"

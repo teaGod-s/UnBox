@@ -14,6 +14,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"time"
 
@@ -38,12 +39,13 @@ type mpvProc struct {
 	exePath string
 	ipcPath string // --input-ipc-server 暴露的 Unix socket 路径
 
-	// lifecycleMu 守护 cmd/conn/ipcPath/session：只在锁内做快照/赋值，
+	// lifecycleMu 守护 cmd/conn/ipcPath/session/wid：只在锁内做快照/赋值，
 	// 绝不在持锁时阻塞（不做 IO、不等应答），且不与 sendMu 嵌套。
 	lifecycleMu sync.Mutex
 	session     int64 // 会话代际：Load 每次自增，用于丢弃跨会话串味的迟到应答
 	cmd         *exec.Cmd
 	conn        net.Conn
+	wid         uintptr // 嵌入宿主窗口句柄（0 表示不嵌入，独立开窗）
 
 	sendMu    sync.Mutex    // 串行化命令：保证任一时刻只有一条命令在飞
 	responses chan response // readLoop 路由来的命令应答（带会话代际）
@@ -55,9 +57,8 @@ type mpvProc struct {
 
 // New 以指定 mpv 可执行文件启动一个播放器实例。
 //
-// 实际把视频嵌入窗口需要 --wid=<窗口句柄>，但那是 shell 层的事；本层只
-// 负责 mpv 进程生命周期与 JSON IPC 对话，窗口句柄由 shell 通过后续扩展
-// 参数传入（M1 阶段先用 --force-window 保证无嵌入也能独立开窗冒烟）。
+// 本层负责 mpv 进程生命周期与 JSON IPC 对话；把视频嵌入宿主窗口可通过
+// SetEmbedWindow 传入 --wid=<窗口句柄>，未设置时用 --force-window 独立开窗。
 func New(exePath string) (player.Player, error) {
 	if _, err := os.Stat(exePath); err != nil {
 		return nil, fmt.Errorf("mpv 可执行文件不可用: %w", err)
@@ -81,18 +82,10 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	_ = sock.Close()
 	_ = os.Remove(ipcPath)
 
-	args := []string{
-		"--idle=yes",
-		"--input-ipc-server=" + ipcPath,
-		"--force-window=yes",
-		"--osc=no",
-		"--keep-open=yes",
-		"--volume=80",
-	}
-	for k, v := range s.Headers {
-		args = append(args, "--http-header-fields="+k+": "+v)
-	}
-	args = append(args, s.URL)
+	p.lifecycleMu.Lock()
+	wid := p.wid
+	p.lifecycleMu.Unlock()
+	args := buildArgs(s, ipcPath, wid)
 
 	cmd := exec.CommandContext(ctx, p.exePath, args...)
 	cmd.Stdout = io.Discard
@@ -127,6 +120,35 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	// 故忽略错误。
 	_ = p.send("observe_property", 0, "time-pos")
 	return nil
+}
+
+// SetEmbedWindow 设置 mpv 嵌入的宿主窗口句柄（X11 XID / Windows HWND）。
+// 为 0 表示不嵌入，Load 时回退为 --force-window 独立窗口。
+func (p *mpvProc) SetEmbedWindow(id uintptr) {
+	p.lifecycleMu.Lock()
+	p.wid = id
+	p.lifecycleMu.Unlock()
+}
+
+// buildArgs 构造 mpv 启动参数。wid != 0 时嵌入宿主窗口并开 OSC；
+// wid == 0 时独立开窗并关 OSC（前端控制）。
+func buildArgs(s player.Stream, ipcPath string, wid uintptr) []string {
+	args := []string{
+		"--idle=yes",
+		"--input-ipc-server=" + ipcPath,
+		"--keep-open=yes",
+		"--volume=80",
+	}
+	if wid != 0 {
+		args = append(args, "--wid="+strconv.FormatUint(uint64(wid), 10), "--osc=yes")
+	} else {
+		args = append(args, "--force-window=yes", "--osc=no")
+	}
+	for k, v := range s.Headers {
+		args = append(args, "--http-header-fields="+k+": "+v)
+	}
+	args = append(args, s.URL)
+	return args
 }
 
 func (p *mpvProc) Play() error  { return p.send("set_property", "pause", false) }

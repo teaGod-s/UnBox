@@ -119,3 +119,9 @@ type Player interface {
 	Events() <-chan Event
 	Close() error
 }
+
+// Embedder 是可嵌入到指定宿主窗口的播放器（mpvproc 用 --wid 实现）。
+// mpvlib（macOS）经 CAMetalLayer 分层渲染，不需要宿主窗口句柄，故不实现本接口。
+type Embedder interface {
+	SetEmbedWindow(id uintptr)
+}

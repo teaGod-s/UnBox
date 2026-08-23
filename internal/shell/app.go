@@ -9,6 +9,7 @@ package shell
 import (
 	"context"
 	"errors"
+	"os"
 	"runtime"
 	"sync"
 
@@ -56,10 +57,21 @@ func (s *ShellService) LoadTestStream() error {
 	})
 }
 
+// forceLinuxX11Backend 在 Linux 下把 GDK_BACKEND 设为 x11，必须在 GTK 初始化前调用。
+// GTK4 默认优先 Wayland 后端；WSLg 等同时暴露 Wayland + XWayland 的环境下，
+// Wayland 后端会让 WebKit 窗口拿不到渲染上下文（不显示），且 mpvproc 的
+// --wid 嵌入需要 X11 的 XID。X11（XWayland）后端才同时满足两者。
+func forceLinuxX11Backend() {
+	if runtime.GOOS == "linux" {
+		_ = os.Setenv("GDK_BACKEND", "x11")
+	}
+}
+
 // NewApp 创建 Unbox 桌面应用，应用级 Wails 选项细节全部收敛于此。
 // p 为启动时选出的播放器实例（可为 nil，表示未就绪）；pv 为内容来源
 // （可为 nil，表示尚未导入订阅）；st 为持久化存储（可为 nil，表示收藏不可用）。
 func NewApp(p player.Player, pv provider.Provider, st *store.Store) *application.App {
+	forceLinuxX11Backend()
 	return application.New(application.Options{
 		Name:        "unbox",
 		Description: "Unbox — IPTV 播放器",

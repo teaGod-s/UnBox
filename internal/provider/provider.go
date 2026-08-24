@@ -34,13 +34,13 @@ type Media struct {
 	Logo  string
 	Group string
 	// 以下字段为 M2 点播扩展，直播实现留空。
-	Description string     // 简介（vod_content）
-	Year        string     // vod_year
-	Area        string     // vod_area
-	Type        string     // type_name
-	Remarks     string     // vod_remarks
-	Sources     []string   // 线路名列表
-	Episodes    []Episode  // 剧集列表
+	Description string    // 简介（vod_content）
+	Year        string    // vod_year
+	Area        string    // vod_area
+	Type        string    // type_name
+	Remarks     string    // vod_remarks
+	Sources     []string  // 线路名列表
+	Episodes    []Episode // 剧集列表
 }
 
 // Episode 是点播的一集。ID 为稳定标识，供 Resolve 定位。

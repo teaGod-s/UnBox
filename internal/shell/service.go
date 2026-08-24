@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/unbox/unbox/internal/config"
 	"github.com/unbox/unbox/internal/player"
@@ -176,23 +177,56 @@ func resolveConfigs(ctx context.Context, ref string, raw []byte) ([]*config.Conf
 	return []*config.Config{cfg}, nil
 }
 
-// collectChannels 从多份配置收集直播频道：Channels 内嵌的直接用，URL 指向的拉取解析。
+// collectChannels 从多份配置收集直播频道：Channels 内嵌的直接用，URL 指向的
+// 并发拉取解析。并发时用 slot 记录原始顺序，结果按原下标回填，保证频道顺序
+// 与串行版本一致（live.New 只对 group 排序，组内频道顺序依赖输入顺序）。
 func collectChannels(ctx context.Context, cfgs []*config.Config) []config.Channel {
-	var channels []config.Channel
 	fetcher := config.NewFetcher()
+
+	// 第一遍：把每个直播组归为「内嵌频道」或「需拉取」，同时记录原始顺序。
+	type slot struct {
+		embedded []config.Channel
+		job      int // 索引进 jobs；-1 表示内嵌
+	}
+	var slots []slot
+	var jobs []config.Live
 	for _, cfg := range cfgs {
 		for _, lv := range cfg.Lives {
-			if len(lv.Channels) > 0 {
-				channels = append(channels, lv.Channels...)
-				continue
+			switch {
+			case len(lv.Channels) > 0:
+				slots = append(slots, slot{embedded: lv.Channels, job: -1})
+			case lv.URL != "":
+				jobs = append(jobs, lv)
+				slots = append(slots, slot{job: len(jobs) - 1})
 			}
-			if lv.URL == "" {
-				continue
+		}
+	}
+
+	// 并发拉取，结果写进与 job 下标对应的位置（每个位置只被一个 goroutine 写）。
+	results := make([][]config.Channel, len(jobs))
+	const maxConcurrency = 8
+	sem := make(chan struct{}, maxConcurrency)
+	var wg sync.WaitGroup
+	for i, lv := range jobs {
+		wg.Add(1)
+		go func(i int, lv config.Live) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if chs, err := live.FetchLive(ctx, lv, fetcher); err == nil {
+				results[i] = chs
 			}
-			chs, ferr := live.FetchLive(ctx, lv, fetcher)
-			if ferr == nil {
-				channels = append(channels, chs...)
-			}
+		}(i, lv)
+	}
+	wg.Wait()
+
+	// 按原始顺序组装：内嵌频道与拉取结果各自归位。
+	var channels []config.Channel
+	for _, s := range slots {
+		if s.job >= 0 {
+			channels = append(channels, results[s.job]...)
+		} else {
+			channels = append(channels, s.embedded...)
 		}
 	}
 	return channels

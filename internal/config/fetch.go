@@ -16,9 +16,9 @@ import (
 const okhttpUA = "okhttp/3.12.11"
 
 // fetchTimeout 是单次 HTTP 拉取的超时时间。真实配置正文都很小
-// （约 400 字节到 114 KB），60 秒足以覆盖慢速网络，同时避免
-// 恶意或卡死的服务端无限期占用连接。
-const fetchTimeout = 60 * time.Second
+// （约 400 字节到 114 KB），15 秒足以覆盖慢速网络；更短的超时配合
+// 并发拉取，能让死掉的源快速失败，避免一个死 URL 拖住整次导入。
+const fetchTimeout = 15 * time.Second
 
 // Fetcher 负责获取配置内容，支持 http(s)://、file:// 以及裸本地路径。
 //

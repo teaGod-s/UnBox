@@ -155,3 +155,39 @@ func TestVodSourcesAndRoutes(t *testing.T) {
 		t.Fatalf("未知站点应报错")
 	}
 }
+
+func writeTempM3U(t *testing.T, content string) string {
+	t.Helper()
+	path := t.TempDir() + "/ch.m3u"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return path
+}
+
+func TestCollectChannelsParallelOrder(t *testing.T) {
+	m3u1 := writeTempM3U(t, "#EXTM3U\n#EXTINF:-1 group-title=\"央视\",频道1\nhttp://x/1\n#EXTINF:-1 group-title=\"央视\",频道2\nhttp://x/2\n")
+	m3u2 := writeTempM3U(t, "#EXTM3U\n#EXTINF:-1 group-title=\"卫视\",频道3\nhttp://x/3\n")
+
+	cfgs := []*config.Config{
+		{Lives: config.LiveList{
+			{Name: "g1", URL: m3u1},
+			{Name: "g2", Channels: []config.Channel{{Name: "内嵌", Group: "G", URLs: []string{"http://x/0"}}}},
+			{Name: "g3", URL: m3u2},
+		}},
+	}
+	chs := collectChannels(context.Background(), cfgs)
+	if len(chs) != 4 {
+		t.Fatalf("频道数 = %d, 期望 4", len(chs))
+	}
+	var names []string
+	for _, c := range chs {
+		names = append(names, c.Name)
+	}
+	want := []string{"频道1", "频道2", "内嵌", "频道3"}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Fatalf("顺序错误: 得 %v, 期望 %v", names, want)
+		}
+	}
+}

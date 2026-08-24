@@ -1,13 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ShellService } from '../bindings/github.com/unbox/unbox/internal/shell'
+import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia } from '../bindings/github.com/unbox/unbox/internal/shell'
 
 interface ChannelInfo { ID: string; Name: string; Group: string; Logo: string; Favorited: boolean }
-interface SourceInfo { ID: string; Name: string; Kind: string }
-interface Section { ID: string; Title: string }
-interface VodItem { ID: string; Title: string; Logo: string; Group: string }
-interface EpisodeInfo { ID: string; Source: string; Name: string }
-interface VodMedia { ID: string; Title: string; Logo: string; Group: string; Description: string; Year: string; Area: string; Type: string; Remarks: string; Sources: string[]; Episodes: EpisodeInfo[] }
 
 const platform = ref('…')
 const playerReady = ref(false)
@@ -216,9 +211,9 @@ onMounted(refresh)
             <h2>{{ vodDetail.Title }}</h2>
             <p class="meta">{{ vodDetail.Type }} · {{ vodDetail.Year }} · {{ vodDetail.Area }}</p>
             <p>{{ vodDetail.Description }}</p>
-            <div v-for="src in vodDetail.Sources" :key="src" class="ep-src">
+            <div v-for="src in (vodDetail.Sources ?? [])" :key="src" class="ep-src">
               <p class="ep-src-name">{{ src }}</p>
-              <button v-for="ep in vodDetail.Episodes.filter(e => e.Source === src)" :key="ep.ID"
+              <button v-for="ep in (vodDetail.Episodes ?? []).filter(e => e.Source === src)" :key="ep.ID"
                       @click="playEpisode(ep)">{{ ep.Name }}</button>
             </div>
           </div>

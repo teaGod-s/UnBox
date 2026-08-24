@@ -221,6 +221,23 @@ body {
   white-space: nowrap;
 }
 
+.channel .thumb {
+  width: 44px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 0.3rem;
+  background: #161a2b;
+  flex-shrink: 0;
+}
+
+.vod-detail .poster {
+  float: left;
+  width: 130px;
+  margin: 0 1rem 0.5rem 0;
+  border-radius: 0.4rem;
+  background: #161a2b;
+}
+
 .channel .group {
   color: #8b91a3;
   font-size: 0.85rem;

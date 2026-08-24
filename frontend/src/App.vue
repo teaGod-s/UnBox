@@ -146,6 +146,11 @@ async function playEpisode(ep: EpisodeInfo) {
   } catch (e) { errMsg.value = String(e) }
 }
 
+// imgError 隐藏加载失败的图片（部分源 vod_pic 为空/失效/被防盗链拦截）。
+function imgError(e: Event) {
+  ;(e.target as HTMLImageElement).style.display = 'none'
+}
+
 onMounted(() => {
   refresh()
   Events.On('import:progress', (ev: any) => { importProgress.value = ev.data as Progress })
@@ -227,11 +232,13 @@ onMounted(() => {
           <div class="search"><input v-model="vodQuery" placeholder="搜索影片" @input="vodSearch" /></div>
           <ul v-if="!vodDetail">
             <li v-for="it in vodItems" :key="it.ID" class="channel" @click="openVodDetail(it)">
+              <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
               <span class="name">{{ it.Title }}</span><span class="group">{{ it.Group }}</span>
             </li>
           </ul>
           <div v-else class="vod-detail">
             <button @click="vodDetail = null">← 返回</button>
+            <img v-if="vodDetail.Logo" :src="vodDetail.Logo" class="poster" referrerpolicy="no-referrer" @error="imgError" />
             <h2>{{ vodDetail.Title }}</h2>
             <p class="meta">{{ vodDetail.Type }} · {{ vodDetail.Year }} · {{ vodDetail.Area }}</p>
             <p>{{ vodDetail.Description }}</p>

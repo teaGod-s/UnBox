@@ -181,7 +181,7 @@ onMounted(() => {
       </aside>
 
       <section class="channels">
-        <div v-if="groups.length === 0" class="load-live">
+        <div v-if="groups.length <= 1" class="load-live">
           <p>直播源尚未加载</p>
           <button @click="loadLive">加载直播</button>
         </div>

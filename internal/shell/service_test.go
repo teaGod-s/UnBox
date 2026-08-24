@@ -1,11 +1,14 @@
 package shell
 
 import (
+	"context"
 	"os"
 	"sync"
 	"testing"
 
 	"github.com/unbox/unbox/internal/config"
+	"github.com/unbox/unbox/internal/player"
+	"github.com/unbox/unbox/internal/provider"
 	"github.com/unbox/unbox/internal/provider/live"
 	"github.com/unbox/unbox/internal/store"
 )
@@ -111,4 +114,44 @@ func TestConcurrentImportAndGroups(t *testing.T) {
 		go func() { defer wg.Done(); _, _ = svc.Groups() }()
 	}
 	wg.Wait()
+}
+
+// stubProvider 是点播 Provider 的最小测试桩。
+type stubProvider struct{ key string }
+
+func (s *stubProvider) ID() string { return s.key }
+func (s *stubProvider) Home(context.Context) ([]provider.Section, error) {
+	return []provider.Section{{ID: "10", Title: "电影"}}, nil
+}
+func (s *stubProvider) Browse(context.Context, string, int) (provider.Page, error) {
+	return provider.Page{Items: []provider.Item{{ID: "1", Title: "电影A"}}}, nil
+}
+func (s *stubProvider) Search(context.Context, string) ([]provider.Item, error) { return nil, nil }
+func (s *stubProvider) Detail(context.Context, string) (provider.Media, error) {
+	return provider.Media{ID: "1", Title: "电影A", Sources: []string{"x"}, Episodes: []provider.Episode{{ID: "1/0/0", Source: "x", Name: "第01集"}}}, nil
+}
+func (s *stubProvider) Resolve(context.Context, string) (player.Stream, error) {
+	return player.Stream{URL: "https://x/a.m3u8", Kind: player.StreamHLS}, nil
+}
+
+func TestVodSourcesAndRoutes(t *testing.T) {
+	svc := NewShellService(nil, nil, nil)
+	svc.vods["s1"] = &stubProvider{key: "s1"}
+	svc.vodNames["s1"] = "站点一"
+
+	srcs := svc.Sources()
+	if len(srcs) != 2 || srcs[0].ID != "live" || srcs[1].ID != "s1" || srcs[1].Name != "站点一" {
+		t.Fatalf("Sources 错误: %+v", srcs)
+	}
+	secs, err := svc.VodCategories("s1")
+	if err != nil || len(secs) != 1 || secs[0].Title != "电影" {
+		t.Fatalf("VodCategories 错误: %+v %v", secs, err)
+	}
+	m, err := svc.VodDetail("s1", "1")
+	if err != nil || len(m.Episodes) != 1 || m.Sources[0] != "x" {
+		t.Fatalf("VodDetail 错误: %+v %v", m, err)
+	}
+	if _, err := svc.VodCategories("nope"); err == nil {
+		t.Fatalf("未知站点应报错")
+	}
 }

@@ -5,11 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/unbox/unbox/internal/config"
 	"github.com/unbox/unbox/internal/player"
 	"github.com/unbox/unbox/internal/provider"
 	"github.com/unbox/unbox/internal/provider/live"
+	"github.com/unbox/unbox/internal/provider/tvbox"
 	"github.com/unbox/unbox/internal/store"
 )
 
@@ -28,9 +30,58 @@ type ChannelInfo struct {
 	Favorited bool
 }
 
-// NewShellService 组装壳层服务。p 可为 nil（播放器未就绪）。
+// SourceInfo 是顶层来源（直播或某个点播站）。
+type SourceInfo struct {
+	ID   string
+	Name string
+	Kind string // "live" | "vod"
+}
+
+// Section 是点播分类。
+type Section struct {
+	ID    string
+	Title string
+}
+
+// VodItem 是点播影片列表项。
+type VodItem struct {
+	ID    string
+	Title string
+	Logo  string
+	Group string
+}
+
+// EpisodeInfo 是点播剧集（不向前端暴露 URL）。
+type EpisodeInfo struct {
+	ID     string
+	Source string
+	Name   string
+}
+
+// VodMedia 是点播详情。
+type VodMedia struct {
+	ID          string
+	Title       string
+	Logo        string
+	Group       string
+	Description string
+	Year        string
+	Area        string
+	Type        string
+	Remarks     string
+	Sources     []string
+	Episodes    []EpisodeInfo
+}
+
+// NewShellService 组装壳层服务。pv 为直播 Provider（可为 nil）；p 可为 nil（播放器未就绪）。
 func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *ShellService {
-	return &ShellService{provider: pv, player: p, store: st}
+	return &ShellService{
+		live:     pv,
+		player:   p,
+		store:    st,
+		vods:     map[string]provider.Provider{},
+		vodNames: map[string]string{},
+	}
 }
 
 // ImportSubscription 拉取并解析订阅，重建 Provider。支持两类输入：
@@ -54,10 +105,26 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 	}
 	lp := live.New(channels)
 	s.mu.Lock()
-	s.provider = lp
+	s.live = lp
+	s.vods, s.vodNames = collectVodSites(cfgs)
 	s.mu.Unlock()
 	secs, _ := lp.Home(context.Background())
 	return ImportResult{Groups: len(secs), Channels: len(channels)}, nil
+}
+
+// collectVodSites 从多份配置收集 type=1（CMS）站点，构建 tvbox.Provider。
+func collectVodSites(cfgs []*config.Config) (map[string]provider.Provider, map[string]string) {
+	vods := make(map[string]provider.Provider)
+	names := make(map[string]string)
+	for _, cfg := range cfgs {
+		for _, site := range cfg.Sites {
+			if site.Type == config.SiteTypeCMS && site.API != "" {
+				vods[site.Key] = tvbox.New(site)
+				names[site.Key] = site.Name
+			}
+		}
+	}
+	return vods, names
 }
 
 // isPlaylist 探测内容是否为独立播放列表而非 JSON 配置。
@@ -85,7 +152,9 @@ func (s *ShellService) importPlaylist(raw []byte) (ImportResult, error) {
 	}
 	lp := live.New(channels)
 	s.mu.Lock()
-	s.provider = lp
+	s.live = lp
+	s.vods = map[string]provider.Provider{}
+	s.vodNames = map[string]string{}
 	s.mu.Unlock()
 	secs, _ := lp.Home(context.Background())
 	return ImportResult{Groups: len(secs), Channels: len(channels)}, nil
@@ -131,7 +200,7 @@ func collectChannels(ctx context.Context, cfgs []*config.Config) []config.Channe
 
 func (s *ShellService) Groups() ([]string, error) {
 	s.mu.RLock()
-	pv := s.provider
+	pv := s.live
 	s.mu.RUnlock()
 	if pv == nil {
 		return nil, nil
@@ -149,7 +218,7 @@ func (s *ShellService) Groups() ([]string, error) {
 
 func (s *ShellService) Channels(group string, page int) ([]ChannelInfo, error) {
 	s.mu.RLock()
-	pv := s.provider
+	pv := s.live
 	s.mu.RUnlock()
 	if pv == nil {
 		return nil, nil
@@ -163,7 +232,7 @@ func (s *ShellService) Channels(group string, page int) ([]ChannelInfo, error) {
 
 func (s *ShellService) Search(q string) ([]ChannelInfo, error) {
 	s.mu.RLock()
-	pv := s.provider
+	pv := s.live
 	s.mu.RUnlock()
 	if pv == nil {
 		return nil, nil
@@ -192,7 +261,7 @@ func (s *ShellService) PlayChannel(id string) error {
 		return errors.New("播放器未就绪")
 	}
 	s.mu.RLock()
-	pv := s.provider
+	pv := s.live
 	s.mu.RUnlock()
 	if pv == nil {
 		return errors.New("未导入订阅")
@@ -235,7 +304,7 @@ func (s *ShellService) SetVolume(v int) error {
 
 func (s *ShellService) AddFavorite(id string) error {
 	s.mu.RLock()
-	pv := s.provider
+	pv := s.live
 	s.mu.RUnlock()
 	if pv == nil {
 		return errors.New("未导入订阅")
@@ -296,4 +365,118 @@ func (s *ShellService) ListGroups() ([]string, error) {
 		out[i] = g.Name
 	}
 	return out, nil
+}
+
+// Sources 返回顶层来源（直播 + 各点播站，按 key 排序稳定）。
+func (s *ShellService) Sources() []SourceInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []SourceInfo{{ID: "live", Name: "直播", Kind: "live"}}
+	keys := make([]string, 0, len(s.vods))
+	for k := range s.vods {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		out = append(out, SourceInfo{ID: k, Name: s.vodNames[k], Kind: "vod"})
+	}
+	return out
+}
+
+// vodOf 按站点 key 取点播 Provider。
+func (s *ShellService) vodOf(site string) (provider.Provider, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	pv, ok := s.vods[site]
+	if !ok {
+		return nil, fmt.Errorf("点播站点不存在: %s", site)
+	}
+	return pv, nil
+}
+
+func (s *ShellService) VodCategories(site string) ([]Section, error) {
+	pv, err := s.vodOf(site)
+	if err != nil {
+		return nil, err
+	}
+	secs, err := pv.Home(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Section, len(secs))
+	for i, sc := range secs {
+		out[i] = Section{ID: sc.ID, Title: sc.Title}
+	}
+	return out, nil
+}
+
+func (s *ShellService) VodList(site, cat string, page int) ([]VodItem, error) {
+	pv, err := s.vodOf(site)
+	if err != nil {
+		return nil, err
+	}
+	pg, err := pv.Browse(context.Background(), cat, page)
+	if err != nil {
+		return nil, err
+	}
+	return toVodItems(pg.Items), nil
+}
+
+func (s *ShellService) VodSearch(site, q string) ([]VodItem, error) {
+	pv, err := s.vodOf(site)
+	if err != nil {
+		return nil, err
+	}
+	items, err := pv.Search(context.Background(), q)
+	if err != nil {
+		return nil, err
+	}
+	return toVodItems(items), nil
+}
+
+func (s *ShellService) VodDetail(site, id string) (VodMedia, error) {
+	pv, err := s.vodOf(site)
+	if err != nil {
+		return VodMedia{}, err
+	}
+	m, err := pv.Detail(context.Background(), id)
+	if err != nil {
+		return VodMedia{}, err
+	}
+	vm := VodMedia{
+		ID: m.ID, Title: m.Title, Logo: m.Logo, Group: m.Group,
+		Description: m.Description, Year: m.Year, Area: m.Area,
+		Type: m.Type, Remarks: m.Remarks, Sources: m.Sources,
+	}
+	vm.Episodes = make([]EpisodeInfo, len(m.Episodes))
+	for i, e := range m.Episodes {
+		vm.Episodes[i] = EpisodeInfo{ID: e.ID, Source: e.Source, Name: e.Name}
+	}
+	return vm, nil
+}
+
+func (s *ShellService) PlayVod(site, epID string) error {
+	if s.player == nil {
+		return errors.New("播放器未就绪")
+	}
+	pv, err := s.vodOf(site)
+	if err != nil {
+		return err
+	}
+	st, err := pv.Resolve(context.Background(), epID)
+	if err != nil {
+		return err
+	}
+	if err := s.player.Load(context.Background(), st); err != nil {
+		return err
+	}
+	return s.player.Play()
+}
+
+func toVodItems(items []provider.Item) []VodItem {
+	out := make([]VodItem, len(items))
+	for i, it := range items {
+		out[i] = VodItem{ID: it.ID, Title: it.Title, Logo: it.Logo, Group: it.Group}
+	}
+	return out
 }

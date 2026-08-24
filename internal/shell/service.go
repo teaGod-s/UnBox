@@ -8,6 +8,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/unbox/unbox/internal/config"
 	"github.com/unbox/unbox/internal/player"
@@ -19,9 +20,12 @@ import (
 )
 
 // ImportResult 是导入订阅的摘要。
+// 播放列表导入时 Channels 立即可用；TVBox 配置导入时 Sites/LiveSources 非空，
+// 直播源需前端调用 LoadLive 按需加载。
 type ImportResult struct {
-	Groups   int
-	Channels int
+	Sites       int // 点播站点数（配置导入）
+	LiveSources int // 直播源数（配置导入，待按需加载）
+	Channels    int // 频道数（播放列表导入，立即可用）
 }
 
 // ChannelInfo 是前端展示用的频道信息。
@@ -97,26 +101,28 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 	}
 }
 
+// progressMu 串行化进度事件的上报（collectChannels 的并发回调会并发触发 emit）。
+var progressMu sync.Mutex
+
+// emitProgress 把进度经 Wails 事件推给前端。并发调用安全。
+func (s *ShellService) emitProgress(p Progress) {
+	app := application.Get()
+	if app == nil {
+		return
+	}
+	progressMu.Lock()
+	defer progressMu.Unlock()
+	app.Event.Emit("import:progress", p)
+}
+
 // ImportSubscription 拉取并解析订阅，重建 Provider。支持两类输入：
 //   - TVBox 订阅配置（JSON，含 lives/storeHouse/urls，可能多仓）
 //   - 独立 M3U/TXT 播放列表（#EXTM3U 或「名称,URL」行）
 func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
-	// report 把进度经 Wails 事件推给前端；用互斥锁串行化并发回调的 emit。
-	var reportMu sync.Mutex
-	report := func(p Progress) {
-		app := application.Get()
-		if app == nil {
-			return
-		}
-		reportMu.Lock()
-		defer reportMu.Unlock()
-		app.Event.Emit("import:progress", p)
-	}
-
-	report(Progress{Stage: "resolve", Message: "正在解析订阅…", Done: -1, Total: -1})
+	s.emitProgress(Progress{Stage: "resolve", Message: "正在解析订阅…", Done: -1, Total: -1})
 	raw, err := config.NewFetcher().Fetch(context.Background(), ref)
 	if err != nil {
-		report(Progress{Stage: "error", Message: "导入失败", Done: -1, Total: -1})
+		s.emitProgress(Progress{Stage: "error", Message: "导入失败", Done: -1, Total: -1})
 		return ImportResult{}, fmt.Errorf("拉取 %s 失败: %w", ref, err)
 	}
 	if isPlaylist(raw) {
@@ -124,26 +130,56 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 	}
 	cfgs, err := resolveConfigs(context.Background(), ref, raw)
 	if err != nil {
-		report(Progress{Stage: "error", Message: "导入失败", Done: -1, Total: -1})
+		s.emitProgress(Progress{Stage: "error", Message: "导入失败", Done: -1, Total: -1})
 		return ImportResult{}, err
 	}
 
-	report(Progress{Stage: "live", Message: "正在拉取直播源…", Done: 0, Total: -1})
-	channels := collectChannels(context.Background(), cfgs, func(done, total int) {
-		report(Progress{Stage: "live", Message: fmt.Sprintf("拉取直播源 %d/%d", done, total), Done: done, Total: total})
-	})
-	if len(channels) == 0 {
-		report(Progress{Stage: "error", Message: "订阅中没有可用直播频道", Done: -1, Total: -1})
-		return ImportResult{}, errors.New("订阅中没有可用直播频道")
+	// 直播源不在此拉取（m3u 数量多、耗时），仅收集定义，前端经 LoadLive 按需加载。
+	liveList := flattenLives(cfgs)
+	vods, vodNames := collectVodSites(cfgs)
+	s.mu.Lock()
+	s.live = nil
+	s.liveSources = liveList
+	s.liveCount = 0
+	s.vods = vods
+	s.vodNames = vodNames
+	s.mu.Unlock()
+
+	s.emitProgress(Progress{Stage: "done", Message: "导入完成", Done: -1, Total: -1})
+	return ImportResult{Sites: len(vods), LiveSources: len(liveList)}, nil
+}
+
+// LoadLive 按需拉取全部直播源并构建直播 provider。已加载则直接返回频道数。
+func (s *ShellService) LoadLive() (int, error) {
+	s.mu.RLock()
+	alreadyLoaded := s.live != nil
+	lives := s.liveSources
+	count := s.liveCount
+	s.mu.RUnlock()
+	if alreadyLoaded {
+		return count, nil
 	}
+
+	s.emitProgress(Progress{Stage: "live", Message: "正在拉取直播源…", Done: 0, Total: len(lives)})
+	channels := collectChannels(context.Background(), lives, func(done, total int) {
+		s.emitProgress(Progress{Stage: "live", Message: fmt.Sprintf("拉取直播源 %d/%d", done, total), Done: done, Total: total})
+	})
 	lp := live.New(channels)
 	s.mu.Lock()
 	s.live = lp
-	s.vods, s.vodNames = collectVodSites(cfgs)
+	s.liveCount = len(channels)
 	s.mu.Unlock()
-	secs, _ := lp.Home(context.Background())
-	report(Progress{Stage: "done", Message: "导入完成", Done: -1, Total: -1})
-	return ImportResult{Groups: len(secs), Channels: len(channels)}, nil
+	s.emitProgress(Progress{Stage: "done", Message: "直播加载完成", Done: -1, Total: -1})
+	return len(channels), nil
+}
+
+// flattenLives 把多份配置的直播源拍平成一个切片。
+func flattenLives(cfgs []*config.Config) []config.Live {
+	var lives []config.Live
+	for _, cfg := range cfgs {
+		lives = append(lives, cfg.Lives...)
+	}
+	return lives
 }
 
 // collectVodSites 从多份配置收集 type=1（CMS）站点，构建 tvbox.Provider。
@@ -187,11 +223,12 @@ func (s *ShellService) importPlaylist(raw []byte) (ImportResult, error) {
 	lp := live.New(channels)
 	s.mu.Lock()
 	s.live = lp
+	s.liveSources = nil
+	s.liveCount = len(channels)
 	s.vods = map[string]provider.Provider{}
 	s.vodNames = map[string]string{}
 	s.mu.Unlock()
-	secs, _ := lp.Home(context.Background())
-	return ImportResult{Groups: len(secs), Channels: len(channels)}, nil
+	return ImportResult{Channels: len(channels)}, nil
 }
 
 // resolveConfigs 解析 TVBox 配置；索引节点（storeHouse/urls 非空）交给 Resolver 展开。
@@ -210,35 +247,40 @@ func resolveConfigs(ctx context.Context, ref string, raw []byte) ([]*config.Conf
 	return []*config.Config{cfg}, nil
 }
 
-// collectChannels 从多份配置收集直播频道：Channels 内嵌的直接用，URL 指向的
-// 并发拉取解析。并发时用 slot 记录原始顺序，结果按原下标回填，保证频道顺序
-// 与串行版本一致（live.New 只对 group 排序，组内频道顺序依赖输入顺序）。
-// progress（可为 nil）在每个直播源拉取完成后回调 (done, total)。
-func collectChannels(ctx context.Context, cfgs []*config.Config, progress func(done, total int)) []config.Channel {
-	fetcher := config.NewFetcher()
+// liveFetchTimeout 是直播源 m3u 的拉取超时。直播源数量多、死源占比高，
+// 用比配置拉取（15s）更短的超时让死源快速失败，避免拖慢整次导入。
+const liveFetchTimeout = 8 * time.Second
 
-	// 第一遍：把每个直播组归为「内嵌频道」或「需拉取」，同时记录原始顺序。
+// collectChannels 从多份配置收集直播频道：Channels 内嵌的直接用，URL 指向的
+// 并发拉取解析（按 URL 去重，同一 m3u 只拉一次）。并发时用 slot 记录原始
+// 顺序，结果按原下标回填，保证频道顺序与串行版本一致（live.New 只对 group
+// 排序，组内频道顺序依赖输入顺序）。progress（可为 nil）在每个直播源拉取
+// 完成后回调 (done, total)。
+func collectChannels(ctx context.Context, lives []config.Live, progress func(done, total int)) []config.Channel {
+	fetcher := config.NewFetcherWithTimeout(liveFetchTimeout)
+
+	// 第一遍：把每个直播源归为「内嵌频道」或「需拉取」，按 URL 去重并记录顺序。
 	type slot struct {
 		embedded []config.Channel
 		job      int // 索引进 jobs；-1 表示内嵌
 	}
 	var slots []slot
 	var jobs []config.Live
-	for _, cfg := range cfgs {
-		for _, lv := range cfg.Lives {
-			switch {
-			case len(lv.Channels) > 0:
-				slots = append(slots, slot{embedded: lv.Channels, job: -1})
-			case lv.URL != "":
-				jobs = append(jobs, lv)
-				slots = append(slots, slot{job: len(jobs) - 1})
-			}
+	seenURL := map[string]bool{}
+	for _, lv := range lives {
+		switch {
+		case len(lv.Channels) > 0:
+			slots = append(slots, slot{embedded: lv.Channels, job: -1})
+		case lv.URL != "" && !seenURL[lv.URL]:
+			seenURL[lv.URL] = true
+			jobs = append(jobs, lv)
+			slots = append(slots, slot{job: len(jobs) - 1})
 		}
 	}
 
 	// 并发拉取，结果写进与 job 下标对应的位置（每个位置只被一个 goroutine 写）。
 	results := make([][]config.Channel, len(jobs))
-	const maxConcurrency = 8
+	const maxConcurrency = 16
 	sem := make(chan struct{}, maxConcurrency)
 	var done atomic.Int64
 	var wg sync.WaitGroup

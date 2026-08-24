@@ -165,18 +165,43 @@ func writeTempM3U(t *testing.T, content string) string {
 	return path
 }
 
+func TestLoadLiveLazy(t *testing.T) {
+	svc := NewShellService(nil, nil, nil)
+	m3u := writeTempM3U(t, "#EXTM3U\n#EXTINF:-1 group-title=\"央视\",频道1\nhttp://x/1\n")
+	svc.liveSources = []config.Live{{Name: "g1", URL: m3u}}
+
+	// 未加载时 Groups 为空
+	gs, _ := svc.Groups()
+	if len(gs) != 0 {
+		t.Fatalf("未加载直播时 Groups 应为空: %v", gs)
+	}
+
+	n, err := svc.LoadLive()
+	if err != nil || n != 1 {
+		t.Fatalf("LoadLive = %d, %v", n, err)
+	}
+	gs, _ = svc.Groups()
+	if len(gs) != 1 || gs[0] != "央视" {
+		t.Fatalf("加载后 Groups = %v", gs)
+	}
+
+	// 幂等：再次 LoadLive 直接返回
+	n2, err := svc.LoadLive()
+	if err != nil || n2 != 1 {
+		t.Fatalf("重复 LoadLive = %d, %v", n2, err)
+	}
+}
+
 func TestCollectChannelsParallelOrder(t *testing.T) {
 	m3u1 := writeTempM3U(t, "#EXTM3U\n#EXTINF:-1 group-title=\"央视\",频道1\nhttp://x/1\n#EXTINF:-1 group-title=\"央视\",频道2\nhttp://x/2\n")
 	m3u2 := writeTempM3U(t, "#EXTM3U\n#EXTINF:-1 group-title=\"卫视\",频道3\nhttp://x/3\n")
 
-	cfgs := []*config.Config{
-		{Lives: config.LiveList{
-			{Name: "g1", URL: m3u1},
-			{Name: "g2", Channels: []config.Channel{{Name: "内嵌", Group: "G", URLs: []string{"http://x/0"}}}},
-			{Name: "g3", URL: m3u2},
-		}},
+	lives := []config.Live{
+		{Name: "g1", URL: m3u1},
+		{Name: "g2", Channels: []config.Channel{{Name: "内嵌", Group: "G", URLs: []string{"http://x/0"}}}},
+		{Name: "g3", URL: m3u2},
 	}
-	chs := collectChannels(context.Background(), cfgs, nil)
+	chs := collectChannels(context.Background(), lives, nil)
 	if len(chs) != 4 {
 		t.Fatalf("频道数 = %d, 期望 4", len(chs))
 	}

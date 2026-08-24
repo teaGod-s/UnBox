@@ -55,10 +55,23 @@ async function doImport() {
   loading.value = true; errMsg.value = ''; importSummary.value = ''; importProgress.value = null
   try {
     const r = await ShellService.ImportSubscription(importUrl.value)
-    importSummary.value = `导入成功：${r.Groups} 组 / ${r.Channels} 频道`
+    if (r.Channels > 0) {
+      importSummary.value = `导入成功：${r.Channels} 频道`
+    } else {
+      importSummary.value = `导入成功：${r.Sites} 个点播站 / ${r.LiveSources} 个直播源（按需加载）`
+    }
     await reloadGroups()
   } catch (e) { errMsg.value = String(e) }
   finally { loading.value = false }
+}
+
+async function loadLive() {
+  errMsg.value = ''; importProgress.value = null
+  try {
+    const n = await ShellService.LoadLive()
+    if (n === 0) importSummary.value = '没有可用的直播频道'
+    await reloadGroups()
+  } catch (e) { errMsg.value = String(e) }
 }
 
 async function play(c: ChannelInfo) {
@@ -168,6 +181,10 @@ onMounted(() => {
       </aside>
 
       <section class="channels">
+        <div v-if="groups.length === 0" class="load-live">
+          <p>直播源尚未加载</p>
+          <button @click="loadLive">加载直播</button>
+        </div>
         <div class="search"><input v-model="query" placeholder="搜索频道" @input="doSearch" /></div>
         <ul>
           <li v-for="c in channels" :key="c.ID" class="channel">

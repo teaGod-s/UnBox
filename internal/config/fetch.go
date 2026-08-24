@@ -36,6 +36,12 @@ func NewFetcher() *Fetcher {
 	return &Fetcher{Client: &http.Client{Timeout: fetchTimeout}}
 }
 
+// NewFetcherWithTimeout 返回一个指定超时的 Fetcher。直播源 m3u 数量多、
+// 死源占比高，用更短的超时让死源快速失败，避免拖慢整次导入。
+func NewFetcherWithTimeout(d time.Duration) *Fetcher {
+	return &Fetcher{Client: &http.Client{Timeout: d}}
+}
+
 // Fetch 获取 ref 指向的配置原始字节。
 //
 // ref 可以是：

@@ -22,26 +22,40 @@ M2 在 M1（直播 + 壳 + mpv 播放）之上，新增 TVBox 点播（VOD）能
 
 ## 2. 调研结论
 
-### 2.1 CMS JSON 协议（苹果CMS v10 `provide/vod`，已核实）
+### 2.1 CMS JSON 协议（苹果CMS v10 `provide/vod`，已实测核实）
 
 TVBox `type=1`（CMS）站点指向苹果CMS v10 的 JSON API，`site.api` 为完整基地址，
-形如 `http://域名/api.php/provide/vod/`。动作经 `ac` 参数区分：
+形如 `http://域名/api.php/provide/vod/`。动作经 `ac` 参数区分。**已对用户订阅中的
+真实站点（非凡资源 / 量子资源）实测抓取并确认如下事实。**
 
 | 动作 | 请求 | 返回关键字段 |
 |---|---|---|
-| 分类 | `?ac=list` | `class[]`：`type_id` / `type_name` |
-| 列表 | `?ac=videolist&t=<type_id>&pg=<页>` | `list[]`：`vod_id` / `vod_name` / `vod_pic` / `type_name` / `vod_remarks` / `vod_year`；`pagecount` / `total` |
-| 搜索 | `?ac=videolist&wd=<关键词>` | 同列表 |
+| 列表（最新） | `?ac=videolist&pg=<页>` | `list[]`：`vod_id` / `vod_name` / `vod_pic` / `type_id` / `type_name` / `vod_remarks` / `vod_year`；`pagecount` / `total` |
+| 列表（按分类） | `?ac=videolist&t=<type_id>&pg=<页>` | 同上，仅含该分类 |
+| 搜索 | `?ac=videolist&wd=<关键词>&pg=<页>` | 同上 |
 | 详情 | `?ac=detail&ids=<vod_id>` | `list[0]`：`vod_content` / `vod_play_from` / `vod_play_url` / `vod_area` 等 |
 
-剧集结构由 `vod_play_from`（线路名）与 `vod_play_url`（集 + 地址）共同表达：
+**实测要点（与常见文档不一致处，以实测为准）**
 
-- 线路分隔：`$$$`（maccms/TVBox 生态主流）；部分 fork 用 `,`。解析器对 `vod_play_from` 两种都探测。
-- 集分隔：`#`；每集为 `剧集名$播放地址`。
-- 即 `vod_play_url` = `第01集$url#第02集$url$$$第01集$url#第02集$url`（两线路）。
+1. **没有独立分类端点**：`?ac=list` / `?ac=class` 实测返回的都是**视频列表**（最新），
+   不是 `class[]`。分类须从列表项的 `type_id` / `type_name` **去重派生**。
+2. **列表项可能内嵌完整详情**：部分站点（非凡资源）的列表项已含 `vod_play_url` /
+   `vod_content`（单页 370KB）；另一部分（量子资源）列表轻量、需单独 `ac=detail`。
+   两种都要兼容：`Browse` 只用轻量字段，`Detail` 始终走 `ac=detail`。
+3. **`vod_play_from` 分隔符不一致**：列表项里用 `,`（仅展示用），详情里用 `$$$`。
+   解析器对两种都要处理。
+4. **`limit` 参数被忽略**：实测站点固定每页 20 条，忽略 `limit`。
 
-**结论**：协议为纯 HTTP + JSON，零运行时依赖，完全符合"安装即用"。分隔符存在
-`$$$` 与 `,` 两种生态写法，必须以真实 fixture 锁定并在解析器两侧兼容。
+剧集结构由 `vod_play_from`（线路名）与 `vod_play_url`（集 + 地址）共同表达，
+**实测确认**的分隔符：
+
+- 线路分隔：`$$$`（如 `feifan$$$ffm3u8` = 2 条线路）。
+- 集分隔：`#`；每集为 `剧集名$播放地址`（`$` 取第一个）。
+- 即 `vod_play_url` = `第01集$url#第02集$url$$$第01集$url#第02集$url`。
+
+**结论**：纯 HTTP + JSON，零运行时依赖，符合"安装即用"。分隔符、分类派生等
+细节均以 `testdata/cms/` 真实 fixture 锁定（非凡资源：`list.json` / `detail.json` /
+`search.json`）。
 
 ### 2.2 站点存量
 
@@ -100,8 +114,8 @@ internal/provider/tvbox/
    │
 前端「点播」tab
    ├─ Sources()            → [直播, 站点1, 站点2, ...]
-   ├─ Categories(siteKey)  → tvbox.Home()   → ac=list → 分类
-   ├─ Browse(siteKey,cat,page) → tvbox.Browse() → ac=videolist → 影片列表
+   ├─ Categories(siteKey)  → tvbox.Home()   → ac=videolist → 去重 type_id/type_name 派生分类
+   ├─ Browse(siteKey,cat,page) → tvbox.Browse() → ac=videolist&t=<cat> → 影片列表
    ├─ Search(siteKey,q)    → tvbox.Search() → ac=videolist&wd=q
    ├─ Detail(siteKey,id)   → tvbox.Detail() → ac=detail → 详情+剧集
    └─ Play(siteKey,epID)   → tvbox.Resolve(epID) → Stream{URL, Referer} → mpv
@@ -112,7 +126,7 @@ internal/provider/tvbox/
 - `New(site config.Site) *Provider`：持有 `site.API`、站点名、key，内部一个
   最近 detail 缓存（上限 64，`vod_id → 已拆分剧集`）。
 - `ID()` 返回站点 key（唯一）。
-- `Home()` → `ac=list` 的分类列表。
+- `Home()` → `ac=videolist` 取最新列表，去重 `type_id`/`type_name` 派生分类。
 - `Browse(cat, page)` → `ac=videolist&t=<cat>&pg=<page>`，映射到 `provider.Page`。
 - `Search(q)` → `ac=videolist&wd=<q>`。
 - `Detail(id)` → `ac=detail&ids=<id>`，拆分剧集并缓存，返回扩展 `Media`。

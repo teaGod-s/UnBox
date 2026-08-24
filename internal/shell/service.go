@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/unbox/unbox/internal/config"
 	"github.com/unbox/unbox/internal/player"
@@ -14,6 +15,7 @@ import (
 	"github.com/unbox/unbox/internal/provider/live"
 	"github.com/unbox/unbox/internal/provider/tvbox"
 	"github.com/unbox/unbox/internal/store"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // ImportResult 是导入订阅的摘要。
@@ -74,6 +76,16 @@ type VodMedia struct {
 	Episodes    []EpisodeInfo
 }
 
+// Progress 是导入进度快照，经 Wails 事件 "import:progress" 推给前端。
+// Done/Total 为 -1 表示该阶段无法给出精确进度（如 resolve 阶段节点数是
+// 边解析边发现的）。
+type Progress struct {
+	Stage   string // "resolve" | "live" | "done" | "error"
+	Message string
+	Done    int
+	Total   int
+}
+
 // NewShellService 组装壳层服务。pv 为直播 Provider（可为 nil）；p 可为 nil（播放器未就绪）。
 func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *ShellService {
 	return &ShellService{
@@ -89,8 +101,22 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 //   - TVBox 订阅配置（JSON，含 lives/storeHouse/urls，可能多仓）
 //   - 独立 M3U/TXT 播放列表（#EXTM3U 或「名称,URL」行）
 func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
+	// report 把进度经 Wails 事件推给前端；用互斥锁串行化并发回调的 emit。
+	var reportMu sync.Mutex
+	report := func(p Progress) {
+		app := application.Get()
+		if app == nil {
+			return
+		}
+		reportMu.Lock()
+		defer reportMu.Unlock()
+		app.Event.Emit("import:progress", p)
+	}
+
+	report(Progress{Stage: "resolve", Message: "正在解析订阅…", Done: -1, Total: -1})
 	raw, err := config.NewFetcher().Fetch(context.Background(), ref)
 	if err != nil {
+		report(Progress{Stage: "error", Message: "导入失败", Done: -1, Total: -1})
 		return ImportResult{}, fmt.Errorf("拉取 %s 失败: %w", ref, err)
 	}
 	if isPlaylist(raw) {
@@ -98,10 +124,16 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 	}
 	cfgs, err := resolveConfigs(context.Background(), ref, raw)
 	if err != nil {
+		report(Progress{Stage: "error", Message: "导入失败", Done: -1, Total: -1})
 		return ImportResult{}, err
 	}
-	channels := collectChannels(context.Background(), cfgs)
+
+	report(Progress{Stage: "live", Message: "正在拉取直播源…", Done: 0, Total: -1})
+	channels := collectChannels(context.Background(), cfgs, func(done, total int) {
+		report(Progress{Stage: "live", Message: fmt.Sprintf("拉取直播源 %d/%d", done, total), Done: done, Total: total})
+	})
 	if len(channels) == 0 {
+		report(Progress{Stage: "error", Message: "订阅中没有可用直播频道", Done: -1, Total: -1})
 		return ImportResult{}, errors.New("订阅中没有可用直播频道")
 	}
 	lp := live.New(channels)
@@ -110,6 +142,7 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 	s.vods, s.vodNames = collectVodSites(cfgs)
 	s.mu.Unlock()
 	secs, _ := lp.Home(context.Background())
+	report(Progress{Stage: "done", Message: "导入完成", Done: -1, Total: -1})
 	return ImportResult{Groups: len(secs), Channels: len(channels)}, nil
 }
 
@@ -180,7 +213,8 @@ func resolveConfigs(ctx context.Context, ref string, raw []byte) ([]*config.Conf
 // collectChannels 从多份配置收集直播频道：Channels 内嵌的直接用，URL 指向的
 // 并发拉取解析。并发时用 slot 记录原始顺序，结果按原下标回填，保证频道顺序
 // 与串行版本一致（live.New 只对 group 排序，组内频道顺序依赖输入顺序）。
-func collectChannels(ctx context.Context, cfgs []*config.Config) []config.Channel {
+// progress（可为 nil）在每个直播源拉取完成后回调 (done, total)。
+func collectChannels(ctx context.Context, cfgs []*config.Config, progress func(done, total int)) []config.Channel {
 	fetcher := config.NewFetcher()
 
 	// 第一遍：把每个直播组归为「内嵌频道」或「需拉取」，同时记录原始顺序。
@@ -206,6 +240,7 @@ func collectChannels(ctx context.Context, cfgs []*config.Config) []config.Channe
 	results := make([][]config.Channel, len(jobs))
 	const maxConcurrency = 8
 	sem := make(chan struct{}, maxConcurrency)
+	var done atomic.Int64
 	var wg sync.WaitGroup
 	for i, lv := range jobs {
 		wg.Add(1)
@@ -215,6 +250,9 @@ func collectChannels(ctx context.Context, cfgs []*config.Config) []config.Channe
 			defer func() { <-sem }()
 			if chs, err := live.FetchLive(ctx, lv, fetcher); err == nil {
 				results[i] = chs
+			}
+			if progress != nil {
+				progress(int(done.Add(1)), len(jobs))
 			}
 		}(i, lv)
 	}

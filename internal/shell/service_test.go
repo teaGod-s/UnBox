@@ -176,7 +176,7 @@ func TestCollectChannelsParallelOrder(t *testing.T) {
 			{Name: "g3", URL: m3u2},
 		}},
 	}
-	chs := collectChannels(context.Background(), cfgs)
+	chs := collectChannels(context.Background(), cfgs, nil)
 	if len(chs) != 4 {
 		t.Fatalf("频道数 = %d, 期望 4", len(chs))
 	}

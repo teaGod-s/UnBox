@@ -10,6 +10,9 @@
   壳层「直播 + 多站点」改造，前端「直播/点播」切换 + 点播浏览/详情/剧集播放。
   实测用户订阅中 4 个 CMS 站点（线路 id=3：量子资源/非凡资源/无水印采集/360资源），
   真实站点全链路（分类派生→列表→详情→剧集→Resolve+Referer）已验证通过。
+- **导入优化**：直播源改**按需加载**（`ShellService.LoadLive`），导入只解析配置
+  （~15s 而非 2-3 分钟）；config resolver 并发化 + 直播拉取并发/去重/短超时；
+  进度经 Wails 事件 `import:progress` 推给前端。
 
 设计文档：`docs/superpowers/specs/2026-08-17-unbox-m1-design.md`（M1）、
 `docs/superpowers/specs/2026-08-24-unbox-m2-design.md`（M2）；

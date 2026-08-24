@@ -13,31 +13,31 @@
 
 ## 当前 git 状态
 
-- 分支 `master`，HEAD `2b6f115`。
-- 最近两个修复（均在本会话完成、已提交）：
+- 分支 `master`，HEAD `a5a8016`（docs: 新增 AGENTS.md 与 handoff）。
+- 本会话的修复（均已提交）：
   - `af74872` fix(shell): XID 提取改走 Wails InvokeSync，修复启动段错误。
   - `2b6f115` fix(shell): Linux 强制 GDK_BACKEND=x11，修复窗口不显示。
+  - `a5a8016` docs: 新增 AGENTS.md 与 handoff，供 Codex 接手。
 
-## 卡点：WSLg 环境问题（非代码问题，待用户在 Windows 侧解决）
+## 卡点（已解决）：WSLg 渲染 —— 2026-08-24 窗口已正常显示
 
-**现象**：`./bin/unbox` 能启动、窗口能映射、`--wid` 嵌入拿到正确 XID，但
-WebView 渲染**全黑**（Vue 未 mount，连静态标题都没有）。
+**现状**：`./bin/unbox` 能启动、窗口映射、`--wid` 嵌入拿到正确 XID，**窗口已
+正常渲染**（用户目视确认；抓帧 YMAX=235 有亮色内容，App 背景本就是近黑
+`RGB(6,7,15)`，故整屏 YAVG≈16 属正常）。WebKitGTK 走软件渲染回退，无 GPU 也能显示。
 
-**根因**：WSLg 的 GPU 直通坏了 —— `/dev/dri` 不存在（`ls /dev/dri` 为空），
-dmesg 里 `dxgkrnl` 有 GPU 通信警告（`dxgvmb_send_wait_sync_object_gpu`）。
-WebKitGTK 2.52.3 无 GPU 时软渲染也失效：`LIBGL_ALWAYS_SOFTWARE=1`、
-`WEBKIT_DISABLE_DMABUF_RENDERER=1`、`WEBKIT_DISABLE_COMPOSITING_MODE=1`
-及其组合均无效。
+**仍存在的残留（非阻塞）**：
+- `/dev/dri` 仍不存在（`ls /dev/dri` 为空），`libEGL` 报
+  `DRI3 error: Could not get DRI3 device`，dmesg 里 `dxgkio_query_adapter_info`
+  Ioctl failed -2 —— 即 **无 GPU 硬件加速**，纯软件渲染。仅影响性能，不影响显示。
 
-**已确认非代码问题**：把 Plan 4 之前的代码（`b4dba38`）单独编译，在当前
-环境同样渲染全黑（YAVG=16）。
+**历史教训（勿重蹈）**：早期会话曾误判「窗口全黑 = /dev/dri 缺失导致、环境阻塞」。
+该结论不成立（或已失效）——当前 `/dev/dri` 仍缺失，窗口却正常显示。若再遇「窗口
+全黑」，优先排查：① `./bin/unbox` 是否旧二进制（未含 GDK_BACKEND=x11 修复）；②
+抓帧几何是否错误（多显示器/虚拟桌面下窗口可能在屏幕外）；最后才考虑 GPU。
 
-**修复方向（Windows 侧，需用户操作）**：
-1. `wsl --shutdown` 重启 WSLg，然后 `ls /dev/dri` 应出现 `renderD128`。
-2. 若仍为空：`wsl --update`，并检查/重装 Windows 显卡驱动
-   （本会话用户装 Windows 工具链时可能误动了驱动）。
-
-验证恢复：`ls /dev/dri` 有输出后，`./bin/unbox` 应能显示频道列表。
+**可选优化（非必需）**：想让 WebKit 用上 GPU 加速，可在 Windows 侧
+`wsl --shutdown` 重启后 `ls /dev/dri` 看是否出现 `renderD128`；没有则
+`wsl --update` / 重装显卡驱动。不做也不影响正常使用。
 
 ## 后续待办
 

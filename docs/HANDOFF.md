@@ -37,6 +37,10 @@
   打包 node），工作量大，未开始。
 - **M4：全平台 mpvlib** —— 已定为**独立里程碑**（不在 M2/M3），把 Windows/Linux
   从 mpvproc 子进程切换为 libmpv + 分层渲染，复用 macOS 已验证逻辑。
+  - **Linux mpv 嵌入延后到 M4（2026-08-24 已定）**：mpv 0.37 在 WSLg（DISPLAY+
+    WAYLAND_DISPLAY 同存）选 Wayland/DRM 后端，`--wid`（X11 专有）被静默忽略 →
+    mpv 独立窗口。`--vo=x11` 可强制嵌入，但前端无视频区、会铺满主窗口且无返回
+    按钮。保留独立窗口至 M4 mpvlib，勿再对 mpvproc 做半成品嵌入。
 - **M3：本地媒体库** —— 未开始。
 - **Windows `--wid` 嵌入**：`internal/shell/embed_windows.go` 已写好，需 Windows
   宿主机原生编译 + 运行验证。

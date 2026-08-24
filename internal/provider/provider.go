@@ -27,12 +27,28 @@ type Page struct {
 	Items []Item
 }
 
-// Media 是详情（M1 直播仅含频道元信息；M2 点播再扩展剧集字段）。
+// Media 是详情（M1 直播仅含频道元信息；M2 点播扩展剧集等字段）。
 type Media struct {
 	ID    string
 	Title string
 	Logo  string
 	Group string
+	// 以下字段为 M2 点播扩展，直播实现留空。
+	Description string     // 简介（vod_content）
+	Year        string     // vod_year
+	Area        string     // vod_area
+	Type        string     // type_name
+	Remarks     string     // vod_remarks
+	Sources     []string   // 线路名列表
+	Episodes    []Episode  // 剧集列表
+}
+
+// Episode 是点播的一集。ID 为稳定标识，供 Resolve 定位。
+type Episode struct {
+	ID     string // 稳定标识
+	Source string // 线路名
+	Name   string // 第 N 集
+	URL    string // 播放地址
 }
 
 // Provider 是所有来源的统一接口。

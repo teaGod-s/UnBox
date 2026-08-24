@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { Events } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia } from '../bindings/github.com/unbox/unbox/internal/shell'
 
 interface ChannelInfo { ID: string; Name: string; Group: string; Logo: string; Favorited: boolean }
+interface Progress { Stage: string; Message: string; Done: number; Total: number }
 
 const platform = ref('…')
 const playerReady = ref(false)
@@ -16,6 +18,7 @@ const importUrl = ref('')
 const importSummary = ref('')
 const errMsg = ref('')
 const loading = ref(false)
+const importProgress = ref<Progress | null>(null)
 const mode = ref<'live' | 'vod'>('live')
 const sources = ref<SourceInfo[]>([])
 const activeSite = ref('')
@@ -49,7 +52,7 @@ async function doSearch() {
 }
 
 async function doImport() {
-  loading.value = true; errMsg.value = ''; importSummary.value = ''
+  loading.value = true; errMsg.value = ''; importSummary.value = ''; importProgress.value = null
   try {
     const r = await ShellService.ImportSubscription(importUrl.value)
     importSummary.value = `导入成功：${r.Groups} 组 / ${r.Channels} 频道`
@@ -130,7 +133,10 @@ async function playEpisode(ep: EpisodeInfo) {
   } catch (e) { errMsg.value = String(e) }
 }
 
-onMounted(refresh)
+onMounted(() => {
+  refresh()
+  Events.On('import:progress', (ev: any) => { importProgress.value = ev.data as Progress })
+})
 </script>
 
 <template>
@@ -148,6 +154,7 @@ onMounted(refresh)
     <section class="import">
       <input v-model="importUrl" placeholder="粘贴订阅链接或本地路径" />
       <button :disabled="loading" @click="doImport">{{ loading ? '导入中…' : '导入订阅' }}</button>
+      <span v-if="importProgress" class="progress">{{ importProgress.Message }}</span>
       <span v-if="importSummary" class="ok">{{ importSummary }}</span>
     </section>
 

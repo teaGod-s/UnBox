@@ -31,9 +31,9 @@ type ImportResult struct {
 
 // persistedSubscription 是存进 store 的订阅快照，重启后据此无网络重建状态。
 type persistedSubscription struct {
-	Ref      string            `json:"ref"`
-	CFGs     []*config.Config  `json:"cfgs,omitempty"`     // 配置导入：解析后的终端配置
-	Channels []config.Channel  `json:"channels,omitempty"` // 播放列表导入：已组装频道
+	Ref      string           `json:"ref"`
+	CFGs     []*config.Config `json:"cfgs,omitempty"`     // 配置导入：解析后的终端配置
+	Channels []config.Channel `json:"channels,omitempty"` // 播放列表导入：已组装频道
 }
 
 // subscriptionKey 是 store.kv 里订阅快照的键。

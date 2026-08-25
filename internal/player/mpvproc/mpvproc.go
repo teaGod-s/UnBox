@@ -1,7 +1,7 @@
 // Package mpvproc 通过 mpv 子进程 + JSON IPC 实现 player.Player。
 //
-// 当前 --input-ipc-server 仅实现 Unix socket（Linux/macOS）；Windows 需改用
-// named pipe，留待后续任务。macOS 播放另有 libmpv 后端，见 ../mpvlib。
+// --input-ipc-server 在 Linux/macOS 用 Unix socket、Windows 用命名管道
+// （见 ipc_unix.go / ipc_windows.go）。macOS 播放另有 libmpv 后端，见 ../mpvlib。
 package mpvproc
 
 import (
@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"strconv"
@@ -37,14 +36,14 @@ type response struct {
 
 type mpvProc struct {
 	exePath string
-	ipcPath string // --input-ipc-server 暴露的 Unix socket 路径
+	ipcPath string // --input-ipc-server 暴露的 IPC 路径（Unix socket 或 Windows 命名管道）
 
 	// lifecycleMu 守护 cmd/conn/ipcPath/session/wid：只在锁内做快照/赋值，
 	// 绝不在持锁时阻塞（不做 IO、不等应答），且不与 sendMu 嵌套。
 	lifecycleMu sync.Mutex
 	session     int64 // 会话代际：Load 每次自增，用于丢弃跨会话串味的迟到应答
 	cmd         *exec.Cmd
-	conn        net.Conn
+	conn        io.ReadWriteCloser
 	wid         uintptr // 嵌入宿主窗口句柄（0 表示不嵌入，独立开窗）
 
 	sendMu    sync.Mutex    // 串行化命令：保证任一时刻只有一条命令在飞
@@ -74,13 +73,10 @@ func New(exePath string) (player.Player, error) {
 func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	// 关闭旧会话（Close 幂等：无会话时直接返回 nil）。
 	_ = p.Close()
-	sock, err := os.CreateTemp("", "unbox-mpv-*.sock")
+	ipcPath, err := newIPCPath()
 	if err != nil {
 		return err
 	}
-	ipcPath := sock.Name()
-	_ = sock.Close()
-	_ = os.Remove(ipcPath)
 
 	p.lifecycleMu.Lock()
 	wid := p.wid
@@ -90,8 +86,9 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	cmd := exec.CommandContext(ctx, p.exePath, args...)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
+	setupProcAttr(cmd) // Windows：隐藏 mpv 子进程的控制台窗口
 	if err := cmd.Start(); err != nil {
-		_ = os.Remove(ipcPath)
+		cleanupIPC(ipcPath)
 		return fmt.Errorf("启动 mpv 失败: %w", err)
 	}
 
@@ -99,7 +96,7 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	if err != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
-		_ = os.Remove(ipcPath)
+		cleanupIPC(ipcPath)
 		return fmt.Errorf("连接 mpv IPC 失败: %w", err)
 	}
 
@@ -194,7 +191,7 @@ func (p *mpvProc) Close() error {
 		_ = cmd.Wait()
 	}
 	if ipcPath != "" {
-		_ = os.Remove(ipcPath)
+		cleanupIPC(ipcPath)
 	}
 	return nil
 }
@@ -241,7 +238,7 @@ func (p *mpvProc) send(args ...any) error {
 			// 时才拆解，否则说明 Load 已重入建立新会话，不得误杀后继。
 			p.lifecycleMu.Lock()
 			same := p.conn == c
-			var conn net.Conn
+			var conn io.ReadWriteCloser
 			var cmd *exec.Cmd
 			var ipcPath string
 			if same {
@@ -263,7 +260,7 @@ func (p *mpvProc) send(args ...any) error {
 					_ = cmd.Wait()
 				}
 				if ipcPath != "" {
-					_ = os.Remove(ipcPath)
+					cleanupIPC(ipcPath)
 				}
 				p.stateMu.Lock()
 				p.state.Playing = player.StateStopped
@@ -278,7 +275,7 @@ func (p *mpvProc) send(args ...any) error {
 // 应答与异步事件在同一流上交错，必须由单一 reader 分路，否则多个带预读
 // 的 reader（bufio.Reader/Scanner）会互相抢字节。
 // conn/sess 由 Load 传入并固定，保证每条命令应答都标上本会话代际。
-func (p *mpvProc) readLoop(conn net.Conn, sess int64) {
+func (p *mpvProc) readLoop(conn io.ReadWriteCloser, sess int64) {
 	sc := bufio.NewScanner(conn)
 	// 单行可能较长（如音轨/字幕列表），给足缓冲：起始 64KB、上限 1MB，
 	// 避免 ReadBytes 默认 4096B 缓冲触顶误杀读循环。
@@ -321,20 +318,5 @@ func sendEvent(ch chan<- player.Event, evt player.Event) {
 		case ch <- evt:
 		default:
 		}
-	}
-}
-
-// dialIPC 以重试方式连接 mpv IPC socket：mpv 启动后创建 socket 有微小延迟。
-func dialIPC(path string) (net.Conn, error) {
-	deadline := time.Now().Add(ipcConnectTimeout)
-	for {
-		conn, err := net.Dial("unix", path)
-		if err == nil {
-			return conn, nil
-		}
-		if time.Now().After(deadline) {
-			return nil, err
-		}
-		time.Sleep(50 * time.Millisecond)
 	}
 }

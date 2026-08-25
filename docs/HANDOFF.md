@@ -42,8 +42,8 @@
     mpv 独立窗口。`--vo=x11` 可强制嵌入，但前端无视频区、会铺满主窗口且无返回
     按钮。保留独立窗口至 M4 mpvlib，勿再对 mpvproc 做半成品嵌入。
 - **M3：本地媒体库** —— 未开始。
-- **Windows `--wid` 嵌入**：`internal/shell/embed_windows.go` 已写好，需 Windows
-  宿主机原生编译 + 运行验证。
+- **Windows 播放**：已支持（命名管道 IPC + 隐藏控制台 + 独立开窗，见 `c06b37a`）；
+  `--wid` 嵌入延后到 M4（WebView2 会覆盖 mpv 画面）。仍需 Windows 宿主机实测。
 - **macOS 嵌入**：libmpv + CAMetalLayer，需 macOS 机器。
 - **停车项（来自 Plan 3/4）**：failover `Events()` fan-out、probe 同步阻塞
   `Load`、`ListFavorites` 的 Logo 字段、tvbox 剧集缓存上限、点播收藏/观看进度。

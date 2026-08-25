@@ -50,7 +50,7 @@ func Classify(s Site) (kind string, sup Support) {
 		case strings.HasSuffix(api, ".py"):
 			return "python", SupportNo
 		case strings.HasPrefix(api, "http"):
-			return "http", SupportMaybe
+			return "http", SupportYes
 		}
 	}
 	return "unknown", SupportNo

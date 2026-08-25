@@ -277,3 +277,23 @@ func TestRestoreSubscriptionPlaylist(t *testing.T) {
 		t.Fatalf("恢复后 Groups = %v", gs)
 	}
 }
+
+func TestCollectVodSitesSpider(t *testing.T) {
+	cfgs := []*config.Config{{
+		Sites: []config.Site{
+			{Key: "cms", Name: "CMS站", Type: config.SiteTypeCMS, API: "http://x/api.php"},
+			{Key: "sp", Name: "爬虫站", Type: config.SiteTypeSpider, API: "http://x:5757"},
+			{Key: "jar", Name: "JAR站", Type: config.SiteTypeSpider, API: "csp_xxx"},
+		},
+	}}
+	vods, names := collectVodSites(cfgs)
+	if len(vods) != 2 {
+		t.Fatalf("应有 2 个站点（cms + spider http），得 %d", len(vods))
+	}
+	if names["sp"] != "爬虫站" {
+		t.Fatalf("names = %v", names)
+	}
+	if _, ok := vods["jar"]; ok {
+		t.Fatalf("csp_ JAR 站点不应被收集")
+	}
+}

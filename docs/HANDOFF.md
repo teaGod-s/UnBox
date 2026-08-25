@@ -33,8 +33,9 @@
 
 ## 后续待办
 
-- **M2.5：JS 爬虫站点**（type=3 drpy2/hipy）—— 需先定 JS 运行时（goja 纯 Go vs
-  打包 node），工作量大，未开始。
+- **M2.5：JS 爬虫站点**（type=3 http 客户端模式）—— 已实现（`tvbox.Drpy`，
+  `dbdd428`），对 drpy2/drpyS 服务调 `/api/*`，`vod_*` 复用 CMS 解析。**待真实
+  drpyS 实例实测钉死端点/信封**；`playerContent` 懒加载/解析留待后续。
 - **M4：全平台 mpvlib** —— 已定为**独立里程碑**（不在 M2/M3），把 Windows/Linux
   从 mpvproc 子进程切换为 libmpv + 分层渲染，复用 macOS 已验证逻辑。
   - **Linux mpv 嵌入延后到 M4（2026-08-24 已定）**：mpv 0.37 在 WSLg（DISPLAY+

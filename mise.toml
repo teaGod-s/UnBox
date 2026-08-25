@@ -10,7 +10,7 @@ run = "go test ./..."
 run = "go run ./cmd/unbox-scan"
 
 [tasks.build]
-run = "go build -o bin/ ./cmd/..."
+run = "cd frontend && npm run build && cd .. && go build -tags production -o bin/ ./cmd/..."
 
 [tasks.dev]
 run = "wails3 dev"

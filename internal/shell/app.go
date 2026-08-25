@@ -9,6 +9,7 @@ package shell
 import (
 	"context"
 	"errors"
+	"log"
 	"os"
 	"runtime"
 	"sync"
@@ -77,11 +78,16 @@ func forceLinuxX11Backend() {
 // （可为 nil，表示尚未导入订阅）；st 为持久化存储（可为 nil，表示收藏不可用）。
 func NewApp(p player.Player, pv provider.Provider, st *store.Store) *application.App {
 	forceLinuxX11Backend()
+	svc := NewShellService(pv, p, st)
+	// 恢复上次导入的订阅快照（无网络，纯内存重建）；失败不阻断启动。
+	if _, err := svc.RestoreSubscription(); err != nil {
+		log.Printf("恢复订阅失败（按未导入处理）: %v", err)
+	}
 	return application.New(application.Options{
 		Name:        "unbox",
 		Description: "Unbox — IPTV 播放器",
 		Services: []application.Service{
-			application.NewService(NewShellService(pv, p, st)),
+			application.NewService(svc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets.Frontend),

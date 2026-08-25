@@ -3,6 +3,7 @@ package shell
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -27,6 +28,16 @@ type ImportResult struct {
 	LiveSources int // 直播源数（配置导入，待按需加载）
 	Channels    int // 频道数（播放列表导入，立即可用）
 }
+
+// persistedSubscription 是存进 store 的订阅快照，重启后据此无网络重建状态。
+type persistedSubscription struct {
+	Ref      string            `json:"ref"`
+	CFGs     []*config.Config  `json:"cfgs,omitempty"`     // 配置导入：解析后的终端配置
+	Channels []config.Channel  `json:"channels,omitempty"` // 播放列表导入：已组装频道
+}
+
+// subscriptionKey 是 store.kv 里订阅快照的键。
+const subscriptionKey = "subscription"
 
 // ChannelInfo 是前端展示用的频道信息。
 type ChannelInfo struct {
@@ -126,7 +137,7 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 		return ImportResult{}, fmt.Errorf("拉取 %s 失败: %w", ref, err)
 	}
 	if isPlaylist(raw) {
-		return s.importPlaylist(raw)
+		return s.importPlaylist(ref, raw)
 	}
 	cfgs, err := resolveConfigs(context.Background(), ref, raw)
 	if err != nil {
@@ -145,8 +156,59 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 	s.vodNames = vodNames
 	s.mu.Unlock()
 
+	// 持久化快照：重启后免重新导入。
+	s.saveSubscription(ref, cfgs, nil)
+
 	s.emitProgress(Progress{Stage: "done", Message: "导入完成", Done: -1, Total: -1})
 	return ImportResult{Sites: len(vods), LiveSources: len(liveList)}, nil
+}
+
+// saveSubscription 把解析后的订阅快照写进 store（无网络）。store 为 nil 时静默跳过。
+func (s *ShellService) saveSubscription(ref string, cfgs []*config.Config, channels []config.Channel) {
+	if s.store == nil {
+		return
+	}
+	b, err := json.Marshal(persistedSubscription{Ref: ref, CFGs: cfgs, Channels: channels})
+	if err != nil {
+		return
+	}
+	_ = s.store.SetKV(subscriptionKey, string(b))
+}
+
+// RestoreSubscription 从 store 恢复上次导入的订阅快照并重建状态。
+// 无快照或 store 为 nil 时返回零值 ImportResult 且不报错（视为「尚未导入」）。
+// 恢复只做纯内存重建（flattenLives/collectVodSites/live.New），不触发网络。
+func (s *ShellService) RestoreSubscription() (ImportResult, error) {
+	if s.store == nil {
+		return ImportResult{}, nil
+	}
+	raw, ok, err := s.store.GetKV(subscriptionKey)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	if !ok {
+		return ImportResult{}, nil
+	}
+	var sub persistedSubscription
+	if err := json.Unmarshal([]byte(raw), &sub); err != nil {
+		return ImportResult{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(sub.Channels) > 0 {
+		s.live = live.New(sub.Channels)
+		s.liveSources = nil
+		s.liveCount = len(sub.Channels)
+		s.vods = map[string]provider.Provider{}
+		s.vodNames = map[string]string{}
+		return ImportResult{Channels: len(sub.Channels)}, nil
+	}
+	s.live = nil
+	s.liveSources = flattenLives(sub.CFGs)
+	s.liveCount = 0
+	s.vods, s.vodNames = collectVodSites(sub.CFGs)
+	return ImportResult{Sites: len(s.vods), LiveSources: len(s.liveSources)}, nil
 }
 
 // LoadLive 按需拉取全部直播源并构建直播 provider。已加载则直接返回频道数。
@@ -211,7 +273,7 @@ func isPlaylist(raw []byte) bool {
 }
 
 // importPlaylist 解析独立 M3U/TXT 播放列表并重建 Provider。
-func (s *ShellService) importPlaylist(raw []byte) (ImportResult, error) {
+func (s *ShellService) importPlaylist(ref string, raw []byte) (ImportResult, error) {
 	entries := live.ParseM3U(raw)
 	if len(entries) == 0 {
 		entries = live.ParseTXT(raw) // m3u 解析为空则按 TXT 回退
@@ -228,6 +290,7 @@ func (s *ShellService) importPlaylist(raw []byte) (ImportResult, error) {
 	s.vods = map[string]provider.Provider{}
 	s.vodNames = map[string]string{}
 	s.mu.Unlock()
+	s.saveSubscription(ref, nil, channels)
 	return ImportResult{Channels: len(channels)}, nil
 }
 

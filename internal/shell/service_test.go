@@ -216,3 +216,64 @@ func TestCollectChannelsParallelOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestRestoreSubscriptionConfig(t *testing.T) {
+	s, err := store.Open(t.TempDir() + "/t.db")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	cfgs := []*config.Config{{
+		Sites: []config.Site{{Key: "s1", Name: "站点一", Type: config.SiteTypeCMS, API: "http://x/api.php"}},
+		Lives: config.LiveList{{Name: "g1", URL: "http://x/g1.m3u"}},
+	}}
+	svc1 := NewShellService(nil, nil, s)
+	svc1.saveSubscription("http://sub", cfgs, nil)
+
+	svc2 := NewShellService(nil, nil, s)
+	r, err := svc2.RestoreSubscription()
+	if err != nil || r.Sites != 1 || r.LiveSources != 1 {
+		t.Fatalf("RestoreSubscription = %+v, %v", r, err)
+	}
+	if _, ok := svc2.vods["s1"]; !ok {
+		t.Fatalf("恢复后应有站点 s1")
+	}
+	if len(svc2.liveSources) != 1 {
+		t.Fatalf("恢复后应有 1 个直播源")
+	}
+}
+
+func TestRestoreSubscriptionNoSnapshot(t *testing.T) {
+	s, err := store.Open(t.TempDir() + "/t.db")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+	svc := NewShellService(nil, nil, s)
+	r, err := svc.RestoreSubscription()
+	if err != nil || r != (ImportResult{}) {
+		t.Fatalf("无快照应返回零值且不报错: %+v, %v", r, err)
+	}
+}
+
+func TestRestoreSubscriptionPlaylist(t *testing.T) {
+	s, err := store.Open(t.TempDir() + "/t.db")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+	chans := []config.Channel{{Name: "CCTV-1", Group: "央视", URLs: []string{"http://x/1"}}}
+	svc1 := NewShellService(nil, nil, s)
+	svc1.saveSubscription("http://ch.m3u", nil, chans)
+
+	svc2 := NewShellService(nil, nil, s)
+	r, err := svc2.RestoreSubscription()
+	if err != nil || r.Channels != 1 {
+		t.Fatalf("RestoreSubscription = %+v, %v", r, err)
+	}
+	gs, _ := svc2.Groups()
+	if len(gs) != 1 || gs[0] != "央视" {
+		t.Fatalf("恢复后 Groups = %v", gs)
+	}
+}

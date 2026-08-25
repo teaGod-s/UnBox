@@ -190,7 +190,7 @@ onMounted(() => {
           <p>直播源尚未加载</p>
           <button @click="loadLive">加载直播</button>
         </div>
-        <div class="search"><input v-model="query" placeholder="搜索频道" @input="doSearch" /></div>
+        <div class="search"><input v-model="query" placeholder="搜索频道" @keyup.enter="doSearch" /><button @click="doSearch">搜索</button></div>
         <ul>
           <li v-for="c in channels" :key="c.ID" class="channel">
             <span class="name">{{ c.Name }}</span>
@@ -229,7 +229,7 @@ onMounted(() => {
         </aside>
 
         <section class="vod-main">
-          <div class="search"><input v-model="vodQuery" placeholder="搜索影片" @input="vodSearch" /></div>
+          <div class="search"><input v-model="vodQuery" placeholder="搜索影片" @keyup.enter="vodSearch" /><button @click="vodSearch">搜索</button></div>
           <ul v-if="!vodDetail">
             <li v-for="it in vodItems" :key="it.ID" class="channel" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />

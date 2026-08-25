@@ -179,12 +179,15 @@ body {
 }
 
 .search {
+  display: flex;
+  gap: 0.5rem;
   padding: 0.5rem;
   border-bottom: 1px solid #23283a;
 }
 
 .search input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 0.45rem 0.6rem;
   font-size: 0.95rem;
   color: #e8eaf0;
@@ -195,6 +198,20 @@ body {
 
 .search input::placeholder {
   color: #6b7280;
+}
+
+.search button {
+  padding: 0.45rem 0.8rem;
+  font-size: 0.9rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.search button:hover {
+  background: #232a45;
 }
 
 .channels ul {
@@ -316,4 +333,183 @@ body {
 
 .favs li:hover {
   background: #1b2137;
+}
+
+/* ---- 顶部切换 + 导入进度 + 加载直播 ---- */
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.tabs button {
+  padding: 0.4rem 1rem;
+  font-size: 0.95rem;
+  color: #c6cbd9;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.tabs button.active {
+  background: #2c3350;
+  color: #ffffff;
+  border-color: #3b4366;
+}
+
+.progress {
+  color: #8b91a3;
+  font-size: 0.9rem;
+}
+
+.load-live {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.load-live p {
+  margin: 0;
+  color: #8b91a3;
+}
+
+.load-live button {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.95rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.load-live button:hover {
+  background: #232a45;
+}
+
+/* ---- 点播面板 ---- */
+
+.vod {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.vod-toolbar {
+  margin-bottom: 0.75rem;
+}
+
+.vod-toolbar select {
+  padding: 0.45rem 0.6rem;
+  font-size: 0.95rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+}
+
+.vod-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.vod-cats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.6rem;
+  overflow-y: auto;
+  background: #0a0d1a;
+  border: 1px solid #23283a;
+  border-radius: 0.5rem;
+}
+
+.vod-cats button {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.9rem;
+  color: #c6cbd9;
+  background: transparent;
+  border: none;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.vod-cats button:hover {
+  background: #1b2137;
+}
+
+.vod-cats button.active {
+  background: #2c3350;
+  color: #ffffff;
+}
+
+.vod-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #0a0d1a;
+  border: 1px solid #23283a;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.vod-main ul {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.vod-detail {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.vod-detail h2 {
+  margin: 0.5rem 0;
+}
+
+.vod-detail .meta {
+  color: #8b91a3;
+  margin: 0.3rem 0 0.75rem;
+}
+
+.ep-src {
+  margin: 0.75rem 0;
+}
+
+.ep-src-name {
+  margin: 0 0 0.4rem;
+  color: #7ee787;
+  font-size: 0.9rem;
+}
+
+.ep-src button {
+  margin: 0 0.35rem 0.35rem 0;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.ep-src button:hover {
+  background: #232a45;
 }

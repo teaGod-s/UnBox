@@ -542,6 +542,34 @@ body {
   cursor: pointer;
 }
 
+.threads-hint { color: #8b91a3; font-size: 0.85rem; margin: 0 0 0.75rem; }
+
+.threads-options {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+
+.threads-options button {
+  padding: 0.6rem;
+  font-size: 0.95rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.threads-options button:hover {
+  background: #232a45;
+}
+
+.threads-options button.active {
+  background: #2c3350;
+  border-color: #7ee787;
+  color: #7ee787;
+}
+
 .player .now {
   margin: 0;
   color: #7ee787;

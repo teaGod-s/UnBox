@@ -47,6 +47,7 @@ const showLogs = ref(false)
 const copyMsg = ref('')
 const searchProgress = ref<Progress | null>(null)
 const searchThreads = ref(1)
+const showThreads = ref(false)
 let lastProgressSave = 0
 
 const vodSites = computed(() => sources.value.filter(s => s.Kind === 'vod'))
@@ -375,8 +376,14 @@ async function loadSearchThreads() {
   try { searchThreads.value = await ShellService.SearchThreads() } catch (e) { errMsg.value = String(e) }
 }
 
-async function setSearchThreads() {
-  try { await ShellService.SetSearchThreads(searchThreads.value) } catch (e) { errMsg.value = String(e) }
+function openThreads() {
+  showThreads.value = true
+}
+
+async function chooseThreads(n: number) {
+  searchThreads.value = n
+  try { await ShellService.SetSearchThreads(n) } catch (e) { errMsg.value = String(e) }
+  showThreads.value = false
 }
 
 // imgError 隐藏加载失败的图片（部分源 vod_pic 为空/失效/被防盗链拦截）。
@@ -562,13 +569,7 @@ onMounted(() => {
       <section class="src-section">
         <h3>搜索</h3>
         <div class="src-add">
-          <span>全站搜索线程数</span>
-          <select v-model.number="searchThreads" @change="setSearchThreads">
-            <option :value="1">1（默认）</option>
-            <option :value="4">4</option>
-            <option :value="8">8</option>
-            <option :value="16">16</option>
-          </select>
+          <button @click="openThreads">搜索线程：{{ searchThreads }} 个</button>
         </div>
       </section>
 
@@ -579,6 +580,19 @@ onMounted(() => {
         </div>
       </section>
     </section>
+
+    <div v-if="showThreads" class="settings-overlay" @click.self="showThreads = false">
+      <div class="settings-panel">
+        <div class="settings-head">
+          <h2>搜索线程</h2>
+          <button @click="showThreads = false">✕</button>
+        </div>
+        <p class="threads-hint">全站搜索时同时请求的站点数，站点多时调大可加速</p>
+        <div class="threads-options">
+          <button v-for="n in [1, 4, 8, 16]" :key="n" :class="{ active: searchThreads === n }" @click="chooseThreads(n)">{{ n }}{{ n === 1 ? '（默认）' : '' }}</button>
+        </div>
+      </div>
+    </div>
 
     <div v-if="showLogs" class="settings-overlay" @click.self="showLogs = false">
       <div class="settings-panel">

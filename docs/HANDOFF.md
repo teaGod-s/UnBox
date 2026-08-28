@@ -7,7 +7,7 @@
 - **M1 已完成**：配置解析、M3U 导入、直播浏览/播放、测速/故障切换、收藏。
 - **M2 已完成**：CMS JSON 点播（`internal/provider/tvbox` + 壳层多源 + 前端点播面板）。
 - **M2.5 已完成**：JS 爬虫客户端模式（`tvbox.Drpy`，对 drpy2/drpyS 调 `/api/*`）。
-- **M4 已完成**（当前分支 `feat/m4-web-playback`）：
+- **M4 已完成**（已合入 master）：
   - 内置 Web 播放（hls.js / mpegts.js / 原生 `<video>` + Go 本地代理）+ 外部 mpv 插件。
   - 播放路由：H.264 HTTP → Web；HEVC / RTMP / 本地文件 / 无 MSE → mpv。
   - Linux WebKitGTK 无 MSE → HLS/FLV/TS 走 mpv，MP4 走原生 `<video>`。
@@ -32,6 +32,12 @@
 - **点播详情内嵌播放器**：选集直接在详情页（海报左侧）播放，无需切回直播页。
 - **站点记忆**：最后站点持久化，重启后若源未变自动恢复。
 - **mpv 进度回传**：前端每 10s 轮询 `Position()`，mpv 后端也能写入观看进度。
+- **详情页面板折叠**：点播详情的类目面板 / 详情面板可折叠，折叠后播放器自适应放大。
+- **当前版本即时回显**：新增 `CurrentVersion()` 免联网接口，「关于」页不再显示占位符。
+- **版本注入**：发布构建经 `-ldflags -X` 注入 `shell.appVersion`（`Taskfile.yml` 的 `VERSION` 变量读环境变量，默认 0.0.1）。
+- **GitHub Actions 分平台出包**：`.github/workflows/release.yml`，push `v*` 标签三平台原生编译并创建 Release（弃 goreleaser）。
+- **README + MIT LICENSE**：补仓库 README（特性/安装/构建/路线图）与许可证。
+- **Logo 迭代**：三面三色柔和配色 + 顶面眯眯眼笑脸（源文件 `build/appicon.svg`）。
 
 ## 已知限制 / 环境坑
 
@@ -53,7 +59,8 @@
   引入 goja（纯 Go JS 引擎，符合「安装即用」），实现 TVBox 爬虫 JS 运行时
   （`req`/`pdfh`/`pdfa`/`pd` 等），支持 `csp_` JAR（type=3）与 xpath（type=0）。
 - **M3 本地媒体库**：未开始。
-- **Windows/macOS 实测**：mpv 插件下载/安装、Web 播放仍需各自宿主机实测。
+- **Windows/macOS 实测**：打包已由 GH Actions 自动化，但 mpv 插件下载/安装、Web 播放的
+  运行时行为仍需各自宿主机实测。
 - 停车项：failover `Events()` fan-out、probe 同步阻塞 `Load`、tvbox 剧集缓存上限、
   点播收藏等。
 

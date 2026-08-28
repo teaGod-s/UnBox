@@ -1,11 +1,11 @@
-# AGENTS.md — Unbox 项目指引
+# AGENTS.md — UnBox 项目指引
 
 本文件供 AI 编码代理（Codex / Claude / 等）接手项目时快速建立上下文。
 改动项目前先读这里和 `docs/HANDOFF.md`。
 
 ## 项目概述
 
-Unbox 是一个跨平台（Windows / macOS / Linux）桌面媒体播放器，完全兼容 TVBox，
+UnBox 是一个跨平台（Windows / macOS / Linux）桌面媒体播放器，完全兼容 TVBox，
 目标「安装即用、无手动依赖」。依赖由 [mise](https://mise.jdx.dev) 管理。
 
 技术栈：Go 1.26.3 + Wails v3（**3.0.0-beta.9 钉死**）+ Vue3 + TypeScript。
@@ -29,6 +29,22 @@ mise run scan          # go run ./cmd/unbox-scan
 前端产物 `frontend/dist` 是 gitignore 的构建产物；production 构建由
 `assets.go` 的 `//go:embed all:frontend/dist` 嵌入二进制，`assets_dev.go`
 在非 production 构建提供空容器（dev 走 Vite）。
+
+## 发布出包与版本
+
+- 三平台原生出包走 GitHub Actions：`.github/workflows/release.yml`，push `v*` 标签
+  自动原生编译 + 打包 + 创建 Release；手动 `workflow_dispatch` 只构建不上传 Release。
+  goreleaser 已弃用（Wails v3 cgo 无法可靠交叉编译，必须各平台各自原生编译）。
+- 版本注入：`internal/shell` 的 `appVersion` 是 `var`，发布构建经
+  `-ldflags -X github.com/unbox/unbox/internal/shell.appVersion=<version>` 注入；根
+  `Taskfile.yml` 的 `VERSION` 变量读 `VERSION` 环境变量（默认 0.0.1），CI 在 build 前
+  把 tag 剥掉 `v` 前缀写入。nfpm 的 `version` 走 `${VERSION}`。
+- 检查更新：`service.go` 的 `updateURL` 指向
+  `api.github.com/repos/teaGod-s/UnBox/releases/latest`；「关于」页当前版本用免联网的
+  `CurrentVersion()` 即时回显（不要用 `CheckUpdate()` 取当前版本，那会联网）。
+- Logo 源文件是 `build/appicon.svg`（三面三色 + 眯眯眼笑脸），改动后重渲染
+  `appicon.png` 并 `wails3 generate icons` 重生成 ico/icns；图标经 SVG 的
+  `matrix()` 变换贴到顶面菱形，勿手改坐标。
 
 ## 架构（internal/ 包）
 

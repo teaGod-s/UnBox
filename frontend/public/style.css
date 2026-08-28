@@ -342,53 +342,11 @@ body {
 
 .tabs .settings-btn { margin-left: auto; }
 
-.settings-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: grid;
-  place-items: center;
-  z-index: 100;
-}
-
-.settings-panel {
-  width: min(560px, 90vw);
-  max-height: 84vh;
-  overflow-y: auto;
-  background: #0a0d1a;
-  border: 1px solid #23283a;
-  border-radius: 0.6rem;
-  padding: 1rem 1.25rem;
-}
-
-.settings-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.25rem;
-}
-
-.settings-head h2 { margin: 0; }
-
-.settings-head button {
-  padding: 0.3rem 0.7rem;
-  color: #e8eaf0;
-  background: #1b2137;
-  border: 1px solid #2c3350;
-  border-radius: 0.4rem;
-  cursor: pointer;
-}
+.settings-page { flex: 1; min-height: 0; overflow-y: auto; }
 
 .src-section { margin: 1.1rem 0; }
 
 .src-section h3 { margin: 0 0 0.4rem; color: #7ee787; font-size: 0.95rem; }
-
-.src-current {
-  color: #8b91a3;
-  font-size: 0.85rem;
-  margin: 0 0 0.5rem;
-  word-break: break-all;
-}
 
 .src-add { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
 
@@ -413,20 +371,57 @@ body {
   cursor: pointer;
 }
 
-.src-sub { color: #8b91a3; font-size: 0.8rem; margin: 0.5rem 0 0.25rem; }
-
 .src-history { margin: 0; padding: 0; list-style: none; }
 
 .src-history li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.35rem 0.45rem;
   font-size: 0.85rem;
   color: #c6cbd9;
   border-radius: 0.35rem;
-  cursor: pointer;
-  word-break: break-all;
 }
 
 .src-history li:hover { background: #1b2137; }
+
+.src-ref { flex: 1; min-width: 0; cursor: pointer; word-break: break-all; }
+.src-ref.current { color: #7ee787; }
+
+.src-del {
+  flex-shrink: 0;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.8rem;
+  color: #ff7b72;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+/* ---- 首页观看记录 ---- */
+.home { flex: 1; min-height: 0; overflow-y: auto; }
+.home h2 { margin: 0.25rem 0 0.75rem; }
+.home-empty { color: #8b91a3; }
+
+.home-list { margin: 0; padding: 0; list-style: none; }
+
+.home-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid #161a2b;
+  cursor: pointer;
+}
+
+.home-list li:hover { background: #1b2137; }
+
+.home-list .thumb { width: 44px; height: 60px; object-fit: cover; border-radius: 0.3rem; background: #161a2b; flex-shrink: 0; }
+
+.home-info { display: flex; flex-direction: column; min-width: 0; }
+.home-info .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-info .sub { color: #8b91a3; font-size: 0.85rem; }
 
 .player .now {
   margin: 0;

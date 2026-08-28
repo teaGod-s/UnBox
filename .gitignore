@@ -17,6 +17,8 @@ frontend/bindings/
 build/linux/appimage/build/
 build/linux/*.desktop
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+build/mpv/
+lib/
 
 # os
 .DS_Store

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { Events } from '@wailsio/runtime'
-import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord } from '../bindings/github.com/unbox/unbox/internal/shell'
+import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import DOMPurify from 'dompurify'
 
@@ -16,12 +16,10 @@ const favorites = ref<ChannelInfo[]>([])
 const activeGroup = ref('*')
 const query = ref('')
 const nowPlaying = ref('')
-const importUrl = ref('')
 const importSummary = ref('')
 const errMsg = ref('')
-const loading = ref(false)
 const importProgress = ref<Progress | null>(null)
-const mode = ref<'live' | 'vod'>('vod')
+const mode = ref<'home' | 'vod' | 'live' | 'settings'>('home')
 const sources = ref<SourceInfo[]>([])
 const activeSite = ref('')
 const vodCategories = ref<Section[]>([])
@@ -34,19 +32,20 @@ const playbackPlan = ref<PlaybackPlan | null>(null)
 const mpvReady = ref(false)
 const mpvInstallMode = ref('')
 const installMessage = ref('')
-const showSettings = ref(false)
 const vodSources = ref<SourceRecord[]>([])
 const liveSources = ref<SourceRecord[]>([])
 const vodSourceUrl = ref('')
 const liveSourceUrl = ref('')
+const homeHistory = ref<VodHistoryInfo[]>([])
+const currentVod = ref<{ site: string; vodID: string } | null>(null)
+let lastProgressSave = 0
 
 async function refresh() {
   try {
     platform.value = await ShellService.Platform()
     playerReady.value = await ShellService.PlayerReady()
     await refreshMpvStatus()
-    if (mode.value === 'vod') await refreshVod()
-    await reloadGroups()
+    await refreshHome()
   } catch (e) { errMsg.value = String(e) }
 }
 
@@ -73,16 +72,45 @@ async function recheckMpv() {
   } catch (e) { errMsg.value = String(e) }
 }
 
-async function openSettings() {
-  showSettings.value = true
-  await reloadSourceHistory()
+async function switchMode(m: 'home' | 'vod' | 'live' | 'settings') {
+  mode.value = m
+  if (m === 'vod') await refreshVod()
+  else if (m === 'live') await reloadGroups()
+  else if (m === 'home') await refreshHome()
+  else if (m === 'settings') await reloadSourceHistory()
 }
 
+async function refreshHome() {
+  try {
+    homeHistory.value = (await ShellService.ListVodHistory()) ?? []
+  } catch (e) { errMsg.value = String(e) }
+}
+
+function fmtProgress(sec: number) {
+  if (sec <= 0) return ''
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  return m > 0 ? `${m}分${s}秒` : `${s}秒`
+}
+
+async function resumeVod(h: VodHistoryInfo) {
+  errMsg.value = ''
+  try {
+    mode.value = 'vod'
+    await loadSources()
+    activeSite.value = h.Site
+    vodDetail.value = await ShellService.VodDetail(h.Site, h.VodID)
+  } catch (e) { errMsg.value = String(e) }
+}
+
+// ---- 设置：源管理 ----
 async function reloadSourceHistory() {
   try {
     const all = (await ShellService.ListSources()) ?? []
     vodSources.value = all.filter(s => s.Kind === 'vod')
     liveSources.value = all.filter(s => s.Kind === 'live')
+    vodSourceUrl.value = vodSources.value[0]?.Ref ?? ''
+    liveSourceUrl.value = liveSources.value[0]?.Ref ?? ''
   } catch (e) { errMsg.value = String(e) }
 }
 
@@ -93,7 +121,6 @@ async function importVodSource() {
   try {
     const r = await ShellService.ImportVodSource(ref)
     importSummary.value = `点播源导入成功：${r.Sites} 个站点`
-    vodSourceUrl.value = ''
     await reloadSourceHistory()
     activeSite.value = ''
     await refreshVod()
@@ -107,15 +134,20 @@ async function importLiveSource() {
   try {
     const r = await ShellService.ImportLiveSource(ref)
     importSummary.value = r.Channels > 0 ? `直播源导入成功：${r.Channels} 频道` : `直播源导入成功：${r.LiveSources} 个源`
-    liveSourceUrl.value = ''
     await reloadSourceHistory()
-    await reloadGroups()
   } catch (e) { errMsg.value = String(e) }
 }
 
 async function reimportSource(kind: string, ref: string) {
   if (kind === 'vod') { vodSourceUrl.value = ref; await importVodSource() }
   else { liveSourceUrl.value = ref; await importLiveSource() }
+}
+
+async function deleteSource(kind: string, ref: string) {
+  try {
+    await ShellService.DeleteSource(kind, ref)
+    await reloadSourceHistory()
+  } catch (e) { errMsg.value = String(e) }
 }
 
 async function reloadGroups() {
@@ -132,21 +164,6 @@ async function doSearch() {
   channels.value = (await ShellService.Search(query.value)) ?? []
 }
 
-async function doImport() {
-  loading.value = true; errMsg.value = ''; importSummary.value = ''; importProgress.value = null
-  try {
-    const r = await ShellService.ImportSubscription(importUrl.value)
-    if (r.Channels > 0) {
-      importSummary.value = `导入成功：${r.Channels} 频道`
-    } else {
-      importSummary.value = `导入成功：${r.Sites} 个点播站 / ${r.LiveSources} 个直播源（按需加载）`
-    }
-    if (mode.value === 'vod') await refreshVod()
-    await reloadGroups()
-  } catch (e) { errMsg.value = String(e) }
-  finally { loading.value = false }
-}
-
 async function loadLive() {
   errMsg.value = ''; importProgress.value = null
   try {
@@ -158,6 +175,7 @@ async function loadLive() {
 
 async function play(c: ChannelInfo) {
   errMsg.value = ''
+  currentVod.value = null
   try {
     playbackPlan.value = await ShellService.PrepareChannel(c.ID) as unknown as PlaybackPlan
     nowPlaying.value = c.Name
@@ -189,11 +207,6 @@ async function loadSources() {
 async function refreshVod() {
   await loadSources()
   if (activeSite.value) await reloadVodCategories()
-}
-
-async function switchMode(m: 'live' | 'vod') {
-  mode.value = m
-  if (m === 'vod') await refreshVod()
 }
 
 async function selectSite(id: string) {
@@ -232,12 +245,25 @@ async function playEpisode(ep: EpisodeInfo) {
   try {
     playbackPlan.value = await ShellService.PrepareVod(activeSite.value, ep.ID) as unknown as PlaybackPlan
     nowPlaying.value = ep.Name
+    if (vodDetail.value) {
+      currentVod.value = { site: activeSite.value, vodID: vodDetail.value.ID }
+      await ShellService.RecordVodHistory(activeSite.value, vodDetail.value.ID, vodDetail.value.Title, vodDetail.value.Logo, ep.ID, ep.Name, ep.Source)
+    }
   } catch (e) { errMsg.value = String(e) }
 }
 
 async function fallbackToMpv(id: string) {
   try { playbackPlan.value = await ShellService.FallbackToMPV(id) as unknown as PlaybackPlan }
   catch (e) { errMsg.value = String(e) }
+}
+
+async function onProgress(time: number, duration: number) {
+  if (!currentVod.value) return
+  const now = Date.now()
+  if (now - lastProgressSave < 10000) return
+  lastProgressSave = now
+  try { await ShellService.UpdateVodProgress(currentVod.value.site, currentVod.value.vodID, time, duration) }
+  catch { /* 进度保存失败不阻断 */ }
 }
 
 // imgError 隐藏加载失败的图片（部分源 vod_pic 为空/失效/被防盗链拦截）。
@@ -266,18 +292,28 @@ onMounted(() => {
     </div>
 
     <nav class="tabs">
+      <button :class="{ active: mode === 'home' }" @click="switchMode('home')">首页</button>
       <button :class="{ active: mode === 'vod' }" @click="switchMode('vod')">点播</button>
       <button :class="{ active: mode === 'live' }" @click="switchMode('live')">直播</button>
-      <button class="settings-btn" @click="openSettings">设置</button>
+      <button :class="{ active: mode === 'settings' }" @click="switchMode('settings')">设置</button>
     </nav>
 
-    <section class="import">
-      <input v-model="importUrl" placeholder="粘贴订阅链接或本地路径" />
-      <button :disabled="loading" @click="doImport">{{ loading ? '导入中…' : '导入订阅' }}</button>
-      <span v-if="importProgress" class="progress">{{ importProgress.Message }}</span>
-      <span v-if="importSummary" class="ok">{{ importSummary }}</span>
+    <!-- 首页：观看历史 -->
+    <section v-if="mode === 'home'" class="home">
+      <h2>观看记录</h2>
+      <p v-if="!homeHistory.length" class="home-empty">暂无观看记录，去「点播」看看吧</p>
+      <ul v-else class="home-list">
+        <li v-for="h in homeHistory" :key="h.Site + h.VodID" @click="resumeVod(h)">
+          <img v-if="h.VodLogo" :src="h.VodLogo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
+          <span class="home-info">
+            <span class="name">{{ h.VodTitle }}</span>
+            <span class="sub">{{ h.EpName }}{{ fmtProgress(h.Progress) ? ' · 看到 ' + fmtProgress(h.Progress) : '' }}</span>
+          </span>
+        </li>
+      </ul>
     </section>
 
+    <!-- 直播 -->
     <section v-if="mode === 'live'" class="layout">
       <aside class="groups">
         <button v-for="g in groups" :key="g" :class="{ active: g === activeGroup }" @click="activeGroup = g; reloadChannels()">
@@ -289,7 +325,7 @@ onMounted(() => {
 
       <aside class="player">
         <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
-        <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" />
+        <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" @progress="onProgress" />
         <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
           <button @click="pause">暂停</button>
           <button @click="resume">继续</button>
@@ -318,6 +354,7 @@ onMounted(() => {
       </section>
     </section>
 
+    <!-- 点播 -->
     <section v-if="mode === 'vod'" class="vod">
       <div class="vod-toolbar">
         <select v-model="activeSite" @change="selectSite(activeSite)">
@@ -344,7 +381,7 @@ onMounted(() => {
             <div class="vod-detail-top">
               <div class="vod-player">
                 <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
-                <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" />
+                <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" @progress="onProgress" />
                 <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
                   <button @click="pause">暂停</button>
                   <button @click="resume">继续</button>
@@ -368,44 +405,39 @@ onMounted(() => {
       </div>
     </section>
 
-    <div v-if="showSettings" class="settings-overlay" @click.self="showSettings = false">
-      <div class="settings-panel">
-        <div class="settings-head">
-          <h2>设置</h2>
-          <button @click="showSettings = false">✕</button>
+    <!-- 设置 -->
+    <section v-if="mode === 'settings'" class="settings-page">
+      <p v-if="importProgress" class="progress">{{ importProgress.Message }}</p>
+      <p v-if="importSummary" class="ok">{{ importSummary }}</p>
+
+      <section class="src-section">
+        <h3>点播源</h3>
+        <div class="src-add">
+          <input v-model="vodSourceUrl" placeholder="粘贴点播源地址" @keyup.enter="importVodSource" />
+          <button @click="importVodSource">导入</button>
         </div>
+        <ul v-if="vodSources.length" class="src-history">
+          <li v-for="s in vodSources" :key="'vod-' + s.Ref">
+            <span class="src-ref" :class="{ current: s.Ref === vodSources[0]?.Ref }" @click="reimportSource('vod', s.Ref)">{{ s.Ref }}</span>
+            <button class="src-del" @click="deleteSource('vod', s.Ref)">删除</button>
+          </li>
+        </ul>
+      </section>
 
-        <section class="src-section">
-          <h3>点播源</h3>
-          <p class="src-current">当前：{{ vodSources[0]?.Ref ?? '未配置' }}</p>
-          <div class="src-add">
-            <input v-model="vodSourceUrl" placeholder="粘贴点播源地址" @keyup.enter="importVodSource" />
-            <button @click="importVodSource">导入</button>
-          </div>
-          <template v-if="vodSources.length > 1">
-            <p class="src-sub">历史源（点击重新导入）</p>
-            <ul class="src-history">
-              <li v-for="s in vodSources.slice(1)" :key="s.Ref" @click="reimportSource('vod', s.Ref)">{{ s.Ref }}</li>
-            </ul>
-          </template>
-        </section>
-
-        <section class="src-section">
-          <h3>直播源</h3>
-          <p class="src-current">当前：{{ liveSources[0]?.Ref ?? '未配置' }}</p>
-          <div class="src-add">
-            <input v-model="liveSourceUrl" placeholder="粘贴直播源地址（M3U/TXT/订阅）" @keyup.enter="importLiveSource" />
-            <button @click="importLiveSource">导入</button>
-          </div>
-          <template v-if="liveSources.length > 1">
-            <p class="src-sub">历史源（点击重新导入）</p>
-            <ul class="src-history">
-              <li v-for="s in liveSources.slice(1)" :key="s.Ref" @click="reimportSource('live', s.Ref)">{{ s.Ref }}</li>
-            </ul>
-          </template>
-        </section>
-      </div>
-    </div>
+      <section class="src-section">
+        <h3>直播源</h3>
+        <div class="src-add">
+          <input v-model="liveSourceUrl" placeholder="粘贴直播源地址（M3U/TXT/订阅）" @keyup.enter="importLiveSource" />
+          <button @click="importLiveSource">导入</button>
+        </div>
+        <ul v-if="liveSources.length" class="src-history">
+          <li v-for="s in liveSources" :key="'live-' + s.Ref">
+            <span class="src-ref" :class="{ current: s.Ref === liveSources[0]?.Ref }" @click="reimportSource('live', s.Ref)">{{ s.Ref }}</span>
+            <button class="src-del" @click="deleteSource('live', s.Ref)">删除</button>
+          </li>
+        </ul>
+      </section>
+    </section>
 
     <p v-if="errMsg" class="error">{{ errMsg }}</p>
   </main>

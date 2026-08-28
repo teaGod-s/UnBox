@@ -12,7 +12,7 @@ export interface PlaybackPlan {
 }
 
 const props = defineProps<{ plan: PlaybackPlan | null }>()
-const emit = defineEmits<{ fallback: [id: string] }>()
+const emit = defineEmits<{ fallback: [id: string]; progress: [time: number, duration: number] }>()
 const video = ref<HTMLVideoElement | null>(null)
 let hls: Hls | null = null
 let flv: ReturnType<typeof mpegts.createPlayer> | null = null
@@ -28,6 +28,12 @@ function requestFallback() {
   if (!fallbackSent && props.plan?.CanFallback && props.plan.Backend === 'web') {
     fallbackSent = true
     emit('fallback', props.plan.ID)
+  }
+}
+
+function onTimeUpdate() {
+  if (video.value) {
+    emit('progress', video.value.currentTime, video.value.duration || 0)
   }
 }
 
@@ -56,7 +62,7 @@ onBeforeUnmount(cleanup)
 
 <template>
   <div class="playback-view">
-    <video v-if="plan?.Backend === 'web'" ref="video" controls playsinline preload="metadata" />
+    <video v-if="plan?.Backend === 'web'" ref="video" controls playsinline preload="metadata" @timeupdate="onTimeUpdate" />
     <div v-else-if="plan?.Backend === 'mpv'" class="mpv-status">正在使用 mpv 播放</div>
     <div v-else class="playback-empty">选择频道或剧集开始播放</div>
   </div>

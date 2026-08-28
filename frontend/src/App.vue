@@ -5,8 +5,8 @@ import { ShellService, type SourceInfo, type Section, type VodItem, type Episode
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import DOMPurify from 'dompurify'
 
-// 爱发电赞助主页（TODO：把 YOUR_AFDIAN_ID 换成你的爱发电主页 ID）
-const DONATE_URL = 'https://afdian.com/a/YOUR_AFDIAN_ID'
+// 爱发电赞助主页
+const DONATE_URL = 'https://afdian.com/a/teaGod'
 
 interface ChannelInfo { ID: string; Name: string; Group: string; Logo: string; Favorited: boolean }
 interface Progress { Stage: string; Message: string; Done: number; Total: number }

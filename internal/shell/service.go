@@ -87,6 +87,7 @@ type SourceInfo struct {
 	ID   string
 	Name string
 	Kind string // "live" | "vod"
+	Line string // 所属线路名（单线路源为空）
 }
 
 // Section 是点播分类。
@@ -101,6 +102,7 @@ type VodItem struct {
 	Title string
 	Logo  string
 	Group string
+	Site  string // 所属站点 key（全站搜索时非空）
 }
 
 // EpisodeInfo 是点播剧集（不向前端暴露 URL）。
@@ -192,13 +194,14 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 
 	// 直播源不在此拉取（m3u 数量多、耗时），仅收集定义，前端经 LoadLive 按需加载。
 	liveList := flattenLives(cfgs)
-	vods, vodNames := collectVodSites(cfgs)
+	vods, vodNames, siteLines := collectVodSites(cfgs)
 	s.mu.Lock()
 	s.live = nil
 	s.liveSources = liveList
 	s.liveCount = 0
 	s.vods = vods
 	s.vodNames = vodNames
+	s.vodSiteLines = siteLines
 	s.vodCFGs = cfgs
 	s.liveCFGs = cfgs
 	s.liveChannels = nil
@@ -229,10 +232,11 @@ func (s *ShellService) ImportVodSource(ref string) (ImportResult, error) {
 	if err != nil {
 		return ImportResult{}, err
 	}
-	vods, vodNames := collectVodSites(cfgs)
+	vods, vodNames, siteLines := collectVodSites(cfgs)
 	s.mu.Lock()
 	s.vods = vods
 	s.vodNames = vodNames
+	s.vodSiteLines = siteLines
 	s.vodCFGs = cfgs
 	s.vodRef = ref
 	s.mu.Unlock()
@@ -429,7 +433,7 @@ func (s *ShellService) RestoreSubscription() (ImportResult, error) {
 		s.liveSources = flattenLives(liveCFGs)
 		s.liveCount = 0
 	}
-	s.vods, s.vodNames = collectVodSites(vodCFGs)
+	s.vods, s.vodNames, s.vodSiteLines = collectVodSites(vodCFGs)
 	return ImportResult{Sites: len(s.vods), LiveSources: len(s.liveSources), Channels: channels}, nil
 }
 
@@ -468,22 +472,26 @@ func flattenLives(cfgs []*config.Config) []config.Live {
 
 // collectVodSites 从多份配置收集点播站点：type=1（CMS）→ tvbox.Provider，
 // type=3 http（drpy2/drpyS 爬虫服务）→ tvbox.Drpy。
-func collectVodSites(cfgs []*config.Config) (map[string]provider.Provider, map[string]string) {
+func collectVodSites(cfgs []*config.Config) (map[string]provider.Provider, map[string]string, map[string]string) {
 	vods := make(map[string]provider.Provider)
 	names := make(map[string]string)
+	lines := make(map[string]string)
 	for _, cfg := range cfgs {
+		line := cfg.SourceName
 		for _, site := range cfg.Sites {
 			switch {
 			case site.Type == config.SiteTypeCMS && site.API != "":
 				vods[site.Key] = tvbox.New(site)
 				names[site.Key] = site.Name
+				lines[site.Key] = line
 			case site.Type == config.SiteTypeSpider && strings.HasPrefix(strings.ToLower(site.API), "http"):
 				vods[site.Key] = tvbox.NewDrpy(site)
 				names[site.Key] = site.Name
+				lines[site.Key] = line
 			}
 		}
 	}
-	return vods, names
+	return vods, names, lines
 }
 
 // isPlaylist 探测内容是否为独立播放列表而非 JSON 配置。
@@ -826,7 +834,7 @@ func (s *ShellService) Sources() []SourceInfo {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		out = append(out, SourceInfo{ID: k, Name: s.vodNames[k], Kind: "vod"})
+		out = append(out, SourceInfo{ID: k, Name: s.vodNames[k], Kind: "vod", Line: s.vodSiteLines[k]})
 	}
 	return out
 }
@@ -880,6 +888,60 @@ func (s *ShellService) VodSearch(site, q string) ([]VodItem, error) {
 		return nil, err
 	}
 	return toVodItems(items), nil
+}
+
+// VodSearchAll 全站搜索点播，返回结果带所属站点（Site 字段）。
+func (s *ShellService) VodSearchAll(q string) ([]VodItem, error) {
+	s.mu.RLock()
+	type sp struct {
+		site string
+		pv   provider.Provider
+	}
+	providers := make([]sp, 0, len(s.vods))
+	for k, pv := range s.vods {
+		providers = append(providers, sp{site: k, pv: pv})
+	}
+	s.mu.RUnlock()
+
+	var mu sync.Mutex
+	var out []VodItem
+	var wg sync.WaitGroup
+	for _, p := range providers {
+		wg.Add(1)
+		go func(site string, pv provider.Provider) {
+			defer wg.Done()
+			items, err := pv.Search(context.Background(), q)
+			if err != nil {
+				return
+			}
+			v := toVodItems(items)
+			for i := range v {
+				v[i].Site = site
+			}
+			mu.Lock()
+			out = append(out, v...)
+			mu.Unlock()
+		}(p.site, p.pv)
+	}
+	wg.Wait()
+	return out, nil
+}
+
+// SetLastVodSite 记忆最后选择的点播站点。
+func (s *ShellService) SetLastVodSite(site string) error {
+	if s.store == nil {
+		return nil
+	}
+	return s.store.SetKV("lastVodSite", site)
+}
+
+// LastVodSite 返回上次选择的点播站点（无则空串）。
+func (s *ShellService) LastVodSite() (string, error) {
+	if s.store == nil {
+		return "", nil
+	}
+	v, _, err := s.store.GetKV("lastVodSite")
+	return v, err
 }
 
 func (s *ShellService) VodDetail(site, id string) (VodMedia, error) {

@@ -289,7 +289,7 @@ func TestCollectVodSitesSpider(t *testing.T) {
 			{Key: "jar", Name: "JAR站", Type: config.SiteTypeSpider, API: "csp_xxx"},
 		},
 	}}
-	vods, names := collectVodSites(cfgs)
+	vods, names, _ := collectVodSites(cfgs)
 	if len(vods) != 2 {
 		t.Fatalf("应有 2 个站点（cms + spider http），得 %d", len(vods))
 	}

@@ -48,6 +48,7 @@ type ShellService struct {
 	liveChannels []config.Channel // 当前直播源（播放列表）组装后的频道
 	vodRef       string           // 当前点播源地址（回显用）
 	liveRef      string           // 当前直播源地址（回显用）
+	vodSiteLines map[string]string // 点播站点 key → 线路名
 }
 
 // Platform 返回当前运行平台（linux / darwin / windows）。

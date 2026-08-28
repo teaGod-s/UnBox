@@ -153,7 +153,7 @@ func (r *Resolver) Resolve(ctx context.Context, ref string) ([]*Config, error) {
 		defer wg.Done()
 		sem <- struct{}{}
 		defer func() { <-sem }()
-		r.walk(ctx, ref, 0, st, sem, &wg)
+		r.walk(ctx, ref, 0, "", st, sem, &wg)
 	}()
 	wg.Wait()
 
@@ -204,7 +204,7 @@ func (r *Resolver) fetchAndParse(ctx context.Context, ref string) *fetchResult {
 // 拉取/解析失败、四集合全空的空节点、storeHouse/urls 条目为空等错误只在
 // 首次实际拉取该 ref（fresh）时记录一次，命中缓存/等待他人的重访不重复
 // 报错——与单线程版本的 cached 去重语义一致。
-func (r *Resolver) walk(ctx context.Context, ref string, depth int, st *resolveState, sem chan struct{}, wg *sync.WaitGroup) {
+func (r *Resolver) walk(ctx context.Context, ref string, depth int, sourceName string, st *resolveState, sem chan struct{}, wg *sync.WaitGroup) {
 	if depth > r.MaxDepth {
 		st.recordDepthRejected(ref)
 		return
@@ -234,6 +234,7 @@ func (r *Resolver) walk(ctx context.Context, ref string, depth int, st *resolveS
 	}
 
 	if isTerminal {
+		cfg.SourceName = sourceName
 		st.collect(ref, cfg)
 	}
 
@@ -244,7 +245,7 @@ func (r *Resolver) walk(ctx context.Context, ref string, depth int, st *resolveS
 			}
 			continue
 		}
-		r.spawn(ctx, h.SourceURL, depth+1, st, sem, wg)
+		r.spawn(ctx, h.SourceURL, depth+1, h.SourceName, st, sem, wg)
 	}
 	for _, u := range cfg.URLs {
 		if u.URL == "" {
@@ -253,17 +254,17 @@ func (r *Resolver) walk(ctx context.Context, ref string, depth int, st *resolveS
 			}
 			continue
 		}
-		r.spawn(ctx, u.URL, depth+1, st, sem, wg)
+		r.spawn(ctx, u.URL, depth+1, u.Name, st, sem, wg)
 	}
 }
 
 // spawn 为一个子节点起一个 goroutine，受 sem 与 wg 约束。
-func (r *Resolver) spawn(ctx context.Context, ref string, depth int, st *resolveState, sem chan struct{}, wg *sync.WaitGroup) {
+func (r *Resolver) spawn(ctx context.Context, ref string, depth int, sourceName string, st *resolveState, sem chan struct{}, wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		sem <- struct{}{}
 		defer func() { <-sem }()
-		r.walk(ctx, ref, depth, st, sem, wg)
+		r.walk(ctx, ref, depth, sourceName, st, sem, wg)
 	}()
 }

@@ -98,4 +98,7 @@ type Config struct {
 		URL  string `json:"url"`
 		Name string `json:"name"`
 	} `json:"urls"`
+	// SourceName 是解析时填充的「线路/仓库名」（urls[].name 或 storeHouse[].sourceName）。
+	// 单线路源为空字符串。
+	SourceName string `json:"sourceName,omitempty"`
 }

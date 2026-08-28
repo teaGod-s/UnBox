@@ -74,7 +74,21 @@ func (s *ShellService) LoadTestStream() error {
 func forceLinuxX11Backend() {
 	if runtime.GOOS == "linux" {
 		_ = os.Setenv("GDK_BACKEND", "x11")
+		configureLinuxRendering(func(path string) bool {
+			_, err := os.Stat(path)
+			return err == nil
+		})
 	}
+}
+
+// configureLinuxRendering 在没有 DRM 设备时关闭 WebKit DMA-BUF，避免 WSLg
+// 无 GPU 环境卡在 EGL 初始化阶段。必须在 GTK/WebKit 初始化前设置。
+func configureLinuxRendering(pathExists func(string) bool) {
+	if pathExists("/dev/dri") {
+		return
+	}
+	_ = os.Setenv("LIBGL_ALWAYS_SOFTWARE", "1")
+	_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 }
 
 // NewApp 创建 Unbox 桌面应用，应用级 Wails 选项细节全部收敛于此。

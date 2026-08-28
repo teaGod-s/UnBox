@@ -38,6 +38,8 @@
 - **GitHub Actions 分平台出包**：`.github/workflows/release.yml`，push `v*` 标签三平台原生编译并创建 Release（弃 goreleaser）。
 - **README + MIT LICENSE**：补仓库 README（特性/安装/构建/路线图）与许可证。
 - **Logo 迭代**：三面三色柔和配色 + 顶面眯眯眼笑脸（源文件 `build/appicon.svg`）。
+- **窗口最小尺寸**：`OpenWindow` 设 `MinWidth=720`/`MinHeight=480`，防止窗口缩到只剩标题栏淹没播放器。
+- **点播详情海报右对齐**：海报 `margin-left:auto` 靠右贴合边框。
 
 ## 已知限制 / 环境坑
 

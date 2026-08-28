@@ -68,6 +68,7 @@ mise run scan          # go run ./cmd/unbox-scan
 - Wails 代码只允许在 `internal/shell/`、`cmd/unbox/`、`frontend/`；
   `internal/player/` 等业务层不得 import Wails。
 - 公开错误信息 / 注释用中文。
+- 主窗口最小尺寸 720×480，设在 `internal/shell/app.go` 的 `OpenWindow()`（`MinWidth`/`MinHeight`）。
 - TDD：改代码先写失败测试。
 - 提交前 `go test ./... -count=1`、`go vet ./...`、`gofmt -l` 全绿；
   Linux 额外 `CGO_ENABLED=1 go build ./...`。

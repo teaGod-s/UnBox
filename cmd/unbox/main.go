@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/unbox/unbox/internal/player/failover"
 	"github.com/unbox/unbox/internal/probe"
@@ -32,7 +33,13 @@ func main() {
 	// 初始 Provider 为空：等待前端 ImportSubscription 后重建。
 	var pv provider.Provider
 	app := shell.NewApp(pl, pv, st)
-	shell.OpenWindow(app)
+	win := shell.OpenWindow(app)
+	// WSLg 的 XWayland 工作区原点可能落在宿主机的虚拟显示器上；
+	// 窗口创建后用绝对坐标拉回当前可见区域。
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		win.SetPosition(50, 50)
+	}()
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)

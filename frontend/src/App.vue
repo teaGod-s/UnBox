@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Events } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
@@ -22,6 +22,7 @@ const importProgress = ref<Progress | null>(null)
 const mode = ref<'home' | 'vod' | 'live' | 'settings'>('home')
 const sources = ref<SourceInfo[]>([])
 const activeSite = ref('')
+const activeLine = ref('')
 const vodCategories = ref<Section[]>([])
 const vodActiveCat = ref('')
 const vodItems = ref<VodItem[]>([])
@@ -45,6 +46,27 @@ const logs = ref('')
 const showLogs = ref(false)
 const copyMsg = ref('')
 let lastProgressSave = 0
+
+const vodSites = computed(() => sources.value.filter(s => s.Kind === 'vod'))
+const vodLines = computed(() => {
+  const names: string[] = []
+  for (const s of vodSites.value) {
+    const ln = s.Line || ''
+    if (!names.includes(ln)) names.push(ln)
+  }
+  return names
+})
+function sitesOfLine(line: string) {
+  return vodSites.value.filter(s => (s.Line || '') === line)
+}
+function siteName(site: string) {
+  if (!site) return ''
+  return sources.value.find(s => s.ID === site)?.Name ?? site
+}
+function vodItemSub(it: VodItem) {
+  const parts = [it.Site ? siteName(it.Site) : '', it.Group].filter(Boolean)
+  return parts.join(' · ')
+}
 
 async function refresh() {
   try {
@@ -213,7 +235,12 @@ async function setVolume(e: Event) { await ShellService.SetVolume(Number((e.targ
 async function loadSources() {
   sources.value = (await ShellService.Sources()) ?? []
   if (!activeSite.value) {
-    activeSite.value = sources.value.find(s => s.Kind === 'vod')?.ID ?? ''
+    const last = await ShellService.LastVodSite()
+    const target = vodSites.value.find(s => s.ID === last) ?? vodSites.value[0]
+    if (target) {
+      activeSite.value = target.ID
+      activeLine.value = target.Line ?? ''
+    }
   }
 }
 
@@ -222,11 +249,24 @@ async function refreshVod() {
   if (activeSite.value) await reloadVodCategories()
 }
 
+async function selectLine(line: string) {
+  activeLine.value = line
+  const first = sitesOfLine(line)[0]
+  if (first) {
+    activeSite.value = first.ID
+    vodDetail.value = null
+    vodPage.value = 0
+    await reloadVodCategories()
+    await ShellService.SetLastVodSite(first.ID)
+  }
+}
+
 async function selectSite(id: string) {
   activeSite.value = id
   vodDetail.value = null
   vodPage.value = 0
   await reloadVodCategories()
+  await ShellService.SetLastVodSite(id)
 }
 
 async function reloadVodCategories() {
@@ -241,13 +281,18 @@ async function reloadVodList() {
 
 async function vodSearch() {
   if (!vodQuery.value) { await reloadVodList(); return }
-  vodItems.value = (await ShellService.VodSearch(activeSite.value, vodQuery.value)) ?? []
+  vodItems.value = (await ShellService.VodSearchAll(vodQuery.value)) ?? []
 }
 
 async function openVodDetail(item: VodItem) {
   errMsg.value = ''
   try {
-    const d = await ShellService.VodDetail(activeSite.value, item.ID)
+    const site = item.Site || activeSite.value
+    if (item.Site) {
+      activeSite.value = item.Site
+      activeLine.value = vodSites.value.find(s => s.ID === item.Site)?.Line ?? ''
+    }
+    const d = await ShellService.VodDetail(site, item.ID)
     d.Description = DOMPurify.sanitize(d.Description)
     vodDetail.value = d
   } catch (e) { errMsg.value = String(e) }
@@ -417,8 +462,11 @@ onMounted(() => {
     <!-- 点播 -->
     <section v-if="mode === 'vod'" class="vod">
       <div class="vod-toolbar">
+        <select v-if="vodLines.length > 1" v-model="activeLine" @change="selectLine(activeLine)">
+          <option v-for="l in vodLines" :key="l" :value="l">{{ l || '默认线路' }}</option>
+        </select>
         <select v-model="activeSite" @change="selectSite(activeSite)">
-          <option v-for="s in sources.filter(x => x.Kind === 'vod')" :key="s.ID" :value="s.ID">{{ s.Name }}</option>
+          <option v-for="s in sitesOfLine(activeLine)" :key="s.ID" :value="s.ID">{{ s.Name }}</option>
         </select>
       </div>
 
@@ -433,7 +481,7 @@ onMounted(() => {
           <ul v-if="!vodDetail">
             <li v-for="it in vodItems" :key="it.ID" class="channel" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
-              <span class="name">{{ it.Title }}</span><span class="group">{{ it.Group }}</span>
+              <span class="name">{{ it.Title }}</span><span class="group">{{ vodItemSub(it) }}</span>
             </li>
           </ul>
           <div v-else class="vod-detail">

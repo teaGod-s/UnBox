@@ -43,11 +43,11 @@ type ShellService struct {
 	mu           sync.RWMutex                 // 守护 live/vods 读写
 	playback     *playback.Controller
 	mpvPlugin    *mpvplugin.Manager
-	vodCFGs      []*config.Config // 当前点播源解析后的配置（持久化快照）
-	liveCFGs     []*config.Config // 当前直播源解析后的配置（持久化快照）
-	liveChannels []config.Channel // 当前直播源（播放列表）组装后的频道
-	vodRef       string           // 当前点播源地址（回显用）
-	liveRef      string           // 当前直播源地址（回显用）
+	vodCFGs      []*config.Config  // 当前点播源解析后的配置（持久化快照）
+	liveCFGs     []*config.Config  // 当前直播源解析后的配置（持久化快照）
+	liveChannels []config.Channel  // 当前直播源（播放列表）组装后的频道
+	vodRef       string            // 当前点播源地址（回显用）
+	liveRef      string            // 当前直播源地址（回显用）
 	vodSiteLines map[string]string // 点播站点 key → 线路名
 }
 

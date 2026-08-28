@@ -17,3 +17,12 @@
 *.yaml text eol=lf
 *.md   text eol=lf
 *.sh   text eol=lf
+
+# 无扩展名文本文件（go.mod/go.sum 及各种 dotfile）同样强制 LF。
+go.mod         text eol=lf
+go.sum         text eol=lf
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+Dockerfile     text eol=lf
+Makefile       text eol=lf
+LICENSE        text eol=lf

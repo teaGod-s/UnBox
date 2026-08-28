@@ -45,6 +45,10 @@ mise run scan          # go run ./cmd/unbox-scan
 - Logo 源文件是 `build/appicon.svg`（三面三色 + 眯眯眼笑脸），改动后重渲染
   `appicon.png` 并 `wails3 generate icons` 重生成 ico/icns；图标经 SVG 的
   `matrix()` 变换贴到顶面菱形，勿手改坐标。
+- 打包元数据：产品名用 `UnBox`，公司名 / 厂商统一用 `RejectCode`（nfpm `vendor`、
+  NSIS `INFO_COMPANYNAME`、`info.json` 的 `CompanyName`/`LegalCopyright`）。
+- 捐助入口：前端 `App.vue` 顶部 `DONATE_URL` 是爱发电链接（占位 `YOUR_AFDIAN_ID`），
+  README 里也有一处占位，拿到真实 ID 后两处一起改。
 
 ## 架构（internal/ 包）
 

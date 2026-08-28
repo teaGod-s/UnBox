@@ -88,6 +88,12 @@ mise run build:linux    # 或 build:win / build:mac
   目前仅支持 type=1 CMS 与 type=3 http（drpy）。
 - Linux 的 WebKitGTK 无 MSE，HLS / FLV / TS 会自动切到 mpv 播放。
 
+## 💝 捐助
+
+UnBox 是个人「用爱发电」、完全免费的开源项目。如果你觉得它好用，愿意支持后续的开发和维护，欢迎通过[爱发电](https://afdian.com/a/YOUR_AFDIAN_ID)请我喝杯咖啡 ☕。
+
+每一份支持我都非常感激。当然，不捐助也完全没有关系——软件会一直免费开源下去，你使用它、反馈问题，就已经是最好的支持了。感谢每一位使用 UnBox 的朋友。🙏
+
 ## 📄 License
 
 [MIT](LICENSE)

@@ -119,11 +119,15 @@ func NewApp(p player.Player, pv provider.Provider, st *store.Store) *application
 // OpenWindow 在 app 上创建并打开主窗口，并返回窗口（供后续拿原生句柄嵌入播放）。
 func OpenWindow(app *application.App) *application.WebviewWindow {
 	return app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:             "UnboxMain",
-		Title:            "Unbox",
-		Width:            1000,
-		Height:           618,
-		InitialPosition:  application.WindowCentered,
+		Name:   "UnboxMain",
+		Title:  "Unbox",
+		Width:  1000,
+		Height: 618,
+		// WSLg 的 XWayland 在启动时可能返回错误的屏幕工作区，导致
+		// WindowCentered 把窗口放到屏幕外；固定初始坐标保证首次可见。
+		InitialPosition:  application.WindowXY,
+		X:                50,
+		Y:                50,
 		BackgroundColour: application.NewRGB(6, 7, 15),
 		URL:              "/",
 		Linux: application.LinuxWindow{

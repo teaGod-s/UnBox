@@ -33,16 +33,19 @@ const testStreamURL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
 // live 为已加载的直播 provider（经 LoadLive 后）；liveSources 为导入时收集、
 // 但尚未拉取 m3u 的直播源定义（按需加载）；vods 为点播站点；store 为持久化存储。
 type ShellService struct {
-	player      player.Player
-	store       *store.Store
-	live        provider.Provider            // 已加载的直播 provider（LoadLive 后）
-	liveSources []config.Live                // 待按需拉取的直播源定义
-	liveCount   int                          // 已加载的直播频道数
-	vods        map[string]provider.Provider // 点播站点 key → provider
-	vodNames    map[string]string            // 点播站点 key → 显示名
-	mu          sync.RWMutex                 // 守护 live/vods 读写
-	playback    *playback.Controller
-	mpvPlugin   *mpvplugin.Manager
+	player       player.Player
+	store        *store.Store
+	live         provider.Provider            // 已加载的直播 provider（LoadLive 后）
+	liveSources  []config.Live                // 待按需拉取的直播源定义
+	liveCount    int                          // 已加载的直播频道数
+	vods         map[string]provider.Provider // 点播站点 key → provider
+	vodNames     map[string]string            // 点播站点 key → 显示名
+	mu           sync.RWMutex                 // 守护 live/vods 读写
+	playback     *playback.Controller
+	mpvPlugin    *mpvplugin.Manager
+	vodCFGs      []*config.Config // 当前点播源解析后的配置（持久化快照）
+	liveCFGs     []*config.Config // 当前直播源解析后的配置（持久化快照）
+	liveChannels []config.Channel // 当前直播源（播放列表）组装后的频道
 }
 
 // Platform 返回当前运行平台（linux / darwin / windows）。

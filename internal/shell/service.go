@@ -35,10 +35,18 @@ type ImportResult struct {
 }
 
 // persistedSubscription 是存进 store 的订阅快照，重启后据此无网络重建状态。
+// 点播源与直播源分开存储，便于在设置里分别配置。
 type persistedSubscription struct {
-	Ref      string           `json:"ref"`
-	CFGs     []*config.Config `json:"cfgs,omitempty"`     // 配置导入：解析后的终端配置
-	Channels []config.Channel `json:"channels,omitempty"` // 播放列表导入：已组装频道
+	VodCFGs  []*config.Config `json:"vodCfgs,omitempty"`  // 点播源：解析后的终端配置
+	LiveCFGs []*config.Config `json:"liveCfgs,omitempty"` // 直播源：解析后的终端配置
+	Channels []config.Channel `json:"channels,omitempty"` // 直播源（播放列表）：已组装频道
+}
+
+// SourceRecord 是一条导入源的历史记录（供设置页展示当前源与历史源）。
+type SourceRecord struct {
+	Kind string
+	Ref  string
+	At   int64
 }
 
 // subscriptionKey 是 store.kv 里订阅快照的键。
@@ -152,7 +160,7 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 		return ImportResult{}, fmt.Errorf("拉取 %s 失败: %w", ref, err)
 	}
 	if isPlaylist(raw) {
-		return s.importPlaylist(ref, raw)
+		return s.importPlaylist(ref, raw, true)
 	}
 	cfgs, err := resolveConfigs(context.Background(), ref, raw)
 	if err != nil {
@@ -169,21 +177,105 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 	s.liveCount = 0
 	s.vods = vods
 	s.vodNames = vodNames
+	s.vodCFGs = cfgs
+	s.liveCFGs = cfgs
+	s.liveChannels = nil
 	s.mu.Unlock()
 
-	// 持久化快照：重启后免重新导入。
-	s.saveSubscription(ref, cfgs, nil)
+	s.addSource("vod", ref)
+	s.addSource("live", ref)
+	s.saveSubscription()
 
 	s.emitProgress(Progress{Stage: "done", Message: "导入完成", Done: -1, Total: -1})
 	return ImportResult{Sites: len(vods), LiveSources: len(liveList)}, nil
 }
 
-// saveSubscription 把解析后的订阅快照写进 store（无网络）。store 为 nil 时静默跳过。
-func (s *ShellService) saveSubscription(ref string, cfgs []*config.Config, channels []config.Channel) {
+// ImportVodSource 仅导入点播源（站点），不动现有直播源。
+func (s *ShellService) ImportVodSource(ref string) (ImportResult, error) {
+	s.emitProgress(Progress{Stage: "resolve", Message: "正在解析点播源…", Done: -1, Total: -1})
+	raw, err := config.NewFetcher().Fetch(context.Background(), ref)
+	if err != nil {
+		return ImportResult{}, fmt.Errorf("拉取 %s 失败: %w", ref, err)
+	}
+	if isPlaylist(raw) {
+		return ImportResult{}, errors.New("该源是直播播放列表，不含点播站点")
+	}
+	cfgs, err := resolveConfigs(context.Background(), ref, raw)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	vods, vodNames := collectVodSites(cfgs)
+	s.mu.Lock()
+	s.vods = vods
+	s.vodNames = vodNames
+	s.vodCFGs = cfgs
+	s.mu.Unlock()
+	s.addSource("vod", ref)
+	s.saveSubscription()
+	s.emitProgress(Progress{Stage: "done", Message: "点播源导入完成", Done: -1, Total: -1})
+	return ImportResult{Sites: len(vods)}, nil
+}
+
+// ImportLiveSource 仅导入直播源（频道），不动现有点播源。
+func (s *ShellService) ImportLiveSource(ref string) (ImportResult, error) {
+	s.emitProgress(Progress{Stage: "resolve", Message: "正在解析直播源…", Done: -1, Total: -1})
+	raw, err := config.NewFetcher().Fetch(context.Background(), ref)
+	if err != nil {
+		return ImportResult{}, fmt.Errorf("拉取 %s 失败: %w", ref, err)
+	}
+	if isPlaylist(raw) {
+		return s.importPlaylist(ref, raw, false)
+	}
+	cfgs, err := resolveConfigs(context.Background(), ref, raw)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	liveList := flattenLives(cfgs)
+	s.mu.Lock()
+	s.live = nil
+	s.liveSources = liveList
+	s.liveCount = 0
+	s.liveCFGs = cfgs
+	s.liveChannels = nil
+	s.mu.Unlock()
+	s.addSource("live", ref)
+	s.saveSubscription()
+	s.emitProgress(Progress{Stage: "done", Message: "直播源导入完成", Done: -1, Total: -1})
+	return ImportResult{LiveSources: len(liveList)}, nil
+}
+
+// addSource 记录一条导入源（按 kind）。
+func (s *ShellService) addSource(kind, ref string) {
+	if s.store != nil {
+		_ = s.store.AddSource(kind, ref)
+	}
+}
+
+// ListSources 返回导入源历史（最近在前），设置页据此展示当前源与历史源。
+func (s *ShellService) ListSources() ([]SourceRecord, error) {
+	if s.store == nil {
+		return nil, nil
+	}
+	recs, err := s.store.ListSources()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SourceRecord, len(recs))
+	for i, r := range recs {
+		out[i] = SourceRecord{Kind: r.Kind, Ref: r.Ref, At: r.At}
+	}
+	return out, nil
+}
+
+// saveSubscription 把当前点播/直播源快照写进 store（无网络）。store 为 nil 时静默跳过。
+func (s *ShellService) saveSubscription() {
 	if s.store == nil {
 		return
 	}
-	b, err := json.Marshal(persistedSubscription{Ref: ref, CFGs: cfgs, Channels: channels})
+	s.mu.RLock()
+	sub := persistedSubscription{VodCFGs: s.vodCFGs, LiveCFGs: s.liveCFGs, Channels: s.liveChannels}
+	s.mu.RUnlock()
+	b, err := json.Marshal(sub)
 	if err != nil {
 		return
 	}
@@ -211,19 +303,23 @@ func (s *ShellService) RestoreSubscription() (ImportResult, error) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.vodCFGs = sub.VodCFGs
+	s.liveCFGs = sub.LiveCFGs
+	s.liveChannels = sub.Channels
+
+	var channels int
 	if len(sub.Channels) > 0 {
 		s.live = live.New(sub.Channels)
 		s.liveSources = nil
 		s.liveCount = len(sub.Channels)
-		s.vods = map[string]provider.Provider{}
-		s.vodNames = map[string]string{}
-		return ImportResult{Channels: len(sub.Channels)}, nil
+		channels = len(sub.Channels)
+	} else {
+		s.live = nil
+		s.liveSources = flattenLives(sub.LiveCFGs)
+		s.liveCount = 0
 	}
-	s.live = nil
-	s.liveSources = flattenLives(sub.CFGs)
-	s.liveCount = 0
-	s.vods, s.vodNames = collectVodSites(sub.CFGs)
-	return ImportResult{Sites: len(s.vods), LiveSources: len(s.liveSources)}, nil
+	s.vods, s.vodNames = collectVodSites(sub.VodCFGs)
+	return ImportResult{Sites: len(s.vods), LiveSources: len(s.liveSources), Channels: channels}, nil
 }
 
 // LoadLive 按需拉取全部直播源并构建直播 provider。已加载则直接返回频道数。
@@ -292,8 +388,9 @@ func isPlaylist(raw []byte) bool {
 	return t[0] != '{' && t[0] != '['
 }
 
-// importPlaylist 解析独立 M3U/TXT 播放列表并重建 Provider。
-func (s *ShellService) importPlaylist(ref string, raw []byte) (ImportResult, error) {
+// importPlaylist 解析独立 M3U/TXT 播放列表并重建直播 Provider。
+// clearVod 为 true 时同时清空点播站点（合并导入语义）；false 时保留（仅导直播源）。
+func (s *ShellService) importPlaylist(ref string, raw []byte, clearVod bool) (ImportResult, error) {
 	entries := live.ParseM3U(raw)
 	if len(entries) == 0 {
 		entries = live.ParseTXT(raw) // m3u 解析为空则按 TXT 回退
@@ -307,10 +404,16 @@ func (s *ShellService) importPlaylist(ref string, raw []byte) (ImportResult, err
 	s.live = lp
 	s.liveSources = nil
 	s.liveCount = len(channels)
-	s.vods = map[string]provider.Provider{}
-	s.vodNames = map[string]string{}
+	s.liveCFGs = nil
+	s.liveChannels = channels
+	if clearVod {
+		s.vods = map[string]provider.Provider{}
+		s.vodNames = map[string]string{}
+		s.vodCFGs = nil
+	}
 	s.mu.Unlock()
-	s.saveSubscription(ref, nil, channels)
+	s.addSource("live", ref)
+	s.saveSubscription()
 	return ImportResult{Channels: len(channels)}, nil
 }
 

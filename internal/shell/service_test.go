@@ -229,7 +229,9 @@ func TestRestoreSubscriptionConfig(t *testing.T) {
 		Lives: config.LiveList{{Name: "g1", URL: "http://x/g1.m3u"}},
 	}}
 	svc1 := NewShellService(nil, nil, s)
-	svc1.saveSubscription("http://sub", cfgs, nil)
+	svc1.vodCFGs = cfgs
+	svc1.liveCFGs = cfgs
+	svc1.saveSubscription()
 
 	svc2 := NewShellService(nil, nil, s)
 	r, err := svc2.RestoreSubscription()
@@ -265,7 +267,8 @@ func TestRestoreSubscriptionPlaylist(t *testing.T) {
 	defer s.Close()
 	chans := []config.Channel{{Name: "CCTV-1", Group: "央视", URLs: []string{"http://x/1"}}}
 	svc1 := NewShellService(nil, nil, s)
-	svc1.saveSubscription("http://ch.m3u", nil, chans)
+	svc1.liveChannels = chans
+	svc1.saveSubscription()
 
 	svc2 := NewShellService(nil, nil, s)
 	r, err := svc2.RestoreSubscription()

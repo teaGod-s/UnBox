@@ -36,6 +36,13 @@ type Group struct {
 	Order int64
 }
 
+// Source 是一条导入源的历史记录。
+type Source struct {
+	Kind string // "vod" | "live"
+	Ref  string
+	At   int64
+}
+
 // Store 封装 SQLite 连接。
 type Store struct{ db *sql.DB }
 
@@ -80,6 +87,7 @@ func (s *Store) migrate() error {
 		`CREATE TABLE IF NOT EXISTS recent (id TEXT PRIMARY KEY, name TEXT NOT NULL, grp TEXT, url TEXT, watched_at INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS grp (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, ord INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS sources (ref TEXT PRIMARY KEY, kind TEXT NOT NULL, at INTEGER NOT NULL)`,
 	}
 	for _, q := range stmts {
 		if _, err := s.db.Exec(q); err != nil {
@@ -176,4 +184,29 @@ func (s *Store) ListGroups() ([]Group, error) {
 func (s *Store) RemoveGroup(name string) error {
 	_, err := s.db.Exec(`DELETE FROM grp WHERE name=?`, name)
 	return err
+}
+
+// AddSource 记录/更新一条导入源（按 ref 去重，更新时间戳与 kind）。
+func (s *Store) AddSource(kind, ref string) error {
+	_, err := s.db.Exec(`INSERT INTO sources(ref, kind, at) VALUES(?,?,?)
+		ON CONFLICT(ref) DO UPDATE SET kind=excluded.kind, at=excluded.at`, ref, kind, time.Now().Unix())
+	return err
+}
+
+// ListSources 返回导入源历史（最近导入在前）。
+func (s *Store) ListSources() ([]Source, error) {
+	rows, err := s.db.Query(`SELECT kind, ref, at FROM sources ORDER BY at DESC, ref`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Source
+	for rows.Next() {
+		var sc Source
+		if err := rows.Scan(&sc.Kind, &sc.Ref, &sc.At); err != nil {
+			return nil, err
+		}
+		out = append(out, sc)
+	}
+	return out, rows.Err()
 }

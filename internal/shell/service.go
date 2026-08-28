@@ -88,7 +88,9 @@ const subscriptionKey = "subscription"
 const searchThreadsKey = "searchThreads"
 
 // appVersion 是当前应用版本（与 GitHub release tag 对齐）。
-const appVersion = "0.0.1"
+// 本地/开发构建默认为 0.0.1；发布构建通过 -ldflags
+// "-X github.com/unbox/unbox/internal/shell.appVersion=<version>" 注入真实版本。
+var appVersion = "0.0.1"
 
 // updateURL 是 GitHub 最新 release 的 API 地址（repo 改名后改这里）。
 const updateURL = "https://api.github.com/repos/teaGod-s/UnBox/releases/latest"

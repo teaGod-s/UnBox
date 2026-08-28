@@ -53,6 +53,8 @@ const showThreads = ref(false)
 const searching = ref(false)
 const updateInfo = ref<UpdateInfo | null>(null)
 const updateMsg = ref('')
+const catsCollapsed = ref(false)
+const infoCollapsed = ref(false)
 let lastProgressSave = 0
 
 const vodSites = computed(() => sources.value.filter(s => s.Kind === 'vod'))
@@ -519,10 +521,16 @@ onMounted(() => {
         </select>
       </div>
 
-      <div class="vod-layout">
-        <aside class="vod-cats">
-          <button v-for="c in vodCategories" :key="c.ID" :class="{ active: c.ID === vodActiveCat }"
-                  @click="vodActiveCat = c.ID; vodPage = 0; reloadVodList()">{{ c.Title }}</button>
+      <div class="vod-layout" :class="{ 'cats-collapsed': catsCollapsed }">
+        <aside class="vod-cats" :class="{ collapsed: catsCollapsed }">
+          <div class="cats-head">
+            <span class="cats-title">类目</span>
+            <button class="cats-toggle" :title="catsCollapsed ? '展开类目' : '收起类目'" @click="catsCollapsed = !catsCollapsed">{{ catsCollapsed ? '»' : '«' }}</button>
+          </div>
+          <div class="cats-list">
+            <button v-for="c in vodCategories" :key="c.ID" :class="{ active: c.ID === vodActiveCat }"
+                    @click="vodActiveCat = c.ID; vodPage = 0; reloadVodList()">{{ c.Title }}</button>
+          </div>
         </aside>
 
         <section class="vod-main">
@@ -535,7 +543,7 @@ onMounted(() => {
           </ul>
           <div v-else class="vod-detail">
             <button @click="vodDetail = null">← 返回</button>
-            <div class="vod-detail-top">
+            <div class="vod-detail-top" :class="{ 'info-collapsed': infoCollapsed }">
               <div class="vod-player">
                 <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
                 <PlaybackView :plan="playbackPlan" :seek-to="pendingSeek" @fallback="fallbackToMpv" @progress="onProgress" />
@@ -545,11 +553,14 @@ onMounted(() => {
                   <input type="range" min="0" max="100" @input="setVolume" />
                 </div>
               </div>
-              <div class="vod-info">
-                <img v-if="vodDetail.Logo" :src="vodDetail.Logo" class="poster" referrerpolicy="no-referrer" @error="imgError" />
-                <h2>{{ vodDetail.Title }}</h2>
-                <p class="meta">{{ vodDetail.Type }} · {{ vodDetail.Year }} · {{ vodDetail.Area }}</p>
-                <div class="desc" v-html="vodDetail.Description"></div>
+              <div class="vod-info" :class="{ collapsed: infoCollapsed }">
+                <button class="info-toggle" :title="infoCollapsed ? '展开详情' : '收起详情'" @click="infoCollapsed = !infoCollapsed">{{ infoCollapsed ? '«' : '»' }}</button>
+                <div class="info-body">
+                  <img v-if="vodDetail.Logo" :src="vodDetail.Logo" class="poster" referrerpolicy="no-referrer" @error="imgError" />
+                  <h2>{{ vodDetail.Title }}</h2>
+                  <p class="meta">{{ vodDetail.Type }} · {{ vodDetail.Year }} · {{ vodDetail.Area }}</p>
+                  <div class="desc" v-html="vodDetail.Description"></div>
+                </div>
               </div>
             </div>
             <div v-if="(vodDetail.Sources ?? []).length" class="ep-src-tabs">

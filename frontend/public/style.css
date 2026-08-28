@@ -286,7 +286,31 @@ body {
   margin-bottom: 0.75rem;
 }
 
+.vod-detail-top.info-collapsed {
+  grid-template-columns: minmax(0, 1fr) 34px;
+}
+
 .vod-detail-top .vod-player { margin: 0; }
+
+.vod-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vod-info .info-toggle {
+  align-self: flex-end;
+}
+
+.vod-info .info-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vod-info.collapsed .info-body {
+  display: none;
+}
 
 .vod-detail .poster {
   display: block;
@@ -699,6 +723,10 @@ body {
   gap: 0.75rem;
 }
 
+.vod-layout.cats-collapsed {
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+
 .vod-cats {
   display: flex;
   flex-direction: column;
@@ -708,6 +736,57 @@ body {
   background: #0a0d1a;
   border: 1px solid #23283a;
   border-radius: 0.5rem;
+}
+
+.vod-cats .cats-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.vod-cats .cats-title {
+  color: #8b91a3;
+  font-size: 0.85rem;
+}
+
+.vod-cats .cats-toggle,
+.vod-info .info-toggle {
+  padding: 0.05rem 0.45rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: #8b91a3;
+  background: transparent;
+  border: none;
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+
+.vod-cats .cats-toggle:hover,
+.vod-info .info-toggle:hover {
+  background: #1b2137;
+  color: #e8eaf0;
+}
+
+.vod-cats .cats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.vod-cats.collapsed {
+  align-items: center;
+  padding: 0.45rem 0.2rem;
+}
+
+.vod-cats.collapsed .cats-title,
+.vod-cats.collapsed .cats-list {
+  display: none;
+}
+
+.vod-cats.collapsed .cats-head {
+  justify-content: center;
+  margin-bottom: 0;
 }
 
 .vod-cats button {

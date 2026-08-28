@@ -23,8 +23,8 @@ mise run dev           # wails3 dev（前端热重载）
 mise run scan          # go run ./cmd/unbox-scan
 ```
 
-**交叉编译不可行**（cgo：Wails + libmpv）。三个平台必须各自**原生**编译：
-Windows 构建只能在 Windows 宿主机做，不能在 WSL 交叉编译。
+**交叉编译不可行**（cgo：Wails 的 Linux WebKitGTK / macOS 后端）。三个平台必须
+各自**原生**编译：Windows 构建只能在 Windows 宿主机做，不能在 WSL 交叉编译。
 
 前端产物 `frontend/dist` 是 gitignore 的构建产物；production 构建由
 `assets.go` 的 `//go:embed all:frontend/dist` 嵌入二进制，`assets_dev.go`
@@ -32,17 +32,19 @@ Windows 构建只能在 Windows 宿主机做，不能在 WSL 交叉编译。
 
 ## 架构（internal/ 包）
 
-- `internal/config` — 配置解析。
-- `internal/provider` — 内容来源抽象；`internal/provider/live` — M3U/TXT 解析。
+- `internal/config` — 配置解析 + 多仓展开（`Resolver`，追踪线路名 `SourceName`）。
+- `internal/provider` — 内容来源抽象；`internal/provider/live` — M3U/TXT；`internal/provider/tvbox` — CMS/Drpy。
 - `internal/probe` — URL 探测 / 测速排序。
-- `internal/player` — 播放器接口（`Player` 9 方法、`Embedder`）；
-  - `mpvproc` — mpv 子进程 + JSON IPC（Linux/Windows，`--wid` 嵌入）；
-  - `mpvlib` — macOS libmpv（CAMetalLayer 分层渲染）；
-  - `failover` — 单事件循环的故障切换包装。
-- `internal/shell` — 全部 Wails glue（app / 窗口 / 服务 / 原生句柄提取）。
+- `internal/player` — 播放器接口（`Player`）；
+  - `mpvproc` — mpv 子进程 + JSON IPC（三平台统一，独立窗口）；
+  - `mpvplugin` — 外部 mpv 探测 + 一键安装（Linux/macOS 弹命令，Windows 下载）；
+  - `failover` — 故障切换包装。
+- `internal/playback` — 播放编排：Resolver（share 页解析）→ Controller（Web/mpv 路由）
+  → Proxy（本地代理 + HLS 分片重写）。
+- `internal/shell` — 全部 Wails glue（app / 窗口 / 服务）。
 - `internal/store` — SQLite 持久化（`modernc.org/sqlite`，纯 Go 无 cgo）。
 - `cmd/unbox` — 主程序入口；`cmd/unbox-scan` — 扫描 CLI。
-- `frontend` — Vue3 + TS UI（组件 `App.vue`，绑定经 `frontend/bindings` 生成）。
+- `frontend` — Vue3 + TS UI（组件 `App.vue` / `PlaybackView.vue`，绑定经 `frontend/bindings` 生成）。
 
 ## 约束与约定
 
@@ -57,12 +59,13 @@ Windows 构建只能在 Windows 宿主机做，不能在 WSL 交叉编译。
 ## 关键坑（已踩过，勿重蹈）
 
 - **Linux/WSLg 必须强制 `GDK_BACKEND=x11`**：GTK4 默认优先 Wayland，WSLg 下
-  Wayland 会让 WebKit 窗口不渲染、`--wid` 拿不到 XID。已在
-  `internal/shell/app.go` 的 `forceLinuxX11Backend()` 处理（GTK 初始化前）。
-- **WSLg GPU 直通**：`/dev/dri` 必须存在，否则 WebKitGTK 无 GPU 时渲染全黑。
-  这是环境问题而非代码问题，详见 `docs/HANDOFF.md`。
-- **GTK 非线程安全**：`internal/shell/embed_linux.go` 取 XID 必须经 Wails 的
-  `application.InvokeSync` 派发到主线程；`g_main_context_invoke(NULL,...)` 在
-  主循环启动前会就地执行回调（跨线程调 GTK），导致 `g_application_run` 段错误。
+  Wayland 会让 WebKit 窗口不渲染。已在 `internal/shell/app.go` 的
+  `forceLinuxX11Backend()` 处理（GTK 初始化前）。
+- **WSLg 环境坑**（详见 `docs/HANDOFF.md`）：
+  - `/mnt/shared_memory` 未挂载 → 窗口渲染空白（标题带 `[WARN:COPY MODE]`），挂载 tmpfs + `wsl --shutdown` 解决。
+  - 裸 Ubuntu 无 emoji 字体 → 站点名里的 emoji 显示成方块（`sudo apt install fonts-noto-color-emoji`）。
+  - 中文输入法无效（Windows IME 组合事件无法经 RDP→Weston→XWayland 转发到 WebKitGTK，microsoft/wslg 已知限制）。
+- **WebKitGTK 无 MSE**：Linux 上 hls.js/mpegts.js 不可用，HLS/FLV/TS 只能走 mpv；
+  路由逻辑在 `internal/playback/controller.go`（`SetWebMSE(false)`）。
 - **mpv JSON IPC**：`set` 命令拒绝 bool/数字（用 `set_property`）；终端事件
   （EOF/Error）须阻塞发送。

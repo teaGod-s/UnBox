@@ -447,7 +447,7 @@ onMounted(() => {
           <button @click="loadLive">加载直播</button>
           <span v-if="importProgress && importProgress.Stage === 'live'" class="progress">{{ importProgress.Message }}</span>
         </div>
-        <div class="search"><input v-model="query" placeholder="搜索频道" @keyup.enter="doSearch" /><button @click="doSearch">搜索</button></div>
+        <form class="search" @submit.prevent="doSearch"><input v-model="query" placeholder="搜索频道" /><button type="submit">搜索</button></form>
         <ul>
           <li v-for="c in channels" :key="c.ID" class="channel">
             <span class="name">{{ c.Name }}</span>
@@ -477,7 +477,7 @@ onMounted(() => {
         </aside>
 
         <section class="vod-main">
-          <div class="search"><input v-model="vodQuery" placeholder="搜索影片" @keyup.enter="vodSearch" /><button @click="vodSearch">搜索</button></div>
+          <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button></form>
           <ul v-if="!vodDetail">
             <li v-for="it in vodItems" :key="it.ID" class="channel" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
@@ -520,11 +520,11 @@ onMounted(() => {
 
       <section class="src-section">
         <h3>点播源</h3>
-        <div class="src-add">
-          <input v-model="vodSourceUrl" placeholder="粘贴点播源地址" @keyup.enter="importVodSource" />
-          <button @click="importVodSource">导入</button>
-          <button @click="showVodHistory = !showVodHistory">{{ showVodHistory ? '收起历史' : '历史配置' }}</button>
-        </div>
+        <form class="src-add" @submit.prevent="importVodSource">
+          <input v-model="vodSourceUrl" placeholder="粘贴点播源地址" />
+          <button type="submit">导入</button>
+          <button type="button" @click="showVodHistory = !showVodHistory">{{ showVodHistory ? '收起历史' : '历史配置' }}</button>
+        </form>
         <ul v-if="showVodHistory && vodSources.length" class="src-history">
           <li v-for="s in vodSources" :key="'vod-' + s.Ref">
             <span class="src-ref" :class="{ current: s.Ref === vodSources[0]?.Ref }" @click="reimportSource('vod', s.Ref)">{{ s.Ref }}</span>
@@ -535,11 +535,11 @@ onMounted(() => {
 
       <section class="src-section">
         <h3>直播源</h3>
-        <div class="src-add">
-          <input v-model="liveSourceUrl" placeholder="粘贴直播源地址（M3U/TXT/订阅）" @keyup.enter="importLiveSource" />
-          <button @click="importLiveSource">导入</button>
-          <button @click="showLiveHistory = !showLiveHistory">{{ showLiveHistory ? '收起历史' : '历史配置' }}</button>
-        </div>
+        <form class="src-add" @submit.prevent="importLiveSource">
+          <input v-model="liveSourceUrl" placeholder="粘贴直播源地址（M3U/TXT/订阅）" />
+          <button type="submit">导入</button>
+          <button type="button" @click="showLiveHistory = !showLiveHistory">{{ showLiveHistory ? '收起历史' : '历史配置' }}</button>
+        </form>
         <ul v-if="showLiveHistory && liveSources.length" class="src-history">
           <li v-for="s in liveSources" :key="'live-' + s.Ref">
             <span class="src-ref" :class="{ current: s.Ref === liveSources[0]?.Ref }" @click="reimportSource('live', s.Ref)">{{ s.Ref }}</span>

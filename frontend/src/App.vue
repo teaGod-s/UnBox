@@ -370,6 +370,7 @@ onMounted(() => {
         <div v-if="groups.length <= 1" class="load-live">
           <p>直播源尚未加载</p>
           <button @click="loadLive">加载直播</button>
+          <span v-if="importProgress && importProgress.Stage === 'live'" class="progress">{{ importProgress.Message }}</span>
         </div>
         <div class="search"><input v-model="query" placeholder="搜索频道" @keyup.enter="doSearch" /><button @click="doSearch">搜索</button></div>
         <ul>
@@ -436,7 +437,7 @@ onMounted(() => {
 
     <!-- 设置 -->
     <section v-if="mode === 'settings'" class="settings-page">
-      <p v-if="importProgress" class="progress">{{ importProgress.Message }}</p>
+      <p v-if="importProgress && importProgress.Stage !== 'live'" class="progress">{{ importProgress.Message }}</p>
       <p v-if="importSummary" class="ok">{{ importSummary }}</p>
 
       <section class="src-section">

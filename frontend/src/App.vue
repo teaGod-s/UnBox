@@ -554,6 +554,13 @@ onMounted(() => {
                   <button @click="resume">继续</button>
                   <input type="range" min="0" max="100" @input="setVolume" />
                 </div>
+                <div v-if="(vodDetail.Sources ?? []).length" class="ep-src-tabs">
+                  <button v-for="src in vodDetail.Sources" :key="src" :class="{ active: src === activeSource }" @click="activeSource = src">{{ src }}</button>
+                </div>
+                <div class="ep-list">
+                  <button v-for="ep in (vodDetail.Episodes ?? []).filter(e => e.Source === activeSource)" :key="ep.ID"
+                          @click="playEpisode(ep)">{{ ep.Name }}</button>
+                </div>
               </div>
               <div class="vod-info" :class="{ collapsed: infoCollapsed }">
                 <button class="info-toggle" :title="infoCollapsed ? '展开详情' : '收起详情'" @click="infoCollapsed = !infoCollapsed">{{ infoCollapsed ? '«' : '»' }}</button>
@@ -564,13 +571,6 @@ onMounted(() => {
                   <div class="desc" v-html="vodDetail.Description"></div>
                 </div>
               </div>
-            </div>
-            <div v-if="(vodDetail.Sources ?? []).length" class="ep-src-tabs">
-              <button v-for="src in vodDetail.Sources" :key="src" :class="{ active: src === activeSource }" @click="activeSource = src">{{ src }}</button>
-            </div>
-            <div class="ep-list">
-              <button v-for="ep in (vodDetail.Episodes ?? []).filter(e => e.Source === activeSource)" :key="ep.ID"
-                      @click="playEpisode(ep)">{{ ep.Name }}</button>
             </div>
           </div>
         </section>

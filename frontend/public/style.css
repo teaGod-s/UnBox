@@ -876,6 +876,8 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  max-height: 16rem;
+  overflow-y: auto;
 }
 
 .ep-list button {

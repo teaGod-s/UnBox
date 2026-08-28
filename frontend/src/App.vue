@@ -5,6 +5,9 @@ import { ShellService, type SourceInfo, type Section, type VodItem, type Episode
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import DOMPurify from 'dompurify'
 
+// 爱发电赞助主页（TODO：把 YOUR_AFDIAN_ID 换成你的爱发电主页 ID）
+const DONATE_URL = 'https://afdian.com/a/YOUR_AFDIAN_ID'
+
 interface ChannelInfo { ID: string; Name: string; Group: string; Logo: string; Favorited: boolean }
 interface Progress { Stage: string; Message: string; Done: number; Total: number }
 
@@ -649,6 +652,7 @@ onMounted(() => {
           <button @click="showDisclaimer = true">免责条款</button>
           <button @click="showOpenSource = true">开源库</button>
           <a href="https://github.com/teaGod-s/UnBox" target="_blank" rel="noopener">源码</a>
+          <a :href="DONATE_URL" target="_blank" rel="noopener">捐助</a>
         </div>
       </section>
 

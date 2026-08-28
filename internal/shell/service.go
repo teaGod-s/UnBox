@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -72,6 +73,9 @@ type VodHistoryInfo struct {
 
 // subscriptionKey 是 store.kv 里订阅快照的键。
 const subscriptionKey = "subscription"
+
+// searchThreadsKey 是 store.kv 里全站搜索并发线程数的键。
+const searchThreadsKey = "searchThreads"
 
 // ChannelInfo 是前端展示用的频道信息。
 type ChannelInfo struct {
@@ -170,6 +174,17 @@ func (s *ShellService) emitProgress(p Progress) {
 	progressMu.Lock()
 	defer progressMu.Unlock()
 	app.Event.Emit("import:progress", p)
+}
+
+// emitSearchProgress 把全站搜索进度经 Wails 事件推给前端。
+func (s *ShellService) emitSearchProgress(p Progress) {
+	app := application.Get()
+	if app == nil {
+		return
+	}
+	progressMu.Lock()
+	defer progressMu.Unlock()
+	app.Event.Emit("search:progress", p)
 }
 
 // ImportSubscription 拉取并解析订阅，重建 Provider。支持两类输入：
@@ -891,6 +906,7 @@ func (s *ShellService) VodSearch(site, q string) ([]VodItem, error) {
 }
 
 // VodSearchAll 全站搜索点播，返回结果带所属站点（Site 字段）。
+// 并发度由 SearchThreads 控制，进度经 search:progress 事件推给前端。
 func (s *ShellService) VodSearchAll(q string) ([]VodItem, error) {
 	s.mu.RLock()
 	type sp struct {
@@ -901,30 +917,70 @@ func (s *ShellService) VodSearchAll(q string) ([]VodItem, error) {
 	for k, pv := range s.vods {
 		providers = append(providers, sp{site: k, pv: pv})
 	}
+	total := len(providers)
 	s.mu.RUnlock()
 
+	sem := make(chan struct{}, s.SearchThreads())
 	var mu sync.Mutex
 	var out []VodItem
+	var done atomic.Int64
 	var wg sync.WaitGroup
 	for _, p := range providers {
 		wg.Add(1)
 		go func(site string, pv provider.Provider) {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			items, err := pv.Search(context.Background(), q)
-			if err != nil {
-				return
+			if err == nil {
+				v := toVodItems(items)
+				for i := range v {
+					v[i].Site = site
+				}
+				mu.Lock()
+				out = append(out, v...)
+				mu.Unlock()
 			}
-			v := toVodItems(items)
-			for i := range v {
-				v[i].Site = site
-			}
-			mu.Lock()
-			out = append(out, v...)
-			mu.Unlock()
+			n := int(done.Add(1))
+			s.emitSearchProgress(Progress{Stage: "search", Message: fmt.Sprintf("全站搜索 %d/%d", n, total), Done: n, Total: total})
 		}(p.site, p.pv)
 	}
 	wg.Wait()
+	s.emitSearchProgress(Progress{Stage: "search", Message: "搜索完成", Done: total, Total: total})
 	return out, nil
+}
+
+// SearchThreads 返回全站搜索的并发线程数（默认 1，上限 16）。
+func (s *ShellService) SearchThreads() int {
+	if s.store == nil {
+		return 1
+	}
+	v, ok, err := s.store.GetKV(searchThreadsKey)
+	if err != nil || !ok {
+		return 1
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return 1
+	}
+	if n > 16 {
+		n = 16
+	}
+	return n
+}
+
+// SetSearchThreads 设置全站搜索并发线程数（1/4/8/16）。
+func (s *ShellService) SetSearchThreads(n int) error {
+	if s.store == nil {
+		return nil
+	}
+	if n < 1 {
+		n = 1
+	}
+	if n > 16 {
+		n = 16
+	}
+	return s.store.SetKV(searchThreadsKey, strconv.Itoa(n))
 }
 
 // SetLastVodSite 记忆最后选择的点播站点。

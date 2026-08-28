@@ -45,6 +45,8 @@ const pendingSeek = ref(0)
 const logs = ref('')
 const showLogs = ref(false)
 const copyMsg = ref('')
+const searchProgress = ref<Progress | null>(null)
+const searchThreads = ref(1)
 let lastProgressSave = 0
 
 const vodSites = computed(() => sources.value.filter(s => s.Kind === 'vod'))
@@ -105,7 +107,7 @@ async function switchMode(m: 'home' | 'vod' | 'live' | 'settings') {
   if (m === 'vod') await refreshVod()
   else if (m === 'live') await reloadGroups()
   else if (m === 'home') await refreshHome()
-  else if (m === 'settings') { await reloadSourceHistory(); await refreshLogs() }
+  else if (m === 'settings') { await reloadSourceHistory(); await refreshLogs(); await loadSearchThreads() }
 }
 
 async function refreshHome() {
@@ -369,6 +371,14 @@ async function pollMpvProgress() {
   } catch { /* 忽略 */ }
 }
 
+async function loadSearchThreads() {
+  try { searchThreads.value = await ShellService.SearchThreads() } catch (e) { errMsg.value = String(e) }
+}
+
+async function setSearchThreads() {
+  try { await ShellService.SetSearchThreads(searchThreads.value) } catch (e) { errMsg.value = String(e) }
+}
+
 // imgError 隐藏加载失败的图片（部分源 vod_pic 为空/失效/被防盗链拦截）。
 function imgError(e: Event) {
   ;(e.target as HTMLImageElement).style.display = 'none'
@@ -377,6 +387,7 @@ function imgError(e: Event) {
 onMounted(() => {
   refresh()
   Events.On('import:progress', (ev: any) => { importProgress.value = ev.data as Progress })
+  Events.On('search:progress', (ev: any) => { searchProgress.value = ev.data as Progress })
   setInterval(pollMpvProgress, 10000)
 })
 </script>
@@ -477,7 +488,7 @@ onMounted(() => {
         </aside>
 
         <section class="vod-main">
-          <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button></form>
+          <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button><span v-if="searchProgress" class="progress">{{ searchProgress.Message }}</span></form>
           <ul v-if="!vodDetail">
             <li v-for="it in vodItems" :key="it.ID" class="channel" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
@@ -546,6 +557,19 @@ onMounted(() => {
             <button class="src-del" @click="deleteSource('live', s.Ref)">删除</button>
           </li>
         </ul>
+      </section>
+
+      <section class="src-section">
+        <h3>搜索</h3>
+        <div class="src-add">
+          <span>全站搜索线程数</span>
+          <select v-model.number="searchThreads" @change="setSearchThreads">
+            <option :value="1">1（默认）</option>
+            <option :value="4">4</option>
+            <option :value="8">8</option>
+            <option :value="16">16</option>
+          </select>
+        </div>
       </section>
 
       <section class="src-section">

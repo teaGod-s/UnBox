@@ -403,6 +403,21 @@ body {
   cursor: pointer;
 }
 
+.src-add span {
+  font-size: 0.9rem;
+  color: #c6cbd9;
+  align-self: center;
+}
+
+.src-add select {
+  padding: 0.45rem 0.6rem;
+  font-size: 0.9rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+}
+
 .src-history { margin: 0; padding: 0; list-style: none; }
 
 .src-history li {

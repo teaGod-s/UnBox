@@ -36,24 +36,20 @@
 - **M2.5：JS 爬虫站点**（type=3 http 客户端模式）—— 已实现（`tvbox.Drpy`，
   `dbdd428`），对 drpy2/drpyS 服务调 `/api/*`，`vod_*` 复用 CMS 解析。**待真实
   drpyS 实例实测钉死端点/信封**；`playerContent` 懒加载/解析留待后续。
-- **M4：全平台 mpvlib** —— 已定为**独立里程碑**（不在 M2/M3），把 Windows/Linux
-  从 mpvproc 子进程切换为 libmpv + 分层渲染，复用 macOS 已验证逻辑。
-  - **Linux mpv 嵌入延后到 M4（2026-08-24 已定）**：mpv 0.37 在 WSLg（DISPLAY+
-    WAYLAND_DISPLAY 同存）选 Wayland/DRM 后端，`--wid`（X11 专有）被静默忽略 →
-    mpv 独立窗口。`--vo=x11` 可强制嵌入，但前端无视频区、会铺满主窗口且无返回
-    按钮。保留独立窗口至 M4 mpvlib，勿再对 mpvproc 做半成品嵌入。
+- **M4：内置 Web 播放 + 外部 mpv 插件** —— 已在 `feat/m4-web-playback` 实现：HLS/FLV/TS/MP4
+  默认在 WebView 播放，RTMP/本地/HEVC 交给外部 mpv；share 页面由 Go 解析，本地代理负责
+  headers 与 HLS 分片重写。Linux/macOS 展示安装命令，Windows 下载固定版本并校验 SHA-256。
 - **M3：本地媒体库** —— 未开始。
-- **Windows 播放**：已支持（命名管道 IPC + 隐藏控制台 + 独立开窗，见 `c06b37a`）；
-  `--wid` 嵌入延后到 M4（WebView2 会覆盖 mpv 画面）。仍需 Windows 宿主机实测。
-- **macOS 嵌入**：libmpv + CAMetalLayer，需 macOS 机器。
+- **Windows 播放**：mpv 插件下载/探测已支持，仍需 Windows 宿主机实测安装器与播放。
+- **macOS 播放**：统一走 Web + 外部 mpv，仍需 macOS 宿主机实测 Homebrew 命令与播放。
 - **停车项（来自 Plan 3/4）**：failover `Events()` fan-out、probe 同步阻塞
   `Load`、`ListFavorites` 的 Logo 字段、tvbox 剧集缓存上限、点播收藏/观看进度。
 
 ## 已排出的方向（设计决策，勿重开）
 
 - 排除 JAR/Python 爬虫源；JS 爬虫留 M2.5。
-- 嵌入播放：macOS → libmpv/CAMetalLayer，Windows/Linux → mpv 子进程 + `--wid`。
-  （全平台统一到 mpvlib 是独立里程碑 M4。）
+- 播放路由：WebView 原生视频/HLS.js/MPEG-TS.js 优先；RTMP、本地文件和 HEVC 使用外部
+  mpvproc，Web 致命错误可按会话降级到 mpv。
 - Wails v3 钉死 3.0.0-beta.9（Linux 后端为 GTK4，非 GTK3）。
 - CMS JSON 协议实测要点（详见 M2 spec §2.1）：分类从列表 `type_id`/`type_name`
   派生（无独立分类端点）；`vod_play_from` 列表用 `,`、详情用 `$$$`；剧集 `$$$`/`#`/`$`。

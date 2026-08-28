@@ -162,7 +162,7 @@ func exeForOS(goos string) string {
 	}
 	return "mpv"
 }
-func installCommandForOS(goos, root string) string {
+func installCommandForOS(goos, _ string) string {
 	switch goos {
 	case "darwin":
 		return "brew install mpv"

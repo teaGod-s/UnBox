@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { Events } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia } from '../bindings/github.com/unbox/unbox/internal/shell'
+import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 
 interface ChannelInfo { ID: string; Name: string; Group: string; Logo: string; Favorited: boolean }
 interface Progress { Stage: string; Message: string; Done: number; Total: number }
@@ -28,6 +29,7 @@ const vodItems = ref<VodItem[]>([])
 const vodDetail = ref<VodMedia | null>(null)
 const vodQuery = ref('')
 const vodPage = ref(0)
+const playbackPlan = ref<PlaybackPlan | null>(null)
 
 async function refresh() {
   try {
@@ -77,7 +79,7 @@ async function loadLive() {
 async function play(c: ChannelInfo) {
   errMsg.value = ''
   try {
-    await ShellService.PlayChannel(c.ID)
+    playbackPlan.value = await ShellService.PrepareChannel(c.ID) as unknown as PlaybackPlan
     nowPlaying.value = c.Name
   } catch (e) { errMsg.value = String(e) }
 }
@@ -141,9 +143,14 @@ async function openVodDetail(item: VodItem) {
 async function playEpisode(ep: EpisodeInfo) {
   errMsg.value = ''
   try {
-    await ShellService.PlayVod(activeSite.value, ep.ID)
+    playbackPlan.value = await ShellService.PrepareVod(activeSite.value, ep.ID) as unknown as PlaybackPlan
     nowPlaying.value = ep.Name
   } catch (e) { errMsg.value = String(e) }
+}
+
+async function fallbackToMpv(id: string) {
+  try { playbackPlan.value = await ShellService.FallbackToMPV(id) as unknown as PlaybackPlan }
+  catch (e) { errMsg.value = String(e) }
 }
 
 // imgError 隐藏加载失败的图片（部分源 vod_pic 为空/失效/被防盗链拦截）。
@@ -203,6 +210,7 @@ onMounted(() => {
 
       <aside class="player">
         <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
+        <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" />
         <div class="controls" v-if="nowPlaying">
           <button @click="pause">暂停</button>
           <button @click="resume">继续</button>

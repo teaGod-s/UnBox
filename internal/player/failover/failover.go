@@ -1,6 +1,6 @@
 // Package failover 在底层 Player 之上实现「失败自动切换」：监听 EOF/Error
 // 事件，按候选列表（主源 + 备份源，可经 probe 测速排序）切换下一条流。
-// 逻辑位于 Player 接口之上，两种 Player 实现（mpvproc/mpvlib）共用。
+// 逻辑位于 Player 接口之上，供 Web 失败后的 mpv 播放共用。
 package failover
 
 import (

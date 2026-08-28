@@ -3,6 +3,8 @@ package shell
 import (
 	"errors"
 	"testing"
+
+	"github.com/unbox/unbox/internal/player/mpvplugin"
 )
 
 func TestPickPlayerHappyPath(t *testing.T) {
@@ -29,6 +31,9 @@ func TestPickPlayerMissingMpv(t *testing.T) {
 		return "", errors.New("exec: mpv not found")
 	}
 	defer func() { lookPath = orig }()
+	origStatus := pluginStatus
+	pluginStatus = func() mpvplugin.Status { return mpvplugin.Status{} }
+	defer func() { pluginStatus = origStatus }()
 
 	p, err := PickPlayer()
 	if err == nil {

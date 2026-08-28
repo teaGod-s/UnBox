@@ -1,7 +1,7 @@
 // Package player 定义 Unbox 的播放层抽象与媒体类型。
 //
 // 本包不依赖 Wails，也不依赖任何具体播放后端；UI 层与 Provider 层只面对
-// Player 接口，更换播放实现（mpvproc ↔ mpvlib）不触动它们。
+// Player 接口，更换播放实现（Web ↔ mpvproc）不触动它们。
 package player
 
 import (
@@ -152,8 +152,7 @@ type Player interface {
 	Close() error
 }
 
-// Embedder 是可嵌入到指定宿主窗口的播放器（mpvproc 用 --wid 实现）。
-// mpvlib（macOS）经 CAMetalLayer 分层渲染，不需要宿主窗口句柄，故不实现本接口。
+// Embedder 是历史上的原生窗口嵌入接口；M4 Web 播放不再依赖宿主窗口句柄。
 type Embedder interface {
 	SetEmbedWindow(id uintptr)
 }

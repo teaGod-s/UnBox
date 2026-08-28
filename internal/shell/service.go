@@ -13,12 +13,16 @@ import (
 	"time"
 
 	"github.com/unbox/unbox/internal/config"
+	"github.com/unbox/unbox/internal/playback"
 	"github.com/unbox/unbox/internal/player"
+	"github.com/unbox/unbox/internal/player/mpvplugin"
 	"github.com/unbox/unbox/internal/provider"
 	"github.com/unbox/unbox/internal/provider/live"
 	"github.com/unbox/unbox/internal/provider/tvbox"
 	"github.com/unbox/unbox/internal/store"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"os"
+	"runtime"
 )
 
 // ImportResult 是导入订阅的摘要。
@@ -104,12 +108,16 @@ type Progress struct {
 
 // NewShellService 组装壳层服务。pv 为直播 Provider（可为 nil）；p 可为 nil（播放器未就绪）。
 func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *ShellService {
+	root, _ := os.UserConfigDir()
+	manager := mpvplugin.New(runtime.GOOS, root)
 	return &ShellService{
-		live:     pv,
-		player:   p,
-		store:    st,
-		vods:     map[string]provider.Provider{},
-		vodNames: map[string]string{},
+		live:      pv,
+		player:    p,
+		store:     st,
+		vods:      map[string]provider.Provider{},
+		vodNames:  map[string]string{},
+		playback:  playback.NewController(playback.NewResolver(nil), playback.NewProxy(nil, 0), p),
+		mpvPlugin: manager,
 	}
 }
 
@@ -464,6 +472,20 @@ func (s *ShellService) PlayChannel(id string) error {
 	return s.player.Play()
 }
 
+func (s *ShellService) PrepareChannel(id string) (playback.Plan, error) {
+	s.mu.RLock()
+	pv := s.live
+	s.mu.RUnlock()
+	if pv == nil {
+		return playback.Plan{}, errors.New("未导入订阅")
+	}
+	st, err := pv.Resolve(context.Background(), id)
+	if err != nil {
+		return playback.Plan{}, err
+	}
+	return s.playback.Prepare(context.Background(), st)
+}
+
 func (s *ShellService) Pause() error {
 	if s.player == nil {
 		return errors.New("播放器未就绪")
@@ -654,6 +676,46 @@ func (s *ShellService) PlayVod(site, epID string) error {
 		return err
 	}
 	return s.player.Play()
+}
+
+func (s *ShellService) PrepareVod(site, epID string) (playback.Plan, error) {
+	pv, err := s.vodOf(site)
+	if err != nil {
+		return playback.Plan{}, err
+	}
+	st, err := pv.Resolve(context.Background(), epID)
+	if err != nil {
+		return playback.Plan{}, err
+	}
+	return s.playback.Prepare(context.Background(), st)
+}
+
+func (s *ShellService) FallbackToMPV(id string) (playback.Plan, error) {
+	return s.playback.Fallback(context.Background(), id)
+}
+
+func (s *ShellService) MPVReady() bool { return s.playback.MPVReady() }
+
+func (s *ShellService) MPVStatus() mpvplugin.Status { return s.mpvPlugin.Status() }
+
+func (s *ShellService) InstallMPV() (mpvplugin.InstallResult, error) {
+	return s.mpvPlugin.Install(context.Background())
+}
+
+func (s *ShellService) RefreshMPV() (mpvplugin.Status, error) {
+	status := s.mpvPlugin.Status()
+	if !status.Available {
+		return status, nil
+	}
+	p, err := s.mpvPlugin.NewPlayer()
+	if err != nil {
+		return status, err
+	}
+	if err := s.playback.SetMPV(p); err != nil {
+		return status, err
+	}
+	s.player = p
+	return status, nil
 }
 
 func toVodItems(items []provider.Item) []VodItem {

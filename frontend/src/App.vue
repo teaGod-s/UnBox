@@ -53,6 +53,7 @@ const showThreads = ref(false)
 const searching = ref(false)
 const updateInfo = ref<UpdateInfo | null>(null)
 const updateMsg = ref('')
+const currentVersion = ref('')
 const catsCollapsed = ref(false)
 const infoCollapsed = ref(false)
 let lastProgressSave = 0
@@ -82,6 +83,7 @@ async function refresh() {
   try {
     platform.value = await ShellService.Platform()
     playerReady.value = await ShellService.PlayerReady()
+    currentVersion.value = await ShellService.CurrentVersion()
     await refreshMpvStatus()
     await refreshHome()
   } catch (e) { errMsg.value = String(e) }
@@ -620,7 +622,7 @@ onMounted(() => {
       <section class="src-section">
         <h3>关于</h3>
         <div class="src-add">
-          <span>当前版本：{{ updateInfo?.CurrentVersion ?? '…' }}</span>
+          <span>当前版本：{{ currentVersion }}</span>
           <button @click="checkUpdate">检查更新</button>
         </div>
         <p v-if="updateMsg" class="home-empty">{{ updateMsg }}</p>

@@ -1040,6 +1040,11 @@ func (s *ShellService) SetSearchThreads(n int) error {
 	return s.store.SetKV(searchThreadsKey, strconv.Itoa(n))
 }
 
+// CurrentVersion 返回当前应用版本（无需联网，供「关于」页面即时回显）。
+func (s *ShellService) CurrentVersion() string {
+	return appVersion
+}
+
 // CheckUpdate 查询 GitHub 最新 release，返回是否有新版本。
 func (s *ShellService) CheckUpdate() (UpdateInfo, error) {
 	info := UpdateInfo{CurrentVersion: appVersion}

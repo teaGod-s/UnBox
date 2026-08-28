@@ -441,6 +441,60 @@ body {
   border-radius: 0.4rem;
 }
 
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+}
+
+.settings-panel {
+  width: min(640px, 92vw);
+  max-height: 84vh;
+  overflow-y: auto;
+  background: #0a0d1a;
+  border: 1px solid #23283a;
+  border-radius: 0.6rem;
+  padding: 1rem 1.25rem;
+}
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.settings-head h2 { margin: 0; }
+
+.settings-head button {
+  padding: 0.3rem 0.7rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.log-toolbar button {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.9rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
 .player .now {
   margin: 0;
   color: #7ee787;

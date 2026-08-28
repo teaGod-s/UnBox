@@ -42,6 +42,8 @@ const homeHistory = ref<VodHistoryInfo[]>([])
 const currentVod = ref<{ site: string; vodID: string } | null>(null)
 const pendingSeek = ref(0)
 const logs = ref('')
+const showLogs = ref(false)
+const copyMsg = ref('')
 let lastProgressSave = 0
 
 async function refresh() {
@@ -286,6 +288,34 @@ async function refreshLogs() {
   try { logs.value = await ShellService.GetLogs() } catch (e) { errMsg.value = String(e) }
 }
 
+async function openLogs() {
+  copyMsg.value = ''
+  await refreshLogs()
+  showLogs.value = true
+}
+
+async function copyLogs() {
+  const text = logs.value
+  if (!text) return
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    copyMsg.value = '已复制到剪贴板'
+  } catch (e) {
+    errMsg.value = '复制失败：' + String(e)
+  }
+}
+
 async function pollMpvProgress() {
   if (!currentVod.value || playbackPlan.value?.Backend !== 'mpv') return
   try {
@@ -473,12 +503,26 @@ onMounted(() => {
       <section class="src-section">
         <h3>日志</h3>
         <div class="src-add">
-          <button @click="refreshLogs">刷新日志</button>
+          <button @click="openLogs">查看日志</button>
+        </div>
+      </section>
+    </section>
+
+    <div v-if="showLogs" class="settings-overlay" @click.self="showLogs = false">
+      <div class="settings-panel">
+        <div class="settings-head">
+          <h2>日志</h2>
+          <button @click="showLogs = false">✕</button>
+        </div>
+        <div class="log-toolbar">
+          <button @click="refreshLogs">刷新</button>
+          <button @click="copyLogs">复制</button>
+          <span v-if="copyMsg" class="ok">{{ copyMsg }}</span>
         </div>
         <pre v-if="logs" class="log-view">{{ logs }}</pre>
         <p v-else class="home-empty">暂无日志</p>
-      </section>
-    </section>
+      </div>
+    </div>
 
     <p v-if="errMsg" class="error">{{ errMsg }}</p>
   </main>

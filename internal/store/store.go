@@ -109,7 +109,24 @@ func (s *Store) migrate() error {
 			return fmt.Errorf("建表失败: %w", err)
 		}
 	}
-	return nil
+	return s.migrateSourcesSchema()
+}
+
+// migrateSourcesSchema 把早期 sources 表的 ref 单主键迁移为 (ref, kind) 复合主键。
+// 旧表上 ON CONFLICT(ref, kind) 会因缺少约束而报错，导致源无法登记（回显失败）。
+func (s *Store) migrateSourcesSchema() error {
+	var pkCols int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sources') WHERE pk > 0`).Scan(&pkCols); err != nil {
+		return err
+	}
+	if pkCols >= 2 {
+		return nil // 已是复合主键
+	}
+	if _, err := s.db.Exec(`DROP TABLE IF EXISTS sources`); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`CREATE TABLE sources (ref TEXT NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (ref, kind))`)
+	return err
 }
 
 func (s *Store) AddFavorite(id, name, group, url string) error {

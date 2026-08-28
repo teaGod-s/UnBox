@@ -30,12 +30,39 @@ const vodDetail = ref<VodMedia | null>(null)
 const vodQuery = ref('')
 const vodPage = ref(0)
 const playbackPlan = ref<PlaybackPlan | null>(null)
+const mpvReady = ref(false)
+const mpvInstallMode = ref('')
+const installMessage = ref('')
 
 async function refresh() {
   try {
     platform.value = await ShellService.Platform()
     playerReady.value = await ShellService.PlayerReady()
+    await refreshMpvStatus()
     await reloadGroups()
+  } catch (e) { errMsg.value = String(e) }
+}
+
+async function refreshMpvStatus() {
+  const s = await ShellService.MPVStatus()
+  mpvReady.value = s.Available
+  mpvInstallMode.value = s.InstallMode
+}
+
+async function installMpv() {
+  errMsg.value = ''; installMessage.value = ''
+  try {
+    const r = await ShellService.InstallMPV()
+    installMessage.value = r.Message
+    if (r.Installed) { installMessage.value = ''; await refreshMpvStatus() }
+  } catch (e) { errMsg.value = String(e) }
+}
+
+async function recheckMpv() {
+  try {
+    const s = await ShellService.RefreshMPV()
+    mpvReady.value = s.Available
+    if (s.Available) installMessage.value = ''
   } catch (e) { errMsg.value = String(e) }
 }
 
@@ -171,6 +198,13 @@ onMounted(() => {
       <p class="subtitle">{{ platform }} · 播放器{{ playerReady ? '就绪' : '未就绪' }}</p>
     </header>
 
+    <div v-if="!mpvReady" class="mpv-install">
+      <span>mpv 插件未安装（HEVC / RTMP / 本地文件需要它）</span>
+      <button @click="installMpv">{{ mpvInstallMode === 'download' ? '下载并安装 mpv' : '显示安装命令' }}</button>
+      <button v-if="mpvInstallMode && mpvInstallMode !== 'download'" @click="recheckMpv">我已安装，重新检测</button>
+      <p v-if="installMessage" class="install-cmd">{{ installMessage }}</p>
+    </div>
+
     <nav class="tabs">
       <button :class="{ active: mode === 'live' }" @click="switchMode('live')">直播</button>
       <button :class="{ active: mode === 'vod' }" @click="switchMode('vod')">点播</button>
@@ -211,7 +245,7 @@ onMounted(() => {
       <aside class="player">
         <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
         <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" />
-        <div class="controls" v-if="nowPlaying">
+        <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
           <button @click="pause">暂停</button>
           <button @click="resume">继续</button>
           <input type="range" min="0" max="100" @input="setVolume" />

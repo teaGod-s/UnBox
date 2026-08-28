@@ -110,13 +110,19 @@ type Progress struct {
 func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *ShellService {
 	root, _ := os.UserConfigDir()
 	manager := mpvplugin.New(runtime.GOOS, root)
+	controller := playback.NewController(playback.NewResolver(nil), playback.NewProxy(nil, 0), p)
+	// Linux WebKitGTK 无 MSE 也不原生支持 HLS：hls.js/mpegts.js 用不了，
+	// HLS/FLV/TS 必须走 mpv，只有 MP4 能由原生 <video> 播。其余平台 Web 能力默认为真。
+	if runtime.GOOS == "linux" {
+		controller.SetWebMSE(false)
+	}
 	return &ShellService{
 		live:      pv,
 		player:    p,
 		store:     st,
 		vods:      map[string]provider.Provider{},
 		vodNames:  map[string]string{},
-		playback:  playback.NewController(playback.NewResolver(nil), playback.NewProxy(nil, 0), p),
+		playback:  controller,
 		mpvPlugin: manager,
 	}
 }

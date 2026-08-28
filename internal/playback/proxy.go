@@ -22,7 +22,14 @@ import (
 	"github.com/unbox/unbox/internal/player"
 )
 
-const maxManifestBytes = int64(4 << 20)
+const (
+	maxManifestBytes = int64(4 << 20)
+	// 上游流可能持续整个播放时长，故不设 http.Client 整体 Timeout（那会
+	// 在长流中途掐断）。改为只给建连/握手/响应头设超时，防死源挂起。
+	streamDialTimeout  = 10 * time.Second
+	streamTLSHandshake = 10 * time.Second
+	streamRespHeader   = 30 * time.Second
+)
 
 var hlsURIAttribute = regexp.MustCompile(`URI="([^"]+)"`)
 
@@ -48,7 +55,7 @@ type Proxy struct {
 // NewProxy 创建按需启动的本地代理。
 func NewProxy(client *http.Client, ttl time.Duration) *Proxy {
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Transport: newStreamTransport()}
 	}
 	if ttl <= 0 {
 		ttl = 30 * time.Minute
@@ -58,6 +65,16 @@ func NewProxy(client *http.Client, ttl time.Duration) *Proxy {
 		ttl:     ttl,
 		now:     time.Now,
 		streams: make(map[string]proxyEntry),
+	}
+}
+
+// newStreamTransport 返回只对建连/握手/响应头设超时的 Transport，避免用
+// 整体 Timeout 把长播放流中途掐断。
+func newStreamTransport() *http.Transport {
+	return &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: streamDialTimeout}).DialContext,
+		TLSHandshakeTimeout:   streamTLSHandshake,
+		ResponseHeaderTimeout: streamRespHeader,
 	}
 }
 

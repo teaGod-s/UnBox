@@ -43,30 +43,61 @@ func (f *fakePlayer) State() player.State                     { return player.St
 func (f *fakePlayer) Events() <-chan player.Event             { return make(chan player.Event) }
 func (f *fakePlayer) Close() error                            { return nil }
 
-func TestControllerRoutesWebAndMPVStreams(t *testing.T) {
-	webProxy := &fakeProxy{}
+func TestControllerRouting(t *testing.T) {
 	mpv := &fakePlayer{}
-	c := NewController(nil, webProxy, mpv)
+	web := &fakeProxy{}
+	c := NewController(nil, web, mpv)
 	c.probe = func(context.Context, player.Stream) (string, error) { return "", nil }
 
 	cases := []struct {
 		name   string
+		webMSE bool
 		stream player.Stream
 		want   Backend
 	}{
-		{"h264 hls", player.Stream{URL: "https://x/live.m3u8", Kind: player.StreamHLS}, BackendWeb},
-		{"flv", player.Stream{URL: "https://x/live.flv", Kind: player.StreamFLV}, BackendWeb},
-		{"rtmp", player.Stream{URL: "rtmp://x/live", Kind: player.StreamRTMP}, BackendMPV},
-		{"hevc", player.Stream{URL: "https://x/live.m3u8", Kind: player.StreamHLS}, BackendWeb},
+		{"h264 hls web-capable", true, player.Stream{URL: "https://x/live.m3u8", Kind: player.StreamHLS}, BackendWeb},
+		{"flv web-capable", true, player.Stream{URL: "https://x/live.flv", Kind: player.StreamFLV}, BackendWeb},
+		{"mp4 web-capable", true, player.Stream{URL: "https://x/a.mp4", Kind: player.StreamMP4}, BackendWeb},
+		{"rtmp", true, player.Stream{URL: "rtmp://x/live", Kind: player.StreamRTMP}, BackendMPV},
+		{"local", true, player.Stream{URL: "file:///x/a.mkv", Kind: player.StreamLocal}, BackendMPV},
+		{"hls no-mse", false, player.Stream{URL: "https://x/live.m3u8", Kind: player.StreamHLS}, BackendMPV},
+		{"flv no-mse", false, player.Stream{URL: "https://x/live.flv", Kind: player.StreamFLV}, BackendMPV},
+		{"ts no-mse", false, player.Stream{URL: "https://x/live.ts", Kind: player.StreamTS}, BackendMPV},
+		{"mp4 no-mse", false, player.Stream{URL: "https://x/a.mp4", Kind: player.StreamMP4}, BackendWeb},
 	}
 	for _, tc := range cases {
+		c.SetWebMSE(tc.webMSE)
+		mpv.loaded = nil
+		mpv.played = 0
 		got, err := c.Prepare(context.Background(), tc.stream)
-		if tc.name == "hevc" {
-			continue
-		}
 		if err != nil || got.Backend != tc.want {
-			t.Errorf("%s: Prepare = %+v, %v", tc.name, got, err)
+			t.Errorf("%s: Prepare = %+v, %v; want backend %s", tc.name, got, err, tc.want)
 		}
+	}
+}
+
+func TestControllerHEVCHLSRoutesToMPV(t *testing.T) {
+	mpv := &fakePlayer{}
+	c := NewController(nil, &fakeProxy{}, mpv)
+	c.probe = func(context.Context, player.Stream) (string, error) { return "hvc1.1.6.L93.B0", nil }
+	plan, err := c.Prepare(context.Background(), player.Stream{URL: "https://x/live.m3u8", Kind: player.StreamHLS})
+	if err != nil || plan.Backend != BackendMPV {
+		t.Fatalf("HEVC 应路由到 mpv: plan=%+v err=%v", plan, err)
+	}
+	if len(mpv.loaded) != 1 || mpv.played != 1 {
+		t.Fatalf("mpv 后端未真正加载: loaded=%d played=%d", len(mpv.loaded), mpv.played)
+	}
+}
+
+func TestControllerMPVBackendLoadsStream(t *testing.T) {
+	mpv := &fakePlayer{}
+	c := NewController(nil, &fakeProxy{}, mpv)
+	plan, err := c.Prepare(context.Background(), player.Stream{URL: "rtmp://x/live", Kind: player.StreamRTMP})
+	if err != nil || plan.Backend != BackendMPV {
+		t.Fatalf("Prepare = %+v, %v", plan, err)
+	}
+	if len(mpv.loaded) != 1 || mpv.loaded[0].URL != "rtmp://x/live" || mpv.played != 1 {
+		t.Fatalf("mpv 后端未真正加载: loaded=%+v played=%d", mpv.loaded, mpv.played)
 	}
 }
 

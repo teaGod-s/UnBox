@@ -299,6 +299,30 @@ body {
 .playback-view video { width: 100%; height: 100%; object-fit: contain; }
 .mpv-status, .playback-empty { color: #8b91a3; font-size: 0.9rem; }
 
+.mpv-install {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  padding: 0.6rem 0.75rem;
+  background: #151a2c;
+  border: 1px solid #2b3245;
+  border-radius: 0.5rem;
+  color: #c3c9d8;
+  font-size: 0.85rem;
+}
+.mpv-install .install-cmd {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0.4rem 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #05060b;
+  border-radius: 0.3rem;
+  color: #7ee787;
+  word-break: break-all;
+}
+
 .player .now {
   margin: 0;
   color: #7ee787;

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/unbox/unbox/internal/player"
 )
@@ -18,6 +19,9 @@ import (
 const (
 	maxHTMLBytes   = int64(1 << 20)
 	probeBodyBytes = int64(64 << 10)
+	// probeTimeout 是播放前探测（share 页解析、HLS 编码探测）的 HTTP 超时。
+	// 这些请求只读几十 KB 到 1MB 的清单/网页，超时应短，避免死源挂起播放。
+	probeTimeout = 10 * time.Second
 )
 
 var shareURLPattern = regexp.MustCompile(`(?is)(?:const|let|var)\s+url\s*=\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')`)
@@ -30,7 +34,7 @@ type Resolver struct {
 // NewResolver 创建解析器。client 为 nil 时使用带超时的独立 HTTP 客户端。
 func NewResolver(client *http.Client) *Resolver {
 	if client == nil {
-		client = &http.Client{}
+		client = &http.Client{Timeout: probeTimeout}
 	}
 	return &Resolver{client: client}
 }

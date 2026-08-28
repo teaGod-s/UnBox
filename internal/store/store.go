@@ -43,6 +43,20 @@ type Source struct {
 	At   int64
 }
 
+// VodHistory 是一条点播观看记录（首页「续播」用）。
+type VodHistory struct {
+	Site      string
+	VodID     string
+	VodTitle  string
+	VodLogo   string
+	EpID      string
+	EpName    string
+	Source    string
+	Progress  int // 秒
+	Duration  int // 秒
+	UpdatedAt int64
+}
+
 // Store 封装 SQLite 连接。
 type Store struct{ db *sql.DB }
 
@@ -87,7 +101,8 @@ func (s *Store) migrate() error {
 		`CREATE TABLE IF NOT EXISTS recent (id TEXT PRIMARY KEY, name TEXT NOT NULL, grp TEXT, url TEXT, watched_at INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS grp (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, ord INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS sources (ref TEXT PRIMARY KEY, kind TEXT NOT NULL, at INTEGER NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS sources (ref TEXT NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (ref, kind))`,
+		`CREATE TABLE IF NOT EXISTS vod_history (site TEXT NOT NULL, vod_id TEXT NOT NULL, vod_title TEXT NOT NULL, vod_logo TEXT, ep_id TEXT, ep_name TEXT, source TEXT, progress INTEGER NOT NULL DEFAULT 0, duration INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (site, vod_id))`,
 	}
 	for _, q := range stmts {
 		if _, err := s.db.Exec(q); err != nil {
@@ -186,10 +201,10 @@ func (s *Store) RemoveGroup(name string) error {
 	return err
 }
 
-// AddSource 记录/更新一条导入源（按 ref 去重，更新时间戳与 kind）。
+// AddSource 记录/更新一条导入源（按 ref+kind 去重，更新时间戳）。
 func (s *Store) AddSource(kind, ref string) error {
 	_, err := s.db.Exec(`INSERT INTO sources(ref, kind, at) VALUES(?,?,?)
-		ON CONFLICT(ref) DO UPDATE SET kind=excluded.kind, at=excluded.at`, ref, kind, time.Now().Unix())
+		ON CONFLICT(ref, kind) DO UPDATE SET at=excluded.at`, ref, kind, time.Now().Unix())
 	return err
 }
 
@@ -207,6 +222,49 @@ func (s *Store) ListSources() ([]Source, error) {
 			return nil, err
 		}
 		out = append(out, sc)
+	}
+	return out, rows.Err()
+}
+
+// DeleteSource 删除一条导入源历史。
+func (s *Store) DeleteSource(kind, ref string) error {
+	_, err := s.db.Exec(`DELETE FROM sources WHERE ref=? AND kind=?`, ref, kind)
+	return err
+}
+
+// UpsertVodHistory 记录/更新一条点播观看记录（按 site+vod_id 去重）。
+func (s *Store) UpsertVodHistory(h VodHistory) error {
+	_, err := s.db.Exec(`INSERT INTO vod_history(site, vod_id, vod_title, vod_logo, ep_id, ep_name, source, progress, duration, updated_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(site, vod_id) DO UPDATE SET
+			vod_title=excluded.vod_title, vod_logo=excluded.vod_logo,
+			ep_id=excluded.ep_id, ep_name=excluded.ep_name, source=excluded.source,
+			progress=excluded.progress, duration=excluded.duration, updated_at=excluded.updated_at`,
+		h.Site, h.VodID, h.VodTitle, h.VodLogo, h.EpID, h.EpName, h.Source, h.Progress, h.Duration, time.Now().Unix())
+	return err
+}
+
+// UpdateVodProgress 仅更新点播观看进度（秒）。
+func (s *Store) UpdateVodProgress(site, vodID string, progress, duration int) error {
+	_, err := s.db.Exec(`UPDATE vod_history SET progress=?, duration=?, updated_at=? WHERE site=? AND vod_id=?`,
+		progress, duration, time.Now().Unix(), site, vodID)
+	return err
+}
+
+// ListVodHistory 返回点播观看历史（最近观看在前）。
+func (s *Store) ListVodHistory(limit int) ([]VodHistory, error) {
+	rows, err := s.db.Query(`SELECT site, vod_id, vod_title, vod_logo, ep_id, ep_name, source, progress, duration, updated_at FROM vod_history ORDER BY updated_at DESC, rowid DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []VodHistory
+	for rows.Next() {
+		var h VodHistory
+		if err := rows.Scan(&h.Site, &h.VodID, &h.VodTitle, &h.VodLogo, &h.EpID, &h.EpName, &h.Source, &h.Progress, &h.Duration, &h.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
 	}
 	return out, rows.Err()
 }

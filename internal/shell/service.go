@@ -49,6 +49,20 @@ type SourceRecord struct {
 	At   int64
 }
 
+// VodHistoryInfo 是「首页」展示的点播观看记录。
+type VodHistoryInfo struct {
+	Site     string
+	VodID    string
+	VodTitle string
+	VodLogo  string
+	EpID     string
+	EpName   string
+	Source   string
+	Progress int // 秒
+	Duration int // 秒
+	At       int64
+}
+
 // subscriptionKey 是 store.kv 里订阅快照的键。
 const subscriptionKey = "subscription"
 
@@ -263,6 +277,53 @@ func (s *ShellService) ListSources() ([]SourceRecord, error) {
 	out := make([]SourceRecord, len(recs))
 	for i, r := range recs {
 		out[i] = SourceRecord{Kind: r.Kind, Ref: r.Ref, At: r.At}
+	}
+	return out, nil
+}
+
+// DeleteSource 删除一条导入源历史。
+func (s *ShellService) DeleteSource(kind, ref string) error {
+	if s.store == nil {
+		return nil
+	}
+	return s.store.DeleteSource(kind, ref)
+}
+
+// RecordVodHistory 记录一条点播观看记录（开始播放某集时）。
+func (s *ShellService) RecordVodHistory(site, vodID, title, logo, epID, epName, source string) error {
+	if s.store == nil {
+		return nil
+	}
+	return s.store.UpsertVodHistory(store.VodHistory{
+		Site: site, VodID: vodID, VodTitle: title, VodLogo: logo,
+		EpID: epID, EpName: epName, Source: source,
+	})
+}
+
+// UpdateVodProgress 更新点播观看进度（秒）。
+func (s *ShellService) UpdateVodProgress(site, vodID string, progress, duration float64) error {
+	if s.store == nil {
+		return nil
+	}
+	return s.store.UpdateVodProgress(site, vodID, int(progress), int(duration))
+}
+
+// ListVodHistory 返回点播观看历史（最近在前）。
+func (s *ShellService) ListVodHistory() ([]VodHistoryInfo, error) {
+	if s.store == nil {
+		return nil, nil
+	}
+	recs, err := s.store.ListVodHistory(100)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]VodHistoryInfo, len(recs))
+	for i, r := range recs {
+		out[i] = VodHistoryInfo{
+			Site: r.Site, VodID: r.VodID, VodTitle: r.VodTitle, VodLogo: r.VodLogo,
+			EpID: r.EpID, EpName: r.EpName, Source: r.Source,
+			Progress: r.Progress, Duration: r.Duration, At: r.UpdatedAt,
+		}
 	}
 	return out, nil
 }

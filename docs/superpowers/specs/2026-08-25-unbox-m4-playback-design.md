@@ -69,13 +69,13 @@
 
 - **探测**：复用现有 `PickPlayer()`（`exec.LookPath("mpv")`）。存在→启用 mpv 后端，
   否则前端「播放器就绪」显示「Web 模式」。
-- **一键安装**（用户已定）：前端「安装 mpv 插件」按钮 → `ShellService.InstallMpvPlugin()`
-  → 平台安装器 + 进度事件。分平台：
-  - **Linux**：`pkexec apt-get install -y mpv`（polkit 弹密码框，GUI 友好；无 polkit
-    回退 `sudo` 但需终端）。⚠️ 环境敏感，需实测。
-  - **Windows**：下载预编译 mpv.exe（固定来源）→ 解压到
+- **一键安装**（用户已定）：前端「安装 mpv 插件」按钮。**Linux/macOS 弹出安装命令
+  让用户自己执行**（动手能力强，免去 GUI 弹 sudo 密码框的复杂度）：
+  - **Linux**：按探测到的包管理器弹 `sudo apt install mpv` / `sudo dnf install mpv` /
+    `sudo pacman -S mpv`；用户执行后点「我已安装」重新探测。
+  - **macOS**：弹 `brew install mpv`（有 brew）或提示下载 mpv；同样用户自己装。
+  - **Windows**：用户对命令行不熟，走**下载预编译 mpv.exe**（固定来源）→ 解压到
     `%APPDATA%/unbox/plugins/mpv/` → 用绝对路径探测。
-  - **macOS**：`brew install mpv`（有 brew）或下载预编译 mpv。
 - 安装成功后重新 `LookPath` / 用插件目录绝对路径刷新 mpv 后端。
 
 ### 5. share 线路 URL 解析（Go，Resolve 层）
@@ -113,12 +113,16 @@
 
 ## 风险 / 开放问题
 
-1. **Linux 一键安装的 sudo/polkit**：GUI 应用弹密码框，需实测 polkit 是否可用。
-2. **HEVC 编码探测成本**：路由要判断编码，首版可能先「按格式路由 + HEVC 失败降级」。
-3. **WebKitGTK 的 MSE 成熟度**：HLS 边界情况（不连续/切轨）实测。
-4. **macOS mpvlib 去留**：现有 libmpv/CAMetalLayer 是否被「Web + 外部 mpv」取代，
-   待定。
-5. **代理的 HLS 分片重写**：相对/绝对分片、`?sign` 透传等边界。
+1. **HEVC 编码探测成本**：路由要判断编码，首版可能先「按格式路由 + HEVC 失败降级」。
+2. **WebKitGTK 的 MSE 成熟度**：HLS 边界情况（不连续/切轨）实测。
+3. **代理的 HLS 分片重写**：相对/绝对分片、`?sign` 透传等边界。
+
+## 已定决策
+
+- **丢弃 mpvlib**（用户已定）：删除 `internal/player/mpvlib/`，macOS 统一走
+  「Web + 外部 mpv」。`PickPlayer()` 三平台统一为 `exec.LookPath("mpv")` → mpvproc，
+  不再有 libmpv/CAMetalLayer 分支。
+- **Linux/macOS 安装 = 弹命令用户自己执行**（用户已定）；仅 Windows 走下载。
 
 ## 已排除
 

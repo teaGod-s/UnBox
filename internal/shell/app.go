@@ -46,6 +46,8 @@ type ShellService struct {
 	vodCFGs      []*config.Config // 当前点播源解析后的配置（持久化快照）
 	liveCFGs     []*config.Config // 当前直播源解析后的配置（持久化快照）
 	liveChannels []config.Channel // 当前直播源（播放列表）组装后的频道
+	vodRef       string           // 当前点播源地址（回显用）
+	liveRef      string           // 当前直播源地址（回显用）
 }
 
 // Platform 返回当前运行平台（linux / darwin / windows）。

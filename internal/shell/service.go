@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -37,9 +38,14 @@ type ImportResult struct {
 // persistedSubscription 是存进 store 的订阅快照，重启后据此无网络重建状态。
 // 点播源与直播源分开存储，便于在设置里分别配置。
 type persistedSubscription struct {
+	VodRef   string           `json:"vodRef,omitempty"`   // 当前点播源地址
 	VodCFGs  []*config.Config `json:"vodCfgs,omitempty"`  // 点播源：解析后的终端配置
+	LiveRef  string           `json:"liveRef,omitempty"`  // 当前直播源地址
 	LiveCFGs []*config.Config `json:"liveCfgs,omitempty"` // 直播源：解析后的终端配置
 	Channels []config.Channel `json:"channels,omitempty"` // 直播源（播放列表）：已组装频道
+	// 旧版字段（向后兼容早期单源快照）
+	Ref  string           `json:"ref,omitempty"`
+	CFGs []*config.Config `json:"cfgs,omitempty"`
 }
 
 // SourceRecord 是一条导入源的历史记录（供设置页展示当前源与历史源）。
@@ -170,6 +176,7 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 	s.emitProgress(Progress{Stage: "resolve", Message: "正在解析订阅…", Done: -1, Total: -1})
 	raw, err := config.NewFetcher().Fetch(context.Background(), ref)
 	if err != nil {
+		log.Printf("导入订阅拉取失败 %s: %v", ref, err)
 		s.emitProgress(Progress{Stage: "error", Message: "导入失败", Done: -1, Total: -1})
 		return ImportResult{}, fmt.Errorf("拉取 %s 失败: %w", ref, err)
 	}
@@ -194,6 +201,8 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 	s.vodCFGs = cfgs
 	s.liveCFGs = cfgs
 	s.liveChannels = nil
+	s.vodRef = ref
+	s.liveRef = ref
 	s.mu.Unlock()
 
 	s.addSource("vod", ref)
@@ -209,6 +218,7 @@ func (s *ShellService) ImportVodSource(ref string) (ImportResult, error) {
 	s.emitProgress(Progress{Stage: "resolve", Message: "正在解析点播源…", Done: -1, Total: -1})
 	raw, err := config.NewFetcher().Fetch(context.Background(), ref)
 	if err != nil {
+		log.Printf("导入点播源拉取失败 %s: %v", ref, err)
 		return ImportResult{}, fmt.Errorf("拉取 %s 失败: %w", ref, err)
 	}
 	if isPlaylist(raw) {
@@ -223,6 +233,7 @@ func (s *ShellService) ImportVodSource(ref string) (ImportResult, error) {
 	s.vods = vods
 	s.vodNames = vodNames
 	s.vodCFGs = cfgs
+	s.vodRef = ref
 	s.mu.Unlock()
 	s.addSource("vod", ref)
 	s.saveSubscription()
@@ -235,6 +246,7 @@ func (s *ShellService) ImportLiveSource(ref string) (ImportResult, error) {
 	s.emitProgress(Progress{Stage: "resolve", Message: "正在解析直播源…", Done: -1, Total: -1})
 	raw, err := config.NewFetcher().Fetch(context.Background(), ref)
 	if err != nil {
+		log.Printf("导入直播源拉取失败 %s: %v", ref, err)
 		return ImportResult{}, fmt.Errorf("拉取 %s 失败: %w", ref, err)
 	}
 	if isPlaylist(raw) {
@@ -251,6 +263,7 @@ func (s *ShellService) ImportLiveSource(ref string) (ImportResult, error) {
 	s.liveCount = 0
 	s.liveCFGs = cfgs
 	s.liveChannels = nil
+	s.liveRef = ref
 	s.mu.Unlock()
 	s.addSource("live", ref)
 	s.saveSubscription()
@@ -334,7 +347,11 @@ func (s *ShellService) saveSubscription() {
 		return
 	}
 	s.mu.RLock()
-	sub := persistedSubscription{VodCFGs: s.vodCFGs, LiveCFGs: s.liveCFGs, Channels: s.liveChannels}
+	sub := persistedSubscription{
+		VodRef: s.vodRef, VodCFGs: s.vodCFGs,
+		LiveRef: s.liveRef, LiveCFGs: s.liveCFGs,
+		Channels: s.liveChannels,
+	}
 	s.mu.RUnlock()
 	b, err := json.Marshal(sub)
 	if err != nil {
@@ -362,10 +379,36 @@ func (s *ShellService) RestoreSubscription() (ImportResult, error) {
 		return ImportResult{}, err
 	}
 
+	// 向后兼容旧快照（单 ref/cfgs），并重新登记到 sources 表保证设置页回显。
+	vodRef := sub.VodRef
+	if vodRef == "" {
+		vodRef = sub.Ref
+	}
+	vodCFGs := sub.VodCFGs
+	if len(vodCFGs) == 0 {
+		vodCFGs = sub.CFGs
+	}
+	liveRef := sub.LiveRef
+	if liveRef == "" {
+		liveRef = sub.Ref
+	}
+	liveCFGs := sub.LiveCFGs
+	if len(liveCFGs) == 0 {
+		liveCFGs = sub.CFGs
+	}
+	if vodRef != "" {
+		_ = s.store.AddSource("vod", vodRef)
+	}
+	if liveRef != "" {
+		_ = s.store.AddSource("live", liveRef)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.vodCFGs = sub.VodCFGs
-	s.liveCFGs = sub.LiveCFGs
+	s.vodRef = vodRef
+	s.vodCFGs = vodCFGs
+	s.liveRef = liveRef
+	s.liveCFGs = liveCFGs
 	s.liveChannels = sub.Channels
 
 	var channels int
@@ -376,10 +419,10 @@ func (s *ShellService) RestoreSubscription() (ImportResult, error) {
 		channels = len(sub.Channels)
 	} else {
 		s.live = nil
-		s.liveSources = flattenLives(sub.LiveCFGs)
+		s.liveSources = flattenLives(liveCFGs)
 		s.liveCount = 0
 	}
-	s.vods, s.vodNames = collectVodSites(sub.VodCFGs)
+	s.vods, s.vodNames = collectVodSites(vodCFGs)
 	return ImportResult{Sites: len(s.vods), LiveSources: len(s.liveSources), Channels: channels}, nil
 }
 
@@ -467,10 +510,12 @@ func (s *ShellService) importPlaylist(ref string, raw []byte, clearVod bool) (Im
 	s.liveCount = len(channels)
 	s.liveCFGs = nil
 	s.liveChannels = channels
+	s.liveRef = ref
 	if clearVod {
 		s.vods = map[string]provider.Provider{}
 		s.vodNames = map[string]string{}
 		s.vodCFGs = nil
+		s.vodRef = ""
 	}
 	s.mu.Unlock()
 	s.addSource("live", ref)
@@ -651,9 +696,14 @@ func (s *ShellService) PrepareChannel(id string) (playback.Plan, error) {
 	}
 	st, err := pv.Resolve(context.Background(), id)
 	if err != nil {
+		log.Printf("解析直播频道失败 id=%s: %v", id, err)
 		return playback.Plan{}, err
 	}
-	return s.playback.Prepare(context.Background(), st)
+	plan, err := s.playback.Prepare(context.Background(), st)
+	if err != nil {
+		log.Printf("准备直播播放失败 id=%s: %v", id, err)
+	}
+	return plan, err
 }
 
 func (s *ShellService) Pause() error {
@@ -675,6 +725,22 @@ func (s *ShellService) SetVolume(v int) error {
 		return errors.New("播放器未就绪")
 	}
 	return s.player.SetVolume(v)
+}
+
+// Position 返回当前播放位置（秒），供前端轮询 mpv 进度。
+func (s *ShellService) Position() float64 {
+	if s.player == nil {
+		return 0
+	}
+	return s.player.State().Position
+}
+
+// Seek 跳转到指定秒（mpv 后端断点续播用）。
+func (s *ShellService) Seek(sec float64) error {
+	if s.player == nil {
+		return errors.New("播放器未就绪")
+	}
+	return s.player.Seek(sec)
 }
 
 func (s *ShellService) AddFavorite(id string) error {
@@ -855,9 +921,14 @@ func (s *ShellService) PrepareVod(site, epID string) (playback.Plan, error) {
 	}
 	st, err := pv.Resolve(context.Background(), epID)
 	if err != nil {
+		log.Printf("解析点播剧集失败 site=%s ep=%s: %v", site, epID, err)
 		return playback.Plan{}, err
 	}
-	return s.playback.Prepare(context.Background(), st)
+	plan, err := s.playback.Prepare(context.Background(), st)
+	if err != nil {
+		log.Printf("准备点播播放失败 site=%s ep=%s: %v", site, epID, err)
+	}
+	return plan, err
 }
 
 func (s *ShellService) FallbackToMPV(id string) (playback.Plan, error) {

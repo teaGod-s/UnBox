@@ -17,6 +17,7 @@ import (
 )
 
 func main() {
+	shell.InitLogging()
 	p, err := shell.PickPlayer()
 	if err != nil {
 		log.Printf("播放器初始化失败（继续以未就绪状态启动）: %v", err)

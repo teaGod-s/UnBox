@@ -54,6 +54,10 @@ const searching = ref(false)
 const updateInfo = ref<UpdateInfo | null>(null)
 const updateMsg = ref('')
 const currentVersion = ref('')
+const internalVersion = ref('')
+const showAbout = ref(false)
+const showDisclaimer = ref(false)
+const showOpenSource = ref(false)
 const catsCollapsed = ref(false)
 const infoCollapsed = ref(false)
 let lastProgressSave = 0
@@ -84,9 +88,22 @@ async function refresh() {
     platform.value = await ShellService.Platform()
     playerReady.value = await ShellService.PlayerReady()
     currentVersion.value = await ShellService.CurrentVersion()
+    internalVersion.value = await ShellService.InternalVersion()
     await refreshMpvStatus()
     await refreshHome()
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
+}
+
+// handleError 统一处理前端错误：回显 + 写入后端日志（使 RuntimeError 进入「查看日志」）。
+function handleError(e: unknown) {
+  const msg = String(e)
+  errMsg.value = msg
+  ShellService.LogError(msg).catch(() => {})
+}
+
+async function openAbout() {
+  try { internalVersion.value = await ShellService.InternalVersion() } catch { /* 忽略 */ }
+  showAbout.value = true
 }
 
 async function refreshMpvStatus() {
@@ -101,7 +118,7 @@ async function installMpv() {
     const r = await ShellService.InstallMPV()
     installMessage.value = r.Message
     if (r.Installed) { installMessage.value = ''; await refreshMpvStatus() }
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 async function recheckMpv() {
@@ -109,7 +126,7 @@ async function recheckMpv() {
     const s = await ShellService.RefreshMPV()
     mpvReady.value = s.Available
     if (s.Available) installMessage.value = ''
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 async function switchMode(m: 'home' | 'vod' | 'live' | 'settings') {
@@ -123,7 +140,7 @@ async function switchMode(m: 'home' | 'vod' | 'live' | 'settings') {
 async function refreshHome() {
   try {
     homeHistory.value = (await ShellService.ListVodHistory()) ?? []
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 function fmtProgress(sec: number) {
@@ -149,7 +166,7 @@ async function resumeVod(h: VodHistoryInfo) {
         await ShellService.Seek(h.Progress)
       }
     }
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 // ---- 设置：源管理 ----
@@ -160,7 +177,7 @@ async function reloadSourceHistory() {
     liveSources.value = all.filter(s => s.Kind === 'live')
     vodSourceUrl.value = vodSources.value[0]?.Ref ?? ''
     liveSourceUrl.value = liveSources.value[0]?.Ref ?? ''
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 async function importVodSource() {
@@ -173,7 +190,7 @@ async function importVodSource() {
     await reloadSourceHistory()
     activeSite.value = ''
     await refreshVod()
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 async function importLiveSource() {
@@ -184,7 +201,7 @@ async function importLiveSource() {
     const r = await ShellService.ImportLiveSource(ref)
     importSummary.value = r.Channels > 0 ? `直播源导入成功：${r.Channels} 频道` : `直播源导入成功：${r.LiveSources} 个源`
     await reloadSourceHistory()
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 async function reimportSource(kind: string, ref: string) {
@@ -196,7 +213,7 @@ async function deleteSource(kind: string, ref: string) {
   try {
     await ShellService.DeleteSource(kind, ref)
     await reloadSourceHistory()
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 async function reloadGroups() {
@@ -219,7 +236,7 @@ async function loadLive() {
     const n = await ShellService.LoadLive()
     if (n === 0) importSummary.value = '没有可用的直播频道'
     await reloadGroups()
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 async function play(c: ChannelInfo) {
@@ -228,7 +245,7 @@ async function play(c: ChannelInfo) {
   try {
     playbackPlan.value = await ShellService.PrepareChannel(c.ID) as unknown as PlaybackPlan
     nowPlaying.value = c.Name
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 async function toggleFav(c: ChannelInfo) {
@@ -237,7 +254,7 @@ async function toggleFav(c: ChannelInfo) {
     else await ShellService.AddFavorite(c.ID)
     c.Favorited = !c.Favorited
     favorites.value = (await ShellService.ListFavorites()) ?? []
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 async function loadFavorites() { favorites.value = (await ShellService.ListFavorites()) ?? [] }
@@ -299,7 +316,7 @@ async function vodSearch() {
   vodItems.value = []
   try {
     vodItems.value = (await ShellService.VodSearchAll(vodQuery.value)) ?? []
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
   finally { searching.value = false }
 }
 
@@ -317,7 +334,7 @@ async function openVodDetail(item: VodItem) {
     d.Description = DOMPurify.sanitize(d.Description)
     vodDetail.value = d
     activeSource.value = d.Sources?.[0] ?? ''
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 async function doPlayEpisode(site: string, epID: string, epName: string, source: string) {
@@ -334,12 +351,12 @@ async function playEpisode(ep: EpisodeInfo) {
   pendingSeek.value = 0
   try {
     await doPlayEpisode(detailSite.value || activeSite.value, ep.ID, ep.Name, ep.Source)
-  } catch (e) { errMsg.value = String(e) }
+  } catch (e) { handleError(e) }
 }
 
 async function fallbackToMpv(id: string) {
   try { playbackPlan.value = await ShellService.FallbackToMPV(id) as unknown as PlaybackPlan }
-  catch (e) { errMsg.value = String(e) }
+  catch (e) { handleError(e) }
 }
 
 async function onProgress(time: number, duration: number) {
@@ -352,7 +369,7 @@ async function onProgress(time: number, duration: number) {
 }
 
 async function refreshLogs() {
-  try { logs.value = await ShellService.GetLogs() } catch (e) { errMsg.value = String(e) }
+  try { logs.value = await ShellService.GetLogs() } catch (e) { handleError(e) }
 }
 
 async function openLogs() {
@@ -392,7 +409,7 @@ async function pollMpvProgress() {
 }
 
 async function loadSearchThreads() {
-  try { searchThreads.value = await ShellService.SearchThreads() } catch (e) { errMsg.value = String(e) }
+  try { searchThreads.value = await ShellService.SearchThreads() } catch (e) { handleError(e) }
 }
 
 function openThreads() {
@@ -401,7 +418,7 @@ function openThreads() {
 
 async function chooseThreads(n: number) {
   searchThreads.value = n
-  try { await ShellService.SetSearchThreads(n) } catch (e) { errMsg.value = String(e) }
+  try { await ShellService.SetSearchThreads(n) } catch (e) { handleError(e) }
   showThreads.value = false
 }
 
@@ -412,7 +429,7 @@ async function checkUpdate() {
     updateMsg.value = updateInfo.value.HasUpdate ? `发现新版本 ${updateInfo.value.LatestVersion}` : '已是最新版本'
   } catch (e) {
     updateMsg.value = '检查更新失败'
-    errMsg.value = String(e)
+    handleError(e)
   }
 }
 
@@ -627,6 +644,12 @@ onMounted(() => {
         </div>
         <p v-if="updateMsg" class="home-empty">{{ updateMsg }}</p>
         <a v-if="updateInfo?.HasUpdate && updateInfo.URL" :href="updateInfo.URL" target="_blank" rel="noopener">点击下载新版本</a>
+        <div class="src-add about-actions">
+          <button @click="openAbout">关于我们</button>
+          <button @click="showDisclaimer = true">免责条款</button>
+          <button @click="showOpenSource = true">开源库</button>
+          <a href="https://github.com/teaGod-s/UnBox" target="_blank" rel="noopener">源码</a>
+        </div>
       </section>
 
       <section class="src-section">
@@ -663,6 +686,55 @@ onMounted(() => {
         </div>
         <pre v-if="logs" class="log-view">{{ logs }}</pre>
         <p v-else class="home-empty">暂无日志</p>
+      </div>
+    </div>
+
+    <div v-if="showAbout" class="settings-overlay" @click.self="showAbout = false">
+      <div class="settings-panel">
+        <div class="settings-head">
+          <h2>关于 UnBox</h2>
+          <button @click="showAbout = false">✕</button>
+        </div>
+        <div class="about-body">
+          <img class="about-logo" src="/appicon.png" alt="UnBox logo" />
+          <p>UnBox 是一个跨平台（Windows / macOS / Linux）的 TVBox 兼容桌面播放器，支持 IPTV 直播与视频点播，一个安装包装好即用。</p>
+          <p class="about-ver">当前版本：{{ currentVersion }}</p>
+          <p class="about-ver">内部版本：{{ internalVersion }}</p>
+          <p>技术栈：Go 1.26 + Wails v3 + Vue 3 + TypeScript。完全开源，源码见「源码」按钮。</p>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showDisclaimer" class="settings-overlay" @click.self="showDisclaimer = false">
+      <div class="settings-panel">
+        <div class="settings-head">
+          <h2>免责条款</h2>
+          <button @click="showDisclaimer = false">✕</button>
+        </div>
+        <div class="disclaimer">
+          <p>UnBox 是一个开源的「空壳」播放器，本身不提供、不存储、不制作任何影视内容，也不内置任何内容源。</p>
+          <p>本软件仅为用户提供技术性的播放能力。用户自行导入的内容源（订阅、M3U、TVBox 源等）及其所指向的资源，均由第三方提供，与本软件无关。</p>
+          <p>请遵守当地法律法规，仅将本软件用于访问您拥有合法权利或已获授权的内容。用户因使用本软件而产生的任何法律后果由用户自行承担，本软件及作者不承担任何责任。</p>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showOpenSource" class="settings-overlay" @click.self="showOpenSource = false">
+      <div class="settings-panel">
+        <div class="settings-head">
+          <h2>开源库</h2>
+          <button @click="showOpenSource = false">✕</button>
+        </div>
+        <ul class="oss-list">
+          <li><a href="https://github.com/wailsapp/wails" target="_blank" rel="noopener">Wails v3</a><span class="oss-lic">MIT</span> — 桌面应用框架</li>
+          <li><a href="https://gitlab.com/cznic/sqlite" target="_blank" rel="noopener">modernc.org/sqlite</a><span class="oss-lic">BSD-3</span> — 纯 Go SQLite</li>
+          <li><a href="https://github.com/vuejs/core" target="_blank" rel="noopener">Vue 3</a><span class="oss-lic">MIT</span> — 前端框架</li>
+          <li><a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a><span class="oss-lic">Apache-2.0</span> — HLS 播放</li>
+          <li><a href="https://github.com/xqq/mpegts.js" target="_blank" rel="noopener">mpegts.js</a><span class="oss-lic">MIT</span> — MPEG-TS / FLV 播放</li>
+          <li><a href="https://github.com/cure53/DOMPurify" target="_blank" rel="noopener">DOMPurify</a><span class="oss-lic">Apache-2.0</span> — HTML 清洗</li>
+          <li><a href="https://github.com/vitejs/vite" target="_blank" rel="noopener">Vite</a><span class="oss-lic">MIT</span> — 构建工具</li>
+          <li><a href="https://github.com/microsoft/TypeScript" target="_blank" rel="noopener">TypeScript</a><span class="oss-lic">Apache-2.0</span> — 类型系统</li>
+        </ul>
       </div>
     </div>
 

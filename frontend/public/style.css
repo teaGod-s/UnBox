@@ -893,3 +893,78 @@ body {
 .ep-list button:hover {
   background: #232a45;
 }
+
+/* ---- 关于：关于我们 / 免责条款 / 开源库 ---- */
+
+.about-actions a {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.9rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.about-actions a:hover {
+  background: #232a45;
+}
+
+.about-logo {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 0.6rem;
+  border-radius: 0.5rem;
+}
+
+.about-body p {
+  margin: 0.4rem 0;
+  line-height: 1.6;
+  color: #c6cbd9;
+}
+
+.about-body .about-ver {
+  color: #7ee787;
+  font-variant-numeric: tabular-nums;
+}
+
+.disclaimer p {
+  margin: 0.5rem 0;
+  line-height: 1.7;
+  color: #aab0c0;
+  font-size: 0.9rem;
+}
+
+.oss-list {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.oss-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #161a2b;
+  font-size: 0.9rem;
+  color: #c6cbd9;
+}
+
+.oss-list a {
+  color: #7ee787;
+  text-decoration: none;
+}
+
+.oss-list a:hover {
+  text-decoration: underline;
+}
+
+.oss-lic {
+  color: #8b91a3;
+  font-size: 0.8rem;
+}

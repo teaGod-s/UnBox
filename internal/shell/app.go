@@ -115,6 +115,8 @@ func OpenWindow(app *application.App) *application.WebviewWindow {
 		Title:            "UnBox",
 		Width:            1000,
 		Height:           618,
+		MinWidth:         720,
+		MinHeight:        480,
 		BackgroundColour: application.NewRGB(6, 7, 15),
 		URL:              "/",
 	})

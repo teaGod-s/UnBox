@@ -316,7 +316,7 @@ body {
   display: block;
   width: 100%;
   max-width: 220px;
-  margin: 0 0 0.6rem;
+  margin: 0 0 0.6rem auto;
   border-radius: 0.4rem;
   background: #161a2b;
 }

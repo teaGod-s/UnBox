@@ -1045,6 +1045,16 @@ func (s *ShellService) CurrentVersion() string {
 	return appVersion
 }
 
+// InternalVersion 返回内部构建版本（debug.ReadBuildInfo 的 Main.Version）。
+func (s *ShellService) InternalVersion() string {
+	return internalVersion()
+}
+
+// LogError 把前端传来的错误信息写入日志缓冲，使 RuntimeError 也能在「查看日志」里看到。
+func (s *ShellService) LogError(msg string) {
+	log.Printf("%s", msg)
+}
+
 // CheckUpdate 查询 GitHub 最新 release，返回是否有新版本。
 func (s *ShellService) CheckUpdate() (UpdateInfo, error) {
 	info := UpdateInfo{CurrentVersion: appVersion}

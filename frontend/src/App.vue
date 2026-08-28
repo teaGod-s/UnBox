@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { Events } from '@wailsio/runtime'
-import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
+import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import DOMPurify from 'dompurify'
 
@@ -49,6 +49,8 @@ const searchProgress = ref<Progress | null>(null)
 const searchThreads = ref(1)
 const showThreads = ref(false)
 const searching = ref(false)
+const updateInfo = ref<UpdateInfo | null>(null)
+const updateMsg = ref('')
 let lastProgressSave = 0
 
 const vodSites = computed(() => sources.value.filter(s => s.Kind === 'vod'))
@@ -397,6 +399,17 @@ async function chooseThreads(n: number) {
   showThreads.value = false
 }
 
+async function checkUpdate() {
+  updateMsg.value = '检查中…'
+  try {
+    updateInfo.value = await ShellService.CheckUpdate()
+    updateMsg.value = updateInfo.value.HasUpdate ? `发现新版本 ${updateInfo.value.LatestVersion}` : '已是最新版本'
+  } catch (e) {
+    updateMsg.value = '检查更新失败'
+    errMsg.value = String(e)
+  }
+}
+
 // imgError 隐藏加载失败的图片（部分源 vod_pic 为空/失效/被防盗链拦截）。
 function imgError(e: Event) {
   ;(e.target as HTMLImageElement).style.display = 'none'
@@ -587,6 +600,16 @@ onMounted(() => {
         <div class="src-add">
           <button @click="openThreads">搜索线程：{{ searchThreads }} 个</button>
         </div>
+      </section>
+
+      <section class="src-section">
+        <h3>关于</h3>
+        <div class="src-add">
+          <span>当前版本：{{ updateInfo?.CurrentVersion ?? '…' }}</span>
+          <button @click="checkUpdate">检查更新</button>
+        </div>
+        <p v-if="updateMsg" class="home-empty">{{ updateMsg }}</p>
+        <a v-if="updateInfo?.HasUpdate && updateInfo.URL" :href="updateInfo.URL" target="_blank" rel="noopener">点击下载新版本</a>
       </section>
 
       <section class="src-section">

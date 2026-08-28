@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -56,6 +58,14 @@ type SourceRecord struct {
 	At   int64
 }
 
+// UpdateInfo 是「检查更新」的结果。
+type UpdateInfo struct {
+	CurrentVersion string
+	LatestVersion  string
+	HasUpdate      bool
+	URL            string
+}
+
 // VodHistoryInfo 是「首页」展示的点播观看记录。
 type VodHistoryInfo struct {
 	Site     string
@@ -76,6 +86,12 @@ const subscriptionKey = "subscription"
 
 // searchThreadsKey 是 store.kv 里全站搜索并发线程数的键。
 const searchThreadsKey = "searchThreads"
+
+// appVersion 是当前应用版本（与 GitHub release tag 对齐）。
+const appVersion = "0.0.1"
+
+// updateURL 是 GitHub 最新 release 的 API 地址（repo 改名后改这里）。
+const updateURL = "https://api.github.com/repos/teaGod-s/UnBox/releases/latest"
 
 // ChannelInfo 是前端展示用的频道信息。
 type ChannelInfo struct {
@@ -1020,6 +1036,70 @@ func (s *ShellService) SetSearchThreads(n int) error {
 		n = 16
 	}
 	return s.store.SetKV(searchThreadsKey, strconv.Itoa(n))
+}
+
+// CheckUpdate 查询 GitHub 最新 release，返回是否有新版本。
+func (s *ShellService) CheckUpdate() (UpdateInfo, error) {
+	info := UpdateInfo{CurrentVersion: appVersion}
+	req, err := http.NewRequest(http.MethodGet, updateURL, nil)
+	if err != nil {
+		return info, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "UnBox")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return info, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return info, nil // 尚无 release
+	}
+	if resp.StatusCode != http.StatusOK {
+		return info, fmt.Errorf("检查更新失败: HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return info, err
+	}
+	var rel struct {
+		TagName string `json:"tag_name"`
+		HTMLURL string `json:"html_url"`
+	}
+	if err := json.Unmarshal(body, &rel); err != nil {
+		return info, err
+	}
+	info.LatestVersion = rel.TagName
+	info.URL = rel.HTMLURL
+	info.HasUpdate = compareVersion(rel.TagName, appVersion) > 0
+	return info, nil
+}
+
+// compareVersion 简单语义化版本比较：a>b 返回 1，a<b 返回 -1，相等返回 0。
+func compareVersion(a, b string) int {
+	trim := func(s string) string {
+		return strings.TrimPrefix(strings.TrimSpace(s), "v")
+	}
+	as := strings.Split(trim(a), ".")
+	bs := strings.Split(trim(b), ".")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		ai, _ := strconv.Atoi(as[i])
+		bi, _ := strconv.Atoi(bs[i])
+		if ai != bi {
+			if ai > bi {
+				return 1
+			}
+			return -1
+		}
+	}
+	if len(as) > len(bs) {
+		return 1
+	}
+	if len(as) < len(bs) {
+		return -1
+	}
+	return 0
 }
 
 // SetLastVodSite 记忆最后选择的点播站点。

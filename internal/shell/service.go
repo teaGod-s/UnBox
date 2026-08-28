@@ -58,6 +58,7 @@ type SourceRecord struct {
 // VodHistoryInfo 是「首页」展示的点播观看记录。
 type VodHistoryInfo struct {
 	Site     string
+	SiteName string // 站点显示名
 	VodID    string
 	VodTitle string
 	VodLogo  string
@@ -330,10 +331,16 @@ func (s *ShellService) ListVodHistory() ([]VodHistoryInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.mu.RLock()
+	siteNames := make(map[string]string, len(s.vodNames))
+	for k, v := range s.vodNames {
+		siteNames[k] = v
+	}
+	s.mu.RUnlock()
 	out := make([]VodHistoryInfo, len(recs))
 	for i, r := range recs {
 		out[i] = VodHistoryInfo{
-			Site: r.Site, VodID: r.VodID, VodTitle: r.VodTitle, VodLogo: r.VodLogo,
+			Site: r.Site, SiteName: siteNames[r.Site], VodID: r.VodID, VodTitle: r.VodTitle, VodLogo: r.VodLogo,
 			EpID: r.EpID, EpName: r.EpName, Source: r.Source,
 			Progress: r.Progress, Duration: r.Duration, At: r.UpdatedAt,
 		}

@@ -366,7 +366,7 @@ onMounted(() => {
           <img v-if="h.VodLogo" :src="h.VodLogo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
           <span class="home-info">
             <span class="name">{{ h.VodTitle }}</span>
-            <span class="sub">{{ h.EpName }}{{ fmtProgress(h.Progress) ? ' · 看到 ' + fmtProgress(h.Progress) : '' }}</span>
+            <span class="sub">{{ h.SiteName || h.Site }} · {{ h.EpName }}{{ fmtProgress(h.Progress) ? ' · 看到 ' + fmtProgress(h.Progress) : '' }}</span>
           </span>
         </li>
       </ul>

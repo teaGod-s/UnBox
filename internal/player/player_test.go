@@ -7,6 +7,7 @@ func TestStreamKindString(t *testing.T) {
 		StreamHLS:   "hls",
 		StreamMP4:   "mp4",
 		StreamFLV:   "flv",
+		StreamTS:    "ts",
 		StreamRTMP:  "rtmp",
 		StreamLocal: "local",
 	}

@@ -54,6 +54,17 @@ func TestResolveUnknownID(t *testing.T) {
 	}
 }
 
+func TestResolveClassifiesHTTPTransportStream(t *testing.T) {
+	p := New([]config.Channel{{Name: "TS", Group: "测试", URLs: []string{"https://media.example/live.ts?token=1"}}})
+	st, err := p.Resolve(context.Background(), "测试/TS")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if st.Kind != player.StreamTS {
+		t.Fatalf("Kind = %v, want TS", st.Kind)
+	}
+}
+
 func TestFetchLiveParsesM3U(t *testing.T) {
 	// 用 httptest 起一个 m3u 服务，验证 FetchLive 拉取 + 解析 + 归并同名备份。
 	srv := newM3UTestServer(t, "#EXTM3U\n"+

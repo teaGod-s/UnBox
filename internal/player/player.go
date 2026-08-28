@@ -4,7 +4,11 @@
 // Player 接口，更换播放实现（mpvproc ↔ mpvlib）不触动它们。
 package player
 
-import "context"
+import (
+	"context"
+	"net/url"
+	"strings"
+)
 
 // StreamKind 是播放流的容器/传输形态。
 type StreamKind int
@@ -13,6 +17,7 @@ const (
 	StreamHLS StreamKind = iota
 	StreamMP4
 	StreamFLV
+	StreamTS
 	StreamRTMP
 	StreamLocal // 本地文件或本地代理地址
 )
@@ -25,12 +30,39 @@ func (k StreamKind) String() string {
 		return "mp4"
 	case StreamFLV:
 		return "flv"
+	case StreamTS:
+		return "ts"
 	case StreamRTMP:
 		return "rtmp"
 	case StreamLocal:
 		return "local"
 	default:
 		return "unknown"
+	}
+}
+
+// KindForURL 根据 URL 的协议与路径后缀判断流类型；无法识别的网络流按 HLS 处理。
+func KindForURL(rawURL string) StreamKind {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return StreamHLS
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "rtmp", "rtmps":
+		return StreamRTMP
+	case "file":
+		return StreamLocal
+	}
+	path := strings.ToLower(u.Path)
+	switch {
+	case strings.HasSuffix(path, ".mp4"), strings.HasSuffix(path, ".m4v"):
+		return StreamMP4
+	case strings.HasSuffix(path, ".flv"):
+		return StreamFLV
+	case strings.HasSuffix(path, ".ts"), strings.HasSuffix(path, ".m2ts"):
+		return StreamTS
+	default:
+		return StreamHLS
 	}
 }
 

@@ -3,7 +3,6 @@ package live
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"sort"
 	"strings"
 
@@ -135,19 +134,7 @@ func Assemble(entries []Entry) []config.Channel {
 	return out
 }
 
-// kindForURL 依据 URL 扩展名猜测流形态；直播默认按 HLS 处理（mpv 对 TS/裸流
-// 同样按直播协议播放）。
+// kindForURL 依据 URL 扩展名猜测流形态。
 func kindForURL(u string) player.StreamKind {
-	p := u
-	if parsed, err := url.Parse(u); err == nil {
-		p = parsed.Path
-	}
-	switch {
-	case strings.HasSuffix(p, ".mp4"):
-		return player.StreamMP4
-	case strings.HasSuffix(p, ".flv"):
-		return player.StreamFLV
-	default:
-		return player.StreamHLS
-	}
+	return player.KindForURL(u)
 }

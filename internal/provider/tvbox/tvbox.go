@@ -158,18 +158,7 @@ func originOf(api string) string {
 	return u.Scheme + "://" + u.Host
 }
 
-// kindForURL 依据 URL 扩展名猜流形态，默认 HLS。
+// kindForURL 依据 URL 扩展名猜流形态。
 func kindForURL(u string) player.StreamKind {
-	p := u
-	if parsed, err := url.Parse(u); err == nil {
-		p = parsed.Path
-	}
-	switch {
-	case strings.HasSuffix(p, ".mp4"):
-		return player.StreamMP4
-	case strings.HasSuffix(p, ".flv"):
-		return player.StreamFLV
-	default:
-		return player.StreamHLS
-	}
+	return player.KindForURL(u)
 }

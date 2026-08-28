@@ -68,3 +68,9 @@ func TestResolveUnknownEpisode(t *testing.T) {
 		t.Fatalf("未知剧集应报错")
 	}
 }
+
+func TestKindForURLClassifiesTransportStream(t *testing.T) {
+	if got := kindForURL("https://media.example/live.ts?token=1"); got != player.StreamTS {
+		t.Fatalf("kindForURL() = %v, want TS", got)
+	}
+}

@@ -766,18 +766,40 @@ body {
   margin: 0.3rem 0 0.75rem;
 }
 
-.ep-src {
-  margin: 0.75rem 0;
+.ep-src-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.75rem 0 0.5rem;
 }
 
-.ep-src-name {
-  margin: 0 0 0.4rem;
-  color: #7ee787;
-  font-size: 0.9rem;
+.ep-src-tabs button {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+  color: #c6cbd9;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.35rem;
+  cursor: pointer;
 }
 
-.ep-src button {
-  margin: 0 0.35rem 0.35rem 0;
+.ep-src-tabs button:hover {
+  background: #232a45;
+}
+
+.ep-src-tabs button.active {
+  background: #2c3350;
+  color: #ffffff;
+  border-color: #7ee787;
+}
+
+.ep-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ep-list button {
   padding: 0.3rem 0.6rem;
   font-size: 0.85rem;
   color: #e8eaf0;
@@ -787,6 +809,6 @@ body {
   cursor: pointer;
 }
 
-.ep-src button:hover {
+.ep-list button:hover {
   background: #232a45;
 }

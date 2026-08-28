@@ -23,6 +23,8 @@ const mode = ref<'home' | 'vod' | 'live' | 'settings'>('home')
 const sources = ref<SourceInfo[]>([])
 const activeSite = ref('')
 const activeLine = ref('')
+const activeSource = ref('')
+const detailSite = ref('')
 const vodCategories = ref<Section[]>([])
 const vodActiveCat = ref('')
 const vodItems = ref<VodItem[]>([])
@@ -133,7 +135,9 @@ async function resumeVod(h: VodHistoryInfo) {
     mode.value = 'vod'
     await loadSources()
     activeSite.value = h.Site
+    detailSite.value = h.Site
     vodDetail.value = await ShellService.VodDetail(h.Site, h.VodID)
+    activeSource.value = vodDetail.value.Sources?.[0] ?? ''
     if (h.EpID) {
       pendingSeek.value = h.Progress
       await doPlayEpisode(h.Site, h.EpID, h.EpName, h.Source)
@@ -304,13 +308,11 @@ async function openVodDetail(item: VodItem) {
   errMsg.value = ''
   try {
     const site = item.Site || activeSite.value
-    if (item.Site) {
-      activeSite.value = item.Site
-      activeLine.value = vodSites.value.find(s => s.ID === item.Site)?.Line ?? ''
-    }
+    detailSite.value = site
     const d = await ShellService.VodDetail(site, item.ID)
     d.Description = DOMPurify.sanitize(d.Description)
     vodDetail.value = d
+    activeSource.value = d.Sources?.[0] ?? ''
   } catch (e) { errMsg.value = String(e) }
 }
 
@@ -327,7 +329,7 @@ async function playEpisode(ep: EpisodeInfo) {
   errMsg.value = ''
   pendingSeek.value = 0
   try {
-    await doPlayEpisode(activeSite.value, ep.ID, ep.Name, ep.Source)
+    await doPlayEpisode(detailSite.value || activeSite.value, ep.ID, ep.Name, ep.Source)
   } catch (e) { errMsg.value = String(e) }
 }
 
@@ -550,9 +552,11 @@ onMounted(() => {
                 <div class="desc" v-html="vodDetail.Description"></div>
               </div>
             </div>
-            <div v-for="src in (vodDetail.Sources ?? [])" :key="src" class="ep-src">
-              <p class="ep-src-name">{{ src }}</p>
-              <button v-for="ep in (vodDetail.Episodes ?? []).filter(e => e.Source === src)" :key="ep.ID"
+            <div v-if="(vodDetail.Sources ?? []).length" class="ep-src-tabs">
+              <button v-for="src in vodDetail.Sources" :key="src" :class="{ active: src === activeSource }" @click="activeSource = src">{{ src }}</button>
+            </div>
+            <div class="ep-list">
+              <button v-for="ep in (vodDetail.Episodes ?? []).filter(e => e.Source === activeSource)" :key="ep.ID"
                       @click="playEpisode(ep)">{{ ep.Name }}</button>
             </div>
           </div>

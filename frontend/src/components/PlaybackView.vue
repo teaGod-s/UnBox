@@ -11,7 +11,7 @@ export interface PlaybackPlan {
   CanFallback: boolean
 }
 
-const props = defineProps<{ plan: PlaybackPlan | null }>()
+const props = defineProps<{ plan: PlaybackPlan | null; seekTo?: number }>()
 const emit = defineEmits<{ fallback: [id: string]; progress: [time: number, duration: number] }>()
 const video = ref<HTMLVideoElement | null>(null)
 let hls: Hls | null = null
@@ -37,6 +37,17 @@ function onTimeUpdate() {
   }
 }
 
+function applySeek() {
+  const pos = props.seekTo
+  if (pos && pos > 0 && video.value) {
+    video.value.currentTime = pos
+  }
+}
+
+function onLoadedMetadata() {
+  applySeek()
+}
+
 async function attach(plan: PlaybackPlan | null) {
   cleanup(); fallbackSent = false
   if (!plan || plan.Backend !== 'web') return
@@ -57,12 +68,13 @@ async function attach(plan: PlaybackPlan | null) {
 }
 
 watch(() => props.plan, attach, { immediate: true })
+watch(() => props.seekTo, applySeek)
 onBeforeUnmount(cleanup)
 </script>
 
 <template>
   <div class="playback-view">
-    <video v-if="plan?.Backend === 'web'" ref="video" controls playsinline preload="metadata" @timeupdate="onTimeUpdate" />
+    <video v-if="plan?.Backend === 'web'" ref="video" controls playsinline preload="metadata" @timeupdate="onTimeUpdate" @loadedmetadata="onLoadedMetadata" />
     <div v-else-if="plan?.Backend === 'mpv'" class="mpv-status">正在使用 mpv 播放</div>
     <div v-else class="playback-empty">选择频道或剧集开始播放</div>
   </div>

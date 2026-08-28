@@ -36,8 +36,12 @@ const vodSources = ref<SourceRecord[]>([])
 const liveSources = ref<SourceRecord[]>([])
 const vodSourceUrl = ref('')
 const liveSourceUrl = ref('')
+const showVodHistory = ref(false)
+const showLiveHistory = ref(false)
 const homeHistory = ref<VodHistoryInfo[]>([])
 const currentVod = ref<{ site: string; vodID: string } | null>(null)
+const pendingSeek = ref(0)
+const logs = ref('')
 let lastProgressSave = 0
 
 async function refresh() {
@@ -77,7 +81,7 @@ async function switchMode(m: 'home' | 'vod' | 'live' | 'settings') {
   if (m === 'vod') await refreshVod()
   else if (m === 'live') await reloadGroups()
   else if (m === 'home') await refreshHome()
-  else if (m === 'settings') await reloadSourceHistory()
+  else if (m === 'settings') { await reloadSourceHistory(); await refreshLogs() }
 }
 
 async function refreshHome() {
@@ -100,6 +104,13 @@ async function resumeVod(h: VodHistoryInfo) {
     await loadSources()
     activeSite.value = h.Site
     vodDetail.value = await ShellService.VodDetail(h.Site, h.VodID)
+    if (h.EpID) {
+      pendingSeek.value = h.Progress
+      await doPlayEpisode(h.Site, h.EpID, h.EpName, h.Source)
+      if (h.Progress > 0 && playbackPlan.value?.Backend === 'mpv') {
+        await ShellService.Seek(h.Progress)
+      }
+    }
   } catch (e) { errMsg.value = String(e) }
 }
 
@@ -240,15 +251,20 @@ async function openVodDetail(item: VodItem) {
   } catch (e) { errMsg.value = String(e) }
 }
 
+async function doPlayEpisode(site: string, epID: string, epName: string, source: string) {
+  playbackPlan.value = await ShellService.PrepareVod(site, epID) as unknown as PlaybackPlan
+  nowPlaying.value = epName
+  if (vodDetail.value) {
+    currentVod.value = { site, vodID: vodDetail.value.ID }
+    await ShellService.RecordVodHistory(site, vodDetail.value.ID, vodDetail.value.Title, vodDetail.value.Logo, epID, epName, source)
+  }
+}
+
 async function playEpisode(ep: EpisodeInfo) {
   errMsg.value = ''
+  pendingSeek.value = 0
   try {
-    playbackPlan.value = await ShellService.PrepareVod(activeSite.value, ep.ID) as unknown as PlaybackPlan
-    nowPlaying.value = ep.Name
-    if (vodDetail.value) {
-      currentVod.value = { site: activeSite.value, vodID: vodDetail.value.ID }
-      await ShellService.RecordVodHistory(activeSite.value, vodDetail.value.ID, vodDetail.value.Title, vodDetail.value.Logo, ep.ID, ep.Name, ep.Source)
-    }
+    await doPlayEpisode(activeSite.value, ep.ID, ep.Name, ep.Source)
   } catch (e) { errMsg.value = String(e) }
 }
 
@@ -266,6 +282,18 @@ async function onProgress(time: number, duration: number) {
   catch { /* 进度保存失败不阻断 */ }
 }
 
+async function refreshLogs() {
+  try { logs.value = await ShellService.GetLogs() } catch (e) { errMsg.value = String(e) }
+}
+
+async function pollMpvProgress() {
+  if (!currentVod.value || playbackPlan.value?.Backend !== 'mpv') return
+  try {
+    const pos = await ShellService.Position()
+    await ShellService.UpdateVodProgress(currentVod.value.site, currentVod.value.vodID, pos, 0)
+  } catch { /* 忽略 */ }
+}
+
 // imgError 隐藏加载失败的图片（部分源 vod_pic 为空/失效/被防盗链拦截）。
 function imgError(e: Event) {
   ;(e.target as HTMLImageElement).style.display = 'none'
@@ -274,6 +302,7 @@ function imgError(e: Event) {
 onMounted(() => {
   refresh()
   Events.On('import:progress', (ev: any) => { importProgress.value = ev.data as Progress })
+  setInterval(pollMpvProgress, 10000)
 })
 </script>
 
@@ -295,7 +324,7 @@ onMounted(() => {
       <button :class="{ active: mode === 'home' }" @click="switchMode('home')">首页</button>
       <button :class="{ active: mode === 'vod' }" @click="switchMode('vod')">点播</button>
       <button :class="{ active: mode === 'live' }" @click="switchMode('live')">直播</button>
-      <button :class="{ active: mode === 'settings' }" @click="switchMode('settings')">设置</button>
+      <button class="settings-btn" :class="{ active: mode === 'settings' }" @click="switchMode('settings')">设置</button>
     </nav>
 
     <!-- 首页：观看历史 -->
@@ -325,7 +354,7 @@ onMounted(() => {
 
       <aside class="player">
         <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
-        <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" @progress="onProgress" />
+        <PlaybackView :plan="playbackPlan" :seek-to="pendingSeek" @fallback="fallbackToMpv" @progress="onProgress" />
         <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
           <button @click="pause">暂停</button>
           <button @click="resume">继续</button>
@@ -381,7 +410,7 @@ onMounted(() => {
             <div class="vod-detail-top">
               <div class="vod-player">
                 <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
-                <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" @progress="onProgress" />
+                <PlaybackView :plan="playbackPlan" :seek-to="pendingSeek" @fallback="fallbackToMpv" @progress="onProgress" />
                 <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
                   <button @click="pause">暂停</button>
                   <button @click="resume">继续</button>
@@ -415,8 +444,9 @@ onMounted(() => {
         <div class="src-add">
           <input v-model="vodSourceUrl" placeholder="粘贴点播源地址" @keyup.enter="importVodSource" />
           <button @click="importVodSource">导入</button>
+          <button @click="showVodHistory = !showVodHistory">{{ showVodHistory ? '收起历史' : '历史配置' }}</button>
         </div>
-        <ul v-if="vodSources.length" class="src-history">
+        <ul v-if="showVodHistory && vodSources.length" class="src-history">
           <li v-for="s in vodSources" :key="'vod-' + s.Ref">
             <span class="src-ref" :class="{ current: s.Ref === vodSources[0]?.Ref }" @click="reimportSource('vod', s.Ref)">{{ s.Ref }}</span>
             <button class="src-del" @click="deleteSource('vod', s.Ref)">删除</button>
@@ -429,13 +459,23 @@ onMounted(() => {
         <div class="src-add">
           <input v-model="liveSourceUrl" placeholder="粘贴直播源地址（M3U/TXT/订阅）" @keyup.enter="importLiveSource" />
           <button @click="importLiveSource">导入</button>
+          <button @click="showLiveHistory = !showLiveHistory">{{ showLiveHistory ? '收起历史' : '历史配置' }}</button>
         </div>
-        <ul v-if="liveSources.length" class="src-history">
+        <ul v-if="showLiveHistory && liveSources.length" class="src-history">
           <li v-for="s in liveSources" :key="'live-' + s.Ref">
             <span class="src-ref" :class="{ current: s.Ref === liveSources[0]?.Ref }" @click="reimportSource('live', s.Ref)">{{ s.Ref }}</span>
             <button class="src-del" @click="deleteSource('live', s.Ref)">删除</button>
           </li>
         </ul>
+      </section>
+
+      <section class="src-section">
+        <h3>日志</h3>
+        <div class="src-add">
+          <button @click="refreshLogs">刷新日志</button>
+        </div>
+        <pre v-if="logs" class="log-view">{{ logs }}</pre>
+        <p v-else class="home-empty">暂无日志</p>
       </section>
     </section>
 

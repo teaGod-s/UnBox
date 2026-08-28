@@ -423,6 +423,24 @@ body {
 .home-info .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-info .sub { color: #8b91a3; font-size: 0.85rem; }
 
+.tabs .settings-btn { margin-left: auto; }
+
+.log-view {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  max-height: 20rem;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #c6cbd9;
+  background: #05060b;
+  border: 1px solid #23283a;
+  border-radius: 0.4rem;
+}
+
 .player .now {
   margin: 0;
   color: #7ee787;

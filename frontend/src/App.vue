@@ -20,7 +20,7 @@ const importSummary = ref('')
 const errMsg = ref('')
 const loading = ref(false)
 const importProgress = ref<Progress | null>(null)
-const mode = ref<'live' | 'vod'>('live')
+const mode = ref<'live' | 'vod'>('vod')
 const sources = ref<SourceInfo[]>([])
 const activeSite = ref('')
 const vodCategories = ref<Section[]>([])
@@ -39,6 +39,7 @@ async function refresh() {
     platform.value = await ShellService.Platform()
     playerReady.value = await ShellService.PlayerReady()
     await refreshMpvStatus()
+    if (mode.value === 'vod') await refreshVod()
     await reloadGroups()
   } catch (e) { errMsg.value = String(e) }
 }
@@ -89,6 +90,7 @@ async function doImport() {
     } else {
       importSummary.value = `导入成功：${r.Sites} 个点播站 / ${r.LiveSources} 个直播源（按需加载）`
     }
+    if (mode.value === 'vod') await refreshVod()
     await reloadGroups()
   } catch (e) { errMsg.value = String(e) }
   finally { loading.value = false }
@@ -133,9 +135,14 @@ async function loadSources() {
   }
 }
 
+async function refreshVod() {
+  await loadSources()
+  if (activeSite.value) await reloadVodCategories()
+}
+
 async function switchMode(m: 'live' | 'vod') {
   mode.value = m
-  if (m === 'vod') await loadSources()
+  if (m === 'vod') await refreshVod()
 }
 
 async function selectSite(id: string) {
@@ -280,10 +287,19 @@ onMounted(() => {
           </ul>
           <div v-else class="vod-detail">
             <button @click="vodDetail = null">← 返回</button>
+            <div class="vod-player">
+              <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
+              <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" />
+              <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
+                <button @click="pause">暂停</button>
+                <button @click="resume">继续</button>
+                <input type="range" min="0" max="100" @input="setVolume" />
+              </div>
+            </div>
             <img v-if="vodDetail.Logo" :src="vodDetail.Logo" class="poster" referrerpolicy="no-referrer" @error="imgError" />
             <h2>{{ vodDetail.Title }}</h2>
             <p class="meta">{{ vodDetail.Type }} · {{ vodDetail.Year }} · {{ vodDetail.Area }}</p>
-            <p>{{ vodDetail.Description }}</p>
+            <div class="desc" v-html="vodDetail.Description"></div>
             <div v-for="src in (vodDetail.Sources ?? [])" :key="src" class="ep-src">
               <p class="ep-src-name">{{ src }}</p>
               <button v-for="ep in (vodDetail.Episodes ?? []).filter(e => e.Source === src)" :key="ep.ID"

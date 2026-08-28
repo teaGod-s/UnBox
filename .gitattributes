@@ -1,0 +1,19 @@
+# 行尾统一为 LF，避免 Windows 上 CRLF/LF 混用导致整文件 diff、gofmt 报错。
+# `text=auto` 让 git 按内容嗅探文本/二进制；下列源码与文本文件强制 LF。
+* text=auto
+
+# 源码与文本文件：仓库内与检出均强制 LF（Go 工具链对 CRLF 敏感）。
+*.go   text eol=lf
+*.vue  text eol=lf
+*.ts   text eol=lf
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.cjs  text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.md   text eol=lf
+*.sh   text eol=lf

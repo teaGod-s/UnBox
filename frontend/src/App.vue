@@ -402,7 +402,7 @@ onMounted(() => {
 <template>
   <main class="container">
     <header>
-      <h1 class="title">Unbox</h1>
+      <h1 class="title">UnBox</h1>
       <p class="subtitle">{{ platform }} · 播放器{{ playerReady ? '就绪' : '未就绪' }}</p>
     </header>
 

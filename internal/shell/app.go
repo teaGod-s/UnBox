@@ -94,8 +94,8 @@ func NewApp(p player.Player, pv provider.Provider, st *store.Store) *application
 		log.Printf("恢复订阅失败（按未导入处理）: %v", err)
 	}
 	return application.New(application.Options{
-		Name:        "unbox",
-		Description: "Unbox — IPTV 播放器",
+		Name:        "UnBox",
+		Description: "UnBox — IPTV 播放器",
 		Services: []application.Service{
 			application.NewService(svc),
 		},
@@ -111,7 +111,7 @@ func NewApp(p player.Player, pv provider.Provider, st *store.Store) *application
 // OpenWindow 在 app 上创建并打开主窗口。
 func OpenWindow(app *application.App) *application.WebviewWindow {
 	return app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:            "Unbox",
+		Title:            "UnBox",
 		Width:            1000,
 		Height:           618,
 		BackgroundColour: application.NewRGB(6, 7, 15),

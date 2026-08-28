@@ -90,6 +90,8 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           choco install nsis -y --no-progress
+          # choco 只把 NSIS 目录写进机器 PATH（新 shell 才生效），当前 step 需手动加
+          export PATH="/c/Program Files (x86)/NSIS:$PATH"
           wails3 task windows:package
           V="${GITHUB_REF_NAME#v}"
           mv bin/*-installer.exe "UnBox-${V}-windows-amd64-installer.exe"

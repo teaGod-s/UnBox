@@ -74,21 +74,7 @@ func (s *ShellService) LoadTestStream() error {
 func forceLinuxX11Backend() {
 	if runtime.GOOS == "linux" {
 		_ = os.Setenv("GDK_BACKEND", "x11")
-		configureLinuxRendering(func(path string) bool {
-			_, err := os.Stat(path)
-			return err == nil
-		})
 	}
-}
-
-// configureLinuxRendering 在没有 DRM 设备时关闭 WebKit DMA-BUF，避免 WSLg
-// 无 GPU 环境卡在 EGL 初始化阶段。必须在 GTK/WebKit 初始化前设置。
-func configureLinuxRendering(pathExists func(string) bool) {
-	if pathExists("/dev/dri") {
-		return
-	}
-	_ = os.Setenv("LIBGL_ALWAYS_SOFTWARE", "1")
-	_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 }
 
 // NewApp 创建 Unbox 桌面应用，应用级 Wails 选项细节全部收敛于此。
@@ -116,22 +102,13 @@ func NewApp(p player.Player, pv provider.Provider, st *store.Store) *application
 	})
 }
 
-// OpenWindow 在 app 上创建并打开主窗口，并返回窗口（供后续拿原生句柄嵌入播放）。
+// OpenWindow 在 app 上创建并打开主窗口。
 func OpenWindow(app *application.App) *application.WebviewWindow {
 	return app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:   "UnboxMain",
-		Title:  "Unbox",
-		Width:  1000,
-		Height: 618,
-		// WSLg 的 XWayland 在启动时可能返回错误的屏幕工作区，导致
-		// WindowCentered 把窗口放到屏幕外；固定初始坐标保证首次可见。
-		InitialPosition:  application.WindowXY,
-		X:                50,
-		Y:                50,
+		Title:            "Unbox",
+		Width:            1000,
+		Height:           618,
 		BackgroundColour: application.NewRGB(6, 7, 15),
 		URL:              "/",
-		Linux: application.LinuxWindow{
-			WebviewGpuPolicy: application.WebviewGpuPolicyNever,
-		},
 	})
 }

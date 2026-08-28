@@ -572,6 +572,9 @@ onMounted(() => {
       </div>
     </div>
 
-    <p v-if="errMsg" class="error">{{ errMsg }}</p>
+    <div v-if="errMsg" class="error-box">
+      <span class="error-text">{{ errMsg }}</span>
+      <button class="error-close" title="关闭" @click="errMsg = ''">✕</button>
+    </div>
   </main>
 </template>

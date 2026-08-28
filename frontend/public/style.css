@@ -86,11 +86,43 @@ body {
   cursor: not-allowed;
 }
 
-.error {
-  color: #ff7b72;
-  margin: 1rem 0 0;
-  max-width: 24rem;
+.error-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  max-width: 36rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 123, 114, 0.08);
+  border: 1px solid rgba(255, 123, 114, 0.32);
+  border-radius: 0.4rem;
+}
+
+.error-text {
+  flex: 1;
+  min-width: 0;
+  max-height: 7rem;
+  overflow-y: auto;
   overflow-wrap: break-word;
+  white-space: pre-wrap;
+  color: #ff7b72;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.error-close {
+  flex-shrink: 0;
+  padding: 0.05rem 0.4rem;
+  color: #ff7b72;
+  background: transparent;
+  border: none;
+  border-radius: 0.3rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.error-close:hover {
+  background: rgba(255, 123, 114, 0.18);
 }
 
 /* ---- 订阅导入 + 三栏布局（左分组 / 中频道 / 右播放+收藏） ---- */

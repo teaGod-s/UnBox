@@ -20,7 +20,7 @@ Unicode true
 ## The following information is taken from the wails_tools.nsh file, but they can be overwritten here.
 ####
 !define INFO_PROJECTNAME    "unbox"
-!define INFO_COMPANYNAME    "UnBox"
+!define INFO_COMPANYNAME    "RejectCode"
 !define INFO_PRODUCTNAME    "UnBox"
 !define INFO_PRODUCTVERSION "0.1.0"
 !define INFO_COPYRIGHT      "© 2026 UnBox Contributors"

@@ -5,9 +5,9 @@
 	"info": {
 		"0000": {
 			"ProductVersion": "0.0.1",
-			"CompanyName": "UnBox",
+			"CompanyName": "RejectCode",
 			"FileDescription": "UnBox - 跨平台 TVBox 兼容播放器",
-			"LegalCopyright": "© 2026 UnBox Contributors",
+			"LegalCopyright": "© 2026, RejectCode",
 			"ProductName": "UnBox",
 			"Comments": "跨平台 TVBox 兼容桌面播放器"
 		}

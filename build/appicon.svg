@@ -8,13 +8,14 @@
   <!-- Left face (soft sky blue) -->
   <polygon points="131,292 512,512 512,952 131,732" fill="#A9C9E8"/>
   <!--
-    Smiley on the top face. The transform maps the unit square [-1,1]^2 onto the
+    Smiley on the top face. The transform maps the square [-1,1]^2 onto the
     top-face rhombus: s = left-right (along TL<->TR), t = bottom-top (along C<->T).
     matrix(a,b,c,d,e,f): x = a*s + c*t + e, y = b*s + d*t + f.
+    Eyes are happy squinting arcs (^ ^) rather than round dots, for a relaxed look.
   -->
   <g transform="matrix(381 0 0 -220 512 292)">
-    <circle cx="-0.34" cy="0.28" r="0.15" fill="#4A4338"/>
-    <circle cx="0.34" cy="0.28" r="0.15" fill="#4A4338"/>
-    <path d="M -0.32 -0.14 Q 0 -0.36 0.32 -0.14" fill="none" stroke="#4A4338" stroke-width="0.08" stroke-linecap="round"/>
+    <path d="M -0.44 0.26 Q -0.34 0.40 -0.24 0.26" fill="none" stroke="#4A4338" stroke-width="0.07" stroke-linecap="round"/>
+    <path d="M 0.24 0.26 Q 0.34 0.40 0.44 0.26" fill="none" stroke="#4A4338" stroke-width="0.07" stroke-linecap="round"/>
+    <path d="M -0.30 -0.14 Q 0 -0.34 0.30 -0.14" fill="none" stroke="#4A4338" stroke-width="0.08" stroke-linecap="round"/>
   </g>
 </svg>

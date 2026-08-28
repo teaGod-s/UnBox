@@ -908,6 +908,12 @@ func (s *ShellService) VodSearch(site, q string) ([]VodItem, error) {
 // VodSearchAll 全站搜索点播，返回结果带所属站点（Site 字段）。
 // 并发度由 SearchThreads 控制，进度经 search:progress 事件推给前端。
 func (s *ShellService) VodSearchAll(q string) ([]VodItem, error) {
+	s.cancelSearch() // 取消上一次搜索
+	ctx, cancel := context.WithCancel(context.Background())
+	s.mu.Lock()
+	s.searchCancel = cancel
+	s.mu.Unlock()
+
 	s.mu.RLock()
 	type sp struct {
 		site string
@@ -931,7 +937,11 @@ func (s *ShellService) VodSearchAll(q string) ([]VodItem, error) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			items, err := pv.Search(context.Background(), q)
+			if ctx.Err() != nil { // 已取消：跳过该站点
+				done.Add(1)
+				return
+			}
+			items, err := pv.Search(ctx, q)
 			if err == nil {
 				v := toVodItems(items)
 				for i := range v {
@@ -940,14 +950,43 @@ func (s *ShellService) VodSearchAll(q string) ([]VodItem, error) {
 				mu.Lock()
 				out = append(out, v...)
 				mu.Unlock()
+				s.emitSearchResults(v) // 逐步推送结果
 			}
 			n := int(done.Add(1))
 			s.emitSearchProgress(Progress{Stage: "search", Message: fmt.Sprintf("全站搜索 %d/%d", n, total), Done: n, Total: total})
 		}(p.site, p.pv)
 	}
 	wg.Wait()
+
+	s.mu.Lock()
+	s.searchCancel = nil
+	s.mu.Unlock()
 	s.emitSearchProgress(Progress{Stage: "search", Message: "搜索完成", Done: total, Total: total})
 	return out, nil
+}
+
+// cancelSearch 中断当前全站搜索（若有）。
+func (s *ShellService) cancelSearch() {
+	s.mu.Lock()
+	cancel := s.searchCancel
+	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// CancelSearch 中断当前全站搜索（前端「取消」按钮）。
+func (s *ShellService) CancelSearch() {
+	s.cancelSearch()
+}
+
+// emitSearchResults 把一批搜索结果推给前端（渐进渲染）。
+func (s *ShellService) emitSearchResults(items []VodItem) {
+	app := application.Get()
+	if app == nil {
+		return
+	}
+	app.Event.Emit("search:result", items)
 }
 
 // SearchThreads 返回全站搜索的并发线程数（默认 1，上限 16）。

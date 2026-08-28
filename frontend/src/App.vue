@@ -48,6 +48,7 @@ const copyMsg = ref('')
 const searchProgress = ref<Progress | null>(null)
 const searchThreads = ref(1)
 const showThreads = ref(false)
+const searching = ref(false)
 let lastProgressSave = 0
 
 const vodSites = computed(() => sources.value.filter(s => s.Kind === 'vod'))
@@ -284,7 +285,17 @@ async function reloadVodList() {
 
 async function vodSearch() {
   if (!vodQuery.value) { await reloadVodList(); return }
-  vodItems.value = (await ShellService.VodSearchAll(vodQuery.value)) ?? []
+  searching.value = true
+  vodItems.value = []
+  try {
+    vodItems.value = (await ShellService.VodSearchAll(vodQuery.value)) ?? []
+  } catch (e) { errMsg.value = String(e) }
+  finally { searching.value = false }
+}
+
+async function cancelSearch() {
+  searching.value = false
+  try { await ShellService.CancelSearch() } catch { /* 忽略 */ }
 }
 
 async function openVodDetail(item: VodItem) {
@@ -395,6 +406,11 @@ onMounted(() => {
   refresh()
   Events.On('import:progress', (ev: any) => { importProgress.value = ev.data as Progress })
   Events.On('search:progress', (ev: any) => { searchProgress.value = ev.data as Progress })
+  Events.On('search:result', (ev: any) => {
+    if (searching.value) {
+      vodItems.value = [...vodItems.value, ...(ev.data as VodItem[])]
+    }
+  })
   setInterval(pollMpvProgress, 10000)
 })
 </script>
@@ -495,7 +511,7 @@ onMounted(() => {
         </aside>
 
         <section class="vod-main">
-          <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button><span v-if="searchProgress" class="progress">{{ searchProgress.Message }}</span></form>
+          <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button><button v-if="searching" type="button" @click="cancelSearch">取消</button><span v-if="searchProgress" class="progress">{{ searchProgress.Message }}</span></form>
           <ul v-if="!vodDetail">
             <li v-for="it in vodItems" :key="it.ID" class="channel" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />

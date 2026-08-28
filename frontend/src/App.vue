@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { Events } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
+import DOMPurify from 'dompurify'
 
 interface ChannelInfo { ID: string; Name: string; Group: string; Logo: string; Favorited: boolean }
 interface Progress { Stage: string; Message: string; Done: number; Total: number }
@@ -170,7 +171,9 @@ async function vodSearch() {
 async function openVodDetail(item: VodItem) {
   errMsg.value = ''
   try {
-    vodDetail.value = await ShellService.VodDetail(activeSite.value, item.ID)
+    const d = await ShellService.VodDetail(activeSite.value, item.ID)
+    d.Description = DOMPurify.sanitize(d.Description)
+    vodDetail.value = d
   } catch (e) { errMsg.value = String(e) }
 }
 
@@ -213,8 +216,8 @@ onMounted(() => {
     </div>
 
     <nav class="tabs">
-      <button :class="{ active: mode === 'live' }" @click="switchMode('live')">直播</button>
       <button :class="{ active: mode === 'vod' }" @click="switchMode('vod')">点播</button>
+      <button :class="{ active: mode === 'live' }" @click="switchMode('live')">直播</button>
     </nav>
 
     <section class="import">
@@ -233,6 +236,20 @@ onMounted(() => {
         <button @click="loadFavorites">⭐ 收藏</button>
       </aside>
 
+      <aside class="player">
+        <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
+        <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" />
+        <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
+          <button @click="pause">暂停</button>
+          <button @click="resume">继续</button>
+          <input type="range" min="0" max="100" @input="setVolume" />
+        </div>
+        <p v-if="favorites.length" class="favhead">收藏</p>
+        <ul class="favs">
+          <li v-for="f in favorites" :key="f.ID" @click="play(f)">{{ f.Name }}</li>
+        </ul>
+      </aside>
+
       <section class="channels">
         <div v-if="groups.length <= 1" class="load-live">
           <p>直播源尚未加载</p>
@@ -248,20 +265,6 @@ onMounted(() => {
           </li>
         </ul>
       </section>
-
-      <aside class="player">
-        <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
-        <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" />
-        <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
-          <button @click="pause">暂停</button>
-          <button @click="resume">继续</button>
-          <input type="range" min="0" max="100" @input="setVolume" />
-        </div>
-        <p v-if="favorites.length" class="favhead">收藏</p>
-        <ul class="favs">
-          <li v-for="f in favorites" :key="f.ID" @click="play(f)">{{ f.Name }}</li>
-        </ul>
-      </aside>
     </section>
 
     <section v-if="mode === 'vod'" class="vod">
@@ -287,19 +290,23 @@ onMounted(() => {
           </ul>
           <div v-else class="vod-detail">
             <button @click="vodDetail = null">← 返回</button>
-            <div class="vod-player">
-              <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
-              <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" />
-              <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
-                <button @click="pause">暂停</button>
-                <button @click="resume">继续</button>
-                <input type="range" min="0" max="100" @input="setVolume" />
+            <div class="vod-detail-top">
+              <div class="vod-player">
+                <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
+                <PlaybackView :plan="playbackPlan" @fallback="fallbackToMpv" />
+                <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
+                  <button @click="pause">暂停</button>
+                  <button @click="resume">继续</button>
+                  <input type="range" min="0" max="100" @input="setVolume" />
+                </div>
+              </div>
+              <div class="vod-info">
+                <img v-if="vodDetail.Logo" :src="vodDetail.Logo" class="poster" referrerpolicy="no-referrer" @error="imgError" />
+                <h2>{{ vodDetail.Title }}</h2>
+                <p class="meta">{{ vodDetail.Type }} · {{ vodDetail.Year }} · {{ vodDetail.Area }}</p>
+                <div class="desc" v-html="vodDetail.Description"></div>
               </div>
             </div>
-            <img v-if="vodDetail.Logo" :src="vodDetail.Logo" class="poster" referrerpolicy="no-referrer" @error="imgError" />
-            <h2>{{ vodDetail.Title }}</h2>
-            <p class="meta">{{ vodDetail.Type }} · {{ vodDetail.Year }} · {{ vodDetail.Area }}</p>
-            <div class="desc" v-html="vodDetail.Description"></div>
             <div v-for="src in (vodDetail.Sources ?? [])" :key="src" class="ep-src">
               <p class="ep-src-name">{{ src }}</p>
               <button v-for="ep in (vodDetail.Episodes ?? []).filter(e => e.Source === src)" :key="ep.ID"

@@ -126,7 +126,7 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 170px minmax(0, 1fr) 250px;
+  grid-template-columns: 150px minmax(0, 1fr) 280px;
   gap: 0.75rem;
 }
 
@@ -247,10 +247,20 @@ body {
   flex-shrink: 0;
 }
 
+.vod-detail-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.vod-detail-top .vod-player { margin: 0; }
+
 .vod-detail .poster {
-  float: left;
-  width: 130px;
-  margin: 0 1rem 0.5rem 0;
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  margin: 0 0 0.6rem;
   border-radius: 0.4rem;
   background: #161a2b;
 }
@@ -289,6 +299,8 @@ body {
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   background: #0a0d1a;
   border: 1px solid #23283a;

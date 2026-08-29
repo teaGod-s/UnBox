@@ -51,12 +51,12 @@ function detail(id){ return {vod_id:id,vod_name:"甲",vod_pic:"https://example.c
 func TestSpiderRunsFongMiModuleCrawler(t *testing.T) {
 	script := `
 async function init(){ return JSON.stringify({}) }
-async function home(){ return JSON.stringify({class:[{type_id:"movie",type_name:"电影"}]}) }
-async function category(tid, pg){ return JSON.stringify({list:[{vod_id:"1",vod_name:"甲",type_name:tid}]}) }
-async function search(wd){ return JSON.stringify({list:[{vod_id:"1",vod_name:wd}]}) }
-async function detail(id){ return JSON.stringify({list:[{vod_id:id,vod_name:"甲",vod_play_from:"线路一",vod_play_url:"第01集$https://example.com/episode"}]}) }
-async function play(flag, id){ return JSON.stringify({parse:0,url:id+".m3u8"}) }
-export default { init, home, category, search, detail, play }
+async function homeContent(filter){ return JSON.stringify({class:[{type_id:"movie",type_name:"电影"}]}) }
+async function categoryContent(tid, pg, filter, extend){ return JSON.stringify({list:[{vod_id:"1",vod_name:"甲",type_name:tid}]}) }
+async function searchContent(key, quick){ return JSON.stringify({list:[{vod_id:"1",vod_name:key}]}) }
+async function detailContent(ids){ return JSON.stringify({list:[{vod_id:ids[0],vod_name:"甲",vod_play_from:"线路一",vod_play_url:"第01集$https://example.com/episode"}]}) }
+async function playerContent(flag, id, vipFlags){ return JSON.stringify({parse:0,url:id+".m3u8"}) }
+export default { init, homeContent, categoryContent, searchContent, detailContent, playerContent }
 `
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(script)) }))
 	defer srv.Close()

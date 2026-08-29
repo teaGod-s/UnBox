@@ -55,12 +55,12 @@ func TestFongMiModuleActions(t *testing.T) {
 	e := New()
 	if err := e.Load(`
 async function init(){ return JSON.stringify({}) }
-async function home(){ return JSON.stringify({class:[{type_id:"movie",type_name:"电影"}]}) }
-async function category(tid, pg, filter, extend){ return JSON.stringify({list:[{vod_id:tid+pg,vod_name:"分类片"}]}) }
-async function search(wd){ return JSON.stringify({list:[{vod_id:"2",vod_name:wd}]}) }
-async function detail(id){ return JSON.stringify({list:[{vod_id:id,vod_name:"详情",vod_play_from:"线路",vod_play_url:"第01集$https://example.com/play.m3u8"}]}) }
-async function play(flag, id){ return JSON.stringify({parse:0,url:id}) }
-export default { init, home, category, search, detail, play }
+async function homeContent(filter){ return JSON.stringify({class:[{type_id:"movie",type_name:"电影"}]}) }
+async function categoryContent(tid, pg, filter, extend){ return JSON.stringify({list:[{vod_id:tid+pg,vod_name:"分类片"}]}) }
+async function searchContent(key, quick){ return JSON.stringify({list:[{vod_id:"2",vod_name:key}]}) }
+async function detailContent(ids){ return JSON.stringify({list:[{vod_id:ids[0],vod_name:"详情",vod_play_from:"线路",vod_play_url:"第01集$https://example.com/play.m3u8"}]}) }
+async function playerContent(flag, id, vipFlags){ return JSON.stringify({parse:0,url:id}) }
+export default { init, homeContent, categoryContent, searchContent, detailContent, playerContent }
 `); err != nil {
 		t.Fatal(err)
 	}

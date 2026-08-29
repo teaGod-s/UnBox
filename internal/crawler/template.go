@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -24,7 +25,8 @@ func (e *Engine) Rule() (*Rule, error) {
 }
 
 func (e *Engine) VodHome() ([]Vod, error) {
-	for _, name := range []string{"homeVod", "home"} {
+	// homeVideoContent 是 FongMi 官方首页推荐；homeVod/home 是 dr_py 旧名。
+	for _, name := range []string{"homeVideoContent", "homeVod", "home"} {
 		if hasFunction(e, name) {
 			return e.callVods(name)
 		}
@@ -40,10 +42,14 @@ func (e *Engine) VodHome() ([]Vod, error) {
 	return e.fetchVods(joinURL(rule.Host, path), rule)
 }
 
-// VodClasses returns categories exposed by a JS0 home action or declaration.
+// VodClasses returns categories exposed by a FongMi homeContent action or declaration.
 func (e *Engine) VodClasses() ([]Class, error) {
-	if hasFunction(e, "home") {
-		value, err := e.Call("home")
+	// homeContent(filter) 是 FongMi 官方首页分类；home 是 dr_py 旧名。
+	for _, name := range []string{"homeContent", "home"} {
+		if !hasFunction(e, name) {
+			continue
+		}
+		value, err := e.Call(name, e.vm.ToValue(false))
 		if err != nil {
 			return nil, err
 		}
@@ -78,7 +84,7 @@ func (e *Engine) VodClasses() ([]Class, error) {
 func (e *Engine) VodCategory(tid string, pg int) ([]Vod, error) {
 	for _, name := range []string{"categoryContent", "category", "categoryVod"} {
 		if hasFunction(e, name) {
-			return e.callVods(name, e.vm.ToValue(tid), e.vm.ToValue(pg), e.vm.ToValue(false), e.vm.ToValue(nil))
+			return e.callVods(name, e.vm.ToValue(tid), e.vm.ToValue(strconv.Itoa(pg)), e.vm.ToValue(false), e.vm.ToValue(nil))
 		}
 	}
 	rule, err := e.Rule()
@@ -103,7 +109,8 @@ func (e *Engine) VodSearch(wd string) ([]Vod, error) {
 	for _, name := range []string{"searchContent", "search", "searchVod"} {
 		if hasFunction(e, name) {
 			if name == "searchContent" {
-				return e.callVods(name, e.vm.ToValue(wd), e.vm.ToValue(1), e.vm.ToValue(false))
+				// searchContent(key, quick)：quick=false 表示完整搜索。
+				return e.callVods(name, e.vm.ToValue(wd), e.vm.ToValue(false))
 			}
 			return e.callVods(name, e.vm.ToValue(wd))
 		}
@@ -121,11 +128,17 @@ func (e *Engine) VodSearch(wd string) ([]Vod, error) {
 
 // VodPlay resolves a script-level playback action into a media URL.
 func (e *Engine) VodPlay(flag, id string) (string, error) {
-	for _, name := range []string{"play", "playContent", "playVod"} {
+	// playerContent(flag, id, vipFlags) 是 FongMi 官方签名（3 参），
+	// playContent/play/playVod 是 dr_py 旧名（2 参），都兼容。
+	for _, name := range []string{"playerContent", "playContent", "play", "playVod"} {
 		if !hasFunction(e, name) {
 			continue
 		}
-		value, err := e.Call(name, e.vm.ToValue(flag), e.vm.ToValue(id))
+		args := []goja.Value{e.vm.ToValue(flag), e.vm.ToValue(id)}
+		if name == "playerContent" {
+			args = append(args, e.vm.ToValue([]string{}))
+		}
+		value, err := e.Call(name, args...)
 		if err != nil {
 			return "", err
 		}
@@ -137,13 +150,20 @@ func (e *Engine) VodPlay(flag, id string) (string, error) {
 		}
 		return envelope.URL, nil
 	}
-	return "", fmt.Errorf("爬虫未定义函数 play")
+	return "", fmt.Errorf("爬虫未定义函数 playerContent")
 }
 
 func (e *Engine) VodDetail(id string) (*Detail, error) {
 	for _, name := range []string{"detailContent", "detail", "detailVod"} {
 		if hasFunction(e, name) {
-			value, err := e.Call(name, e.vm.ToValue(id))
+			// detailContent(ids) 接收数组；detail/detailVod 旧名接收单个 id。
+			var value goja.Value
+			var err error
+			if name == "detailContent" {
+				value, err = e.Call(name, e.vm.ToValue([]string{id}))
+			} else {
+				value, err = e.Call(name, e.vm.ToValue(id))
+			}
 			if err != nil {
 				return nil, err
 			}

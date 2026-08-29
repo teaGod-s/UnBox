@@ -10,9 +10,11 @@
 `.js` 爬虫站点，让 Tvbox 多线路源能浏览、搜索、详情、播放。
 
 - **M5.1（本设计主目标）**：JS 爬虫 —— goja 运行时 + 核心爬虫 API + 规则引擎 +
-  drpy 模板 + `Spider` Provider。验收：跑通一个真实 drpy2 爬虫（首页/分类/详情/播放）。
-- **M5.2**：JAR（`csp_`）—— JAR 解包取 JS，复用 M5.1 运行时。
-- **M5.3（可选）**：XPath（type=0），视需求再定。
+  FongMi js0 动作调度 + `Spider` Provider。验收：跑通一个真实 FongMi js0 `.js`
+  爬虫（首页/分类/详情/播放）。
+- **M5.2**：JAR（`csp_`）—— 实测为编译后 Android dex，本地不可行（见 §11）。
+- **M5.3（可选）**：dr_py 方言适配（`var rule` 重型方言），视需求再定；XPath
+  （type=0）占比近 0，不再单列。
 
 ## 2. 现状与差距
 
@@ -32,14 +34,18 @@ Tvbox 多线路源站点的绝大多数是 `csp_` JAR（type=3）+ xpath（type=
 
 ## 3. 关键认知
 
-`csp_` JAR 爬虫内部**本质仍是 JS 爬虫**——JAR 是一个 zip 包，内藏爬虫 JS +
-配置；`site.api` 里的 `csp_XXX` 是 JAR 内某个爬虫的名字，真实下载地址在
-配置**顶层 `jar` 字段**（当前 `Config` 模型未捕获，需在 M5.2 补 `Jar` 字段）。因此：
+**已实测修正（2026-08-29）**：`csp_` JAR **不是 JS 爬虫**。下载双龙
+`csp_DouDouGuard` 等站点的 JAR 看，是编译后的 **Android dex（APK）**：内含
+`classes.dex`（Dalvik 字节码），实现 catvod spider 协议（`homeContent`/
+`categoryContent`/`searchContent`/`detailContent`/`playerContent`），用
+`jsoup` + `okhttp3` 编译态实现，**无任何 JS 爬虫文件**。`jar` 字段是
+**每站点一个**（非顶层），伪装成 `.jpg` 地址 + `;md5;` 校验后缀。
 
-- `.js` 爬虫 = 下载 JS 直接跑（只用「运行时 + 规则引擎 + Provider」）。
-- `csp_` JAR = 解包取 JS 后再跑（额外多一层「JAR 解包」）。
+要运行 `csp_` 需执行 dex 字节码（Android ART / DexClassLoader，或 JVM +
+catvod 框架 + Android 桩），与「纯 Go + 安装即用」架构硬冲突。因此：
 
-先做 JS 运行时，JAR 只是在其上叠加解包层。
+- `.js` 爬虫（FongMi js0 `export default` / dr_py `var rule`）= 下载 JS 直接跑。
+- `csp_` JAR = 编译 dex，**本地不可行**（见 §11 M5.2）。
 
 ## 4. 架构
 
@@ -54,7 +60,7 @@ Tvbox 多线路源站点的绝大多数是 `csp_` JAR（type=3）+ xpath（type=
 | `rule.go` | `pdfh`/`pdfa`/`pd` 规则引擎（goquery 选择器 + `&&` 链 + 特殊方法） |
 | `helpers.go` | `log`、`base64`、`md5`、`cookie`、`header`、`sleep`、`env` 等 |
 | `template.go` | drpy `rule` 对象模板解释（home/category/search/detail/play） |
-| `jar.go` | JAR（zip）解包 + `csp_XXX` → JS 文件映射（**M5.2**） |
+| ~~`jar.go`~~ | （M5.2 已证不可行）`csp_` JAR 为编译 dex，本文件不再规划 |
 
 依赖新增：`github.com/dop251/goja`（纯 Go JS 引擎）、
 `github.com/PuerkitoBio/goquery`（jQuery 式选择器，封装 `x/net/html`）。
@@ -131,8 +137,8 @@ drpy2/drpyS 爬虫 JS 的产物是一个声明式 `rule` 对象（含 `host`、`
 
 - `rule.go`：选择器链、各特殊方法单测。
 - `req.go`：`httptest` 测 GET/POST/header/cookie/重定向/超时。
-- 一个**合规脱敏后的真实 drpy2 爬虫 fixture**：端到端跑 home/category/search/
-  detail/play，断言返回结构。
+- 一个**合规脱敏后的真实 FongMi js0 爬虫 fixture**：端到端跑 home/category/
+  search/detail/play，断言返回结构。
 - `spider.go`：映射到 `provider.Media`/`Item`/`Episode` 的单测。
 
 ## 11. 里程碑拆分
@@ -142,27 +148,32 @@ drpy2/drpyS 爬虫 JS 的产物是一个声明式 `rule` 对象（含 `host`、`
 1. `engine.go` + `req.go`：goja VM + `req` 注入。
 2. `rule.go`：`pdfh`/`pdfa`/`pd` 规则引擎。
 3. `helpers.go`：`log`/`base64`/`md5`/`cookie`/`header`。
-4. `template.go`：drpy `rule` 模板。
+4. `template.go`：FongMi js0 动作调度（`export default` 展开 + 动作分发）；dr_py `rule` 模板仅作降级路径。
 5. `spider.go` + 集成：classify `js` → `Spider`。
-6. **验收**：跑通真实 drpy2 爬虫（首页分类 / 列表 / 详情 / 播放地址）。
+6. **验收**：跑通真实 FongMi js0 `.js` 爬虫（首页分类 / 列表 / 详情 / 播放地址）。
 
-### M5.2 JAR（csp_）
+### M5.2 JAR（csp_）—— 已证本地不可行，搁置
 
-1. 前置 spike：下载真实 `csp_` JAR，摸清结构（zip 内 JS 位置、`csp_XXX` → 文件映射）。
-2. `Config` 模型补 `Jar` 字段 + `resolve.go` 透传。
-3. `jar.go`：解包 + 映射。
-4. classify `jar` → `SupportMaybe`。
-5. **验收**：跑通真实 `csp_` JAR 站点的爬虫。
+1. **前置 spike（已完成）**：下载真实 `csp_` JAR，结论：编译后 Android dex
+   （APK，`classes.dex`），catvod spider 协议 + `jsoup`/`okhttp3`，无 JS。
+2. **结论**：`csp_` 无法用 goja/纯 Go 运行，需 Android ART 或 JVM + catvod
+   框架；「解包取 JS」前提不成立，**搁置**。
+3. 将来如需覆盖 `csp_`，只两条路：远程爬虫代理（外挂服务跑 dex）/ 接受放弃。
 
-### M5.3（可选）XPath（type=0）
+### M5.3（可选）dr_py 方言适配（`var rule` 重型方言）
 
-视 Tvbox 多线路源里 xpath 站点的实际占比再定。
+dr_py（如 `hjdhnx/dr_py`，188 个 `.js`）是**另一套**、且重得多的方言：`var
+rule` + `muban` 模板 + `class_parse` + `lazy` + `filter` + `json:`/`js:` 内联
+规则 + `searchUrl` 用 `**` 占位符。实测采样 36/188：100% `rule`、86% `filter`、
+83% `lazy`、61% `class_parse`、33% `muban`、0% `export default`。多数在 dr_py
+**server** 源（已被 `tvbox.Drpy` 客户端覆盖），本地 `.js` 点播主流是 FongMi
+js0。视需求再定是否适配；XPath（type=0）占比近 0，不再单列。
 
 ## 12. 风险与待验证
 
 | 风险 | 应对 |
 |---|---|
-| `csp_` JAR 真实结构未明（JS 位置、`csp_XXX` 映射） | M5.2 前置 spike，用真实 JAR 验证 |
-| drpy2 `rule` 对象语义、`pdfh` 特殊方法全集未钉死 | M5.1 验收即用真实爬虫校准 |
-| goja 与爬虫 JS 兼容性（Node 专有 API） | 遇不兼容 API 加 shim 或降级支持 |
+| `csp_` JAR 结构（原「未明」） | 已实测：编译 dex 非 JS；本地不可行，M5.2 搁置 |
+| dr_py `rule` 语义（`muban`/`class_parse`/`lazy`/`filter`、`**` 占位） | 重型方言，与 M5.1 当前模型不符，留 M5.3 |
+| FongMi js0 与 goja 兼容（async/await、`export default`） | 文本剥离 + 合成测试已做；需真实 js0 验收钉死 |
 | 懒加载播放地址（playContent） | M5.1 验收钉死，Resolve 二次调用 |

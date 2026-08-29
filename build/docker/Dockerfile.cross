@@ -215,7 +215,7 @@ if [ "$OBFUSCATED" = "true" ]; then
     TAGS="${TAGS},wails_obfuscated"
 fi
 
-${COMPILER} -tags "$TAGS" -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o bin/${APP}-${GOOS}-${GOARCH}${EXT} .
+${COMPILER} -tags "$TAGS" -trimpath -buildvcs=true -ldflags="$LDFLAGS" -o bin/${APP}-${GOOS}-${GOARCH}${EXT} .
 echo "Built: bin/${APP}-${GOOS}-${GOARCH}${EXT}"
 SCRIPT
 RUN chmod +x /usr/local/bin/build.sh

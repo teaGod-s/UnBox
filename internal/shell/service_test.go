@@ -10,6 +10,7 @@ import (
 	"github.com/unbox/unbox/internal/player"
 	"github.com/unbox/unbox/internal/provider"
 	"github.com/unbox/unbox/internal/provider/live"
+	"github.com/unbox/unbox/internal/provider/tvbox"
 	"github.com/unbox/unbox/internal/store"
 )
 
@@ -286,17 +287,21 @@ func TestCollectVodSitesSpider(t *testing.T) {
 		Sites: []config.Site{
 			{Key: "cms", Name: "CMS站", Type: config.SiteTypeCMS, API: "http://x/api.php"},
 			{Key: "sp", Name: "爬虫站", Type: config.SiteTypeSpider, API: "http://x:5757"},
+			{Key: "js", Name: "JS站", Type: config.SiteTypeSpider, API: "https://example.com/spider.js"},
 			{Key: "jar", Name: "JAR站", Type: config.SiteTypeSpider, API: "csp_xxx"},
 		},
 	}}
 	vods, names, _ := collectVodSites(cfgs)
-	if len(vods) != 2 {
-		t.Fatalf("应有 2 个站点（cms + spider http），得 %d", len(vods))
+	if len(vods) != 3 {
+		t.Fatalf("应有 3 个站点（cms + spider http + js），得 %d", len(vods))
 	}
 	if names["sp"] != "爬虫站" {
 		t.Fatalf("names = %v", names)
 	}
 	if _, ok := vods["jar"]; ok {
 		t.Fatalf("csp_ JAR 站点不应被收集")
+	}
+	if _, ok := vods["js"].(*tvbox.Spider); !ok {
+		t.Fatalf("js 站点应使用 tvbox.Spider，实际类型 %T", vods["js"])
 	}
 }

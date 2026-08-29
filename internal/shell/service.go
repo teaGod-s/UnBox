@@ -504,7 +504,7 @@ func flattenLives(cfgs []*config.Config) []config.Live {
 }
 
 // collectVodSites 从多份配置收集点播站点：type=1（CMS）→ tvbox.Provider，
-// type=3 http（drpy2/drpyS 爬虫服务）→ tvbox.Drpy。
+// type=3 http（drpy2/drpyS 爬虫服务）→ tvbox.Drpy，.js → tvbox.Spider。
 func collectVodSites(cfgs []*config.Config) (map[string]provider.Provider, map[string]string, map[string]string) {
 	vods := make(map[string]provider.Provider)
 	names := make(map[string]string)
@@ -512,13 +512,25 @@ func collectVodSites(cfgs []*config.Config) (map[string]provider.Provider, map[s
 	for _, cfg := range cfgs {
 		line := cfg.SourceName
 		for _, site := range cfg.Sites {
-			switch {
-			case site.Type == config.SiteTypeCMS && site.API != "":
+			kind, _ := config.Classify(site)
+			switch kind {
+			case "cms":
+				if site.API == "" {
+					continue
+				}
 				vods[site.Key] = tvbox.New(site)
 				names[site.Key] = site.Name
 				lines[site.Key] = line
-			case site.Type == config.SiteTypeSpider && strings.HasPrefix(strings.ToLower(site.API), "http"):
+			case "http":
 				vods[site.Key] = tvbox.NewDrpy(site)
+				names[site.Key] = site.Name
+				lines[site.Key] = line
+			case "js":
+				spider, err := tvbox.NewSpider(site)
+				if err != nil {
+					continue
+				}
+				vods[site.Key] = spider
 				names[site.Key] = site.Name
 				lines[site.Key] = line
 			}

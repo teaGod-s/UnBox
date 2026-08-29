@@ -330,6 +330,10 @@ body {
 
 .vod-detail-top .vod-player .playback-view {
   flex: 0 0 auto;
+  /* 播放器自适应放大时封顶：16:9 无上限会随列宽无限拉高，
+     把下方集数列表挤出可视区。min(50vh, 480px) 保证播放器最多占半屏且不超 480px，
+     其余空间留给集数列表（内部滚动）。超出部分视频用 object-fit:contain 留黑边。 */
+  max-height: min(50vh, 480px);
 }
 
 .vod-info {

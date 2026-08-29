@@ -147,7 +147,7 @@ func (e *Engine) VodDetail(id string) (*Detail, error) {
 			if err != nil {
 				return nil, err
 			}
-			return exportDetail(e, value)
+			return exportDetail(value)
 		}
 	}
 	rule, err := e.Rule()
@@ -317,7 +317,7 @@ func parsePlay(doc *goquery.Document, rule *Rule) (string, string) {
 	return "线路", strings.Join(parts, "#")
 }
 
-func exportDetail(e *Engine, value goja.Value) (*Detail, error) {
+func exportDetail(value goja.Value) (*Detail, error) {
 	b, err := actionJSON(value)
 	if err != nil {
 		return nil, fmt.Errorf("爬虫详情返回格式错误: %w", err)

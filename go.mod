@@ -3,17 +3,17 @@ module github.com/unbox/unbox
 go 1.26.3
 
 require (
+	github.com/PuerkitoBio/goquery v1.13.0
+	github.com/dop251/goja v0.0.0-20260826204918-8f1c0696a37b
 	github.com/wailsapp/wails/v3 v3.0.0-beta.9
 	modernc.org/sqlite v1.56.0
 )
 
 require (
-	github.com/PuerkitoBio/goquery v1.13.0 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/andybalholm/cascadia v1.3.4 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/dlclark/regexp2/v2 v2.5.2 // indirect
-	github.com/dop251/goja v0.0.0-20260826204918-8f1c0696a37b // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect

@@ -15,9 +15,17 @@
   - mpv 插件：探测 + 一键安装（Linux/macOS 弹命令，Windows 下载 mpv.exe 并校验 SHA）。
   - 丢弃 mpvlib，三平台统一「Web + 外部 mpv」。
 
+- **M5.1 已完成**（分支 `feat/m5.1-js-crawler`，待合入 master）：
+  - 内嵌 goja JS 引擎跑 FongMi js0 爬虫（`export default` 模块 + `req`/`pdfh`/`pdfa`/`pd` 原语）。
+  - 方法名/签名对齐 FongMi 官方协议（`homeContent`/`categoryContent`/`searchContent`/`detailContent`/`playerContent`），
+    同时兼容 dr_py 旧名（`home`/`category`/`search`/`detail`/`play`）。
+  - `Spider` Provider 集成 `.js` 站点（classify `js` → Spider）。
+  - 实测结论：`csp_` JAR 是编译 dex（非 JS），本地不可行 → M5.2 搁置（见 spec §11）。
+
 设计文档：`docs/superpowers/specs/2026-08-17-unbox-m1-design.md`（M1）、
 `docs/superpowers/specs/2026-08-24-unbox-m2-design.md`（M2）、
-`docs/superpowers/specs/2026-08-25-unbox-m4-playback-design.md`（M4）。
+`docs/superpowers/specs/2026-08-25-unbox-m4-playback-design.md`（M4）、
+`docs/superpowers/specs/2026-08-29-unbox-m5-js-engine-design.md`（M5）。
 
 ## M4 之后新增的功能（本次会话）
 
@@ -49,10 +57,9 @@
 
 ## 已知限制 / 环境坑
 
-- **Tvbox多线路源**：绝大多数站点是 `csp_` JAR 爬虫（type=3）+ xpath（type=0），
-  需内嵌 JS 引擎执行 JAR 才能跑。当前仅支持 type=1 CMS + type=3 http（drpy），
-  故当前只显示 1 个 CMS 站；「线路」也由
-  「配置中心」`csp_Config` JAR 动态生成，静态配置里没有。→ 见「后续待办」最高优先。
+- **FongMi多线路源的 `csp_` 站点**：实测 `csp_` JAR 是编译后的 Android dex（APK，
+  `classes.dex`），不是 JS——需安卓 ART/DexClassLoader 才能跑，纯 Go 本地不可行。
+  故 FongMi多线路源的完整站点/线路仍未解锁；M5.1 只解锁了独立 `.js`（FongMi js0）站点。
 - **WSLg 中文输入法**：Windows IME 组合事件无法经 RDP→Weston→XWayland 转发到
   WebKitGTK（microsoft/wslg 已知限制），WSLg 里打不了中文；Windows 版（WebView2）正常。
 - **WSLg emoji 字体**：裸 Ubuntu 无 emoji 字体，源站点名里的 emoji 显示成方块，
@@ -63,9 +70,10 @@
 
 ## 后续待办
 
-- **JS 引擎 + JAR 爬虫**（最高优先，解锁 Tvbox 多线路源的完整站点/线路）：
-  引入 goja（纯 Go JS 引擎，符合「安装即用」），实现 TVBox 爬虫 JS 运行时
-  （`req`/`pdfh`/`pdfa`/`pd` 等），支持 `csp_` JAR（type=3）与 xpath（type=0）。
+- **M5.2 `csp_` JAR**：已实测为编译 dex，本地不可行，搁置（见 M5 spec §11）。若要解锁
+  FongMi多线路源完整站点，只两条路：远程爬虫代理 / 接受放弃。
+- **M5.3 dr_py 方言**（可选）：`var rule` 重型方言（`muban`/`class_parse`/`lazy`/
+  `filter` + `json:`/`js:` 内联规则），多数在 server 源（已被 `tvbox.Drpy` 覆盖），视需求再定。
 - **M3 本地媒体库**：未开始。
 - **Windows/macOS 实测**：打包已由 GH Actions 自动化，但 mpv 插件下载/安装、Web 播放的
   运行时行为仍需各自宿主机实测。
@@ -79,4 +87,4 @@
 - 播放路由：Web 优先（H.264 HTTP），mpv 兜底（HEVC/RTMP/本地/无 MSE）。
 - CMS JSON 协议实测要点（详见 M2 spec §2.1）：分类从 `type_id`/`type_name` 派生；
   `vod_play_from` 列表用 `,`、详情用 `$$$`；剧集 `$$$`/`#`/`$`。
-- 早期「排除 JAR 爬虫」的决定已随 Tvbox 多线路需求反转：JAR 现在是解锁 Tvbox 多线路的关键。
+- `csp_` JAR 已实测为编译 dex（非 JS），本地不可行；「解包取 JS」的方案前提不成立（见 M5 spec §3/§11）。

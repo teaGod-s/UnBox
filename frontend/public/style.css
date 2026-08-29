@@ -246,6 +246,35 @@ body {
   background: #232a45;
 }
 
+.vod-search-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid #23283a;
+}
+
+.vod-search-row .search {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.vod-back {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-left: 0.5rem;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.9rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.vod-back:hover {
+  background: #232a45;
+}
+
 .channels ul {
   flex: 1;
   margin: 0;
@@ -283,6 +312,7 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: 1rem;
+  align-items: start;
   margin-bottom: 0.75rem;
 }
 
@@ -290,7 +320,17 @@ body {
   grid-template-columns: minmax(0, 1fr) 34px;
 }
 
-.vod-detail-top .vod-player { margin: 0; }
+.vod-detail-top .vod-player {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+}
+
+.vod-detail-top .vod-player .playback-view {
+  flex: 0 0 auto;
+}
 
 .vod-info {
   display: flex;
@@ -316,7 +356,7 @@ body {
   display: block;
   width: 100%;
   max-width: 220px;
-  margin: 0 0 0.6rem auto;
+  margin: 0 auto 0.6rem;
   border-radius: 0.4rem;
   background: #161a2b;
 }
@@ -876,6 +916,8 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  flex: 0 0 auto;
+  min-height: 0;
   max-height: 16rem;
   overflow-y: auto;
 }

@@ -1192,7 +1192,7 @@ Expected: 构建成功产出 `bin/unbox`。
 
 - [ ] **Step 3: 手动验收**
 
-Run: `./bin/unbox`，导入某影视仓订阅，切换「点播」tab。
+Run: `./bin/unbox`，导入某Tvbox多线路订阅，切换「点播」tab。
 Expected：出现 4 个 CMS 站点；进入「非凡资源」→ 出分类 → 出影片列表 → 点开详情见线路与剧集 → 点剧集出画面；「直播」tab 不受影响。
 
 - [ ] **Step 4: 记录验收结果并更新 HANDOFF**

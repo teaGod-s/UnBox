@@ -7,7 +7,7 @@
 ## 1. 目标与范围
 
 在桌面端用纯 Go JS 引擎（goja）直接运行 TVBox 爬虫 JS，解锁 `csp_` JAR 与
-`.js` 爬虫站点，让影视仓类源能浏览、搜索、详情、播放。
+`.js` 爬虫站点，让 Tvbox 多线路源能浏览、搜索、详情、播放。
 
 - **M5.1（本设计主目标）**：JS 爬虫 —— goja 运行时 + 核心爬虫 API + 规则引擎 +
   drpy 模板 + `Spider` Provider。验收：跑通一个真实 drpy2 爬虫（首页/分类/详情/播放）。
@@ -23,11 +23,11 @@
 | 1 CMS | 任意 | 支持 | ✅ `tvbox.Provider` |
 | 3 spider | `http` 前缀 | 支持 | ✅ `tvbox.Drpy`（drpy 服务客户端） |
 | 3 spider | `.js` 后缀 | 支持 | ❌ 无实现（**谎报可用**） |
-| 3 spider | `csp_` 前缀 | 不支持 | ❌（影视仓站点大头） |
+| 3 spider | `csp_` 前缀 | 不支持 | ❌（Tvbox 多线路站点大头） |
 | 0 xpath | 任意 | 不支持 | ❌ |
 | 4 remote | 任意 | 待定 | 外挂进程 |
 
-影视仓（双龙）站点的绝大多数是 `csp_` JAR（type=3）+ xpath（type=0），
+Tvbox 多线路源站点的绝大多数是 `csp_` JAR（type=3）+ xpath（type=0），
 故当前只显示 1 个 CMS 站「魔都资源」。
 
 ## 3. 关键认知
@@ -156,7 +156,7 @@ drpy2/drpyS 爬虫 JS 的产物是一个声明式 `rule` 对象（含 `host`、`
 
 ### M5.3（可选）XPath（type=0）
 
-视影视仓源里 xpath 站点的实际占比再定。
+视 Tvbox 多线路源里 xpath 站点的实际占比再定。
 
 ## 12. 风险与待验证
 

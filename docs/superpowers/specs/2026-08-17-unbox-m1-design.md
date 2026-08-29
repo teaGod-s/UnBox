@@ -38,7 +38,7 @@ Wails v3 实现。它把多种来源统一到一个 `Provider` 接口之后，�
 
 ```
 apia.php?id=1              → storeHouse[] 多仓库列表（含 clan:// 协议）
-  └─ oua.php?b=某影视仓        → urls[] 聚合 55 条线路
+  └─ oua.php?b=某Tvbox多线路        → urls[] 聚合 55 条线路
        └─ apib.php?id=N    → 实际配置（`jhSPAyzn**<base64>` 混淆）
 ```
 

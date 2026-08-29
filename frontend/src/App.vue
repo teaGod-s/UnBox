@@ -561,7 +561,10 @@ onMounted(() => {
         </aside>
 
         <section class="vod-main">
-          <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button><button v-if="searching" type="button" @click="cancelSearch">取消</button><span v-if="searchProgress" class="progress">{{ searchProgress.Message }}</span></form>
+          <div class="vod-search-row">
+            <button v-if="vodDetail" class="vod-back" type="button" @click="vodDetail = null">← 返回</button>
+            <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button><button v-if="searching" type="button" @click="cancelSearch">取消</button><span v-if="searchProgress" class="progress">{{ searchProgress.Message }}</span></form>
+          </div>
           <ul v-if="!vodDetail">
             <li v-for="it in vodItems" :key="it.ID" class="channel" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
@@ -569,7 +572,6 @@ onMounted(() => {
             </li>
           </ul>
           <div v-else class="vod-detail">
-            <button @click="vodDetail = null">← 返回</button>
             <div class="vod-detail-top" :class="{ 'info-collapsed': infoCollapsed }">
               <div class="vod-player">
                 <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>

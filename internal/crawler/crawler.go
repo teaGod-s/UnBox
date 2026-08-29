@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -58,11 +59,23 @@ func (e *Engine) Load(src string) error {
 	return nil
 }
 
+// asyncFnRe / awaitRe 用词边界 + 跨空白符剥离 async/await，覆盖
+// `await\n`、`await\t`、`async  function`（多空格）等形态，且不误伤
+// `awaitable`、`asyncTask` 这类标识符。
+var (
+	asyncFnRe = regexp.MustCompile(`\basync\s+(function\b)`)
+	awaitRe   = regexp.MustCompile(`\bawait\s+`)
+)
+
 func normalizeModuleSource(src string) string {
-	// req() is synchronous in the embedded runtime. JS0 actions only await
-	// injected synchronous APIs, so normalize them to direct function returns.
-	src = strings.ReplaceAll(src, "async function", "function")
-	src = strings.ReplaceAll(src, "await ", "")
+	// req() 在嵌入运行时中是同步的，JS0 动作只 await 注入的同步 API，
+	// 因此把 async/await 归约为普通函数直接返回。仅支持 FongMi JS0 形态：
+	//   async function 声明 + 同步 req + 末尾 export default {...}。
+	// 已知局限：这是文本级剥离，字符串字面量里的 "await " 会被一并改写，
+	// 无法靠正则区分。真实爬虫若在字符串里含 "await "，需升级到 goja 原生
+	// Promise 处理（M5.1 真实爬虫验收时校准）。
+	src = asyncFnRe.ReplaceAllString(src, "$1")
+	src = awaitRe.ReplaceAllString(src, "")
 	if index := strings.LastIndex(src, "export default"); index >= 0 {
 		src = src[:index] + "var __crawler_exports = " + src[index+len("export default"):]
 	}

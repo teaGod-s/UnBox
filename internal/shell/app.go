@@ -74,13 +74,18 @@ func (s *ShellService) LoadTestStream() error {
 	})
 }
 
-// forceLinuxX11Backend 在 Linux 下把 GDK_BACKEND 设为 x11，必须在 GTK 初始化前调用。
-// GTK4 默认优先 Wayland 后端；WSLg 等同时暴露 Wayland + XWayland 的环境下，
-// Wayland 后端会让 WebKit 窗口拿不到渲染上下文（不显示），且 mpvproc 的
-// --wid 嵌入需要 X11 的 XID。X11（XWayland）后端才同时满足两者。
+// forceLinuxX11Backend 在 Linux 下设置 WSLg 里 WebKit 渲染所需的环境变量，
+// 必须在 GTK 初始化前调用。
+//   - GDK_BACKEND=x11：GTK4 默认优先 Wayland；WSLg 同时暴露 Wayland + XWayland，
+//     Wayland 后端会让 WebKit 窗口拿不到渲染上下文（不显示），且 mpvproc 的
+//     --wid 嵌入需要 X11 的 XID。X11（XWayland）后端才同时满足两者。
+//   - WEBKIT_DISABLE_DMABUF_RENDERER=1：禁用 DMA-BUF 渲染器。WSLg 虚拟 GPU 下
+//     DMA-BUF 合成会丢光标平面（鼠标指针不可见、仅 hover 高亮可见），禁用后
+//     回退到软件合成路径，光标恢复正常。
 func forceLinuxX11Backend() {
 	if runtime.GOOS == "linux" {
 		_ = os.Setenv("GDK_BACKEND", "x11")
+		_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 	}
 }
 

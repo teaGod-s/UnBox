@@ -896,21 +896,8 @@ body {
 
 /* ---- 关于：关于我们 / 免责条款 / 开源库 ---- */
 
-.about-actions a {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.45rem 0.8rem;
-  font-size: 0.9rem;
-  color: #e8eaf0;
-  background: #1b2137;
-  border: 1px solid #2c3350;
-  border-radius: 0.4rem;
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.about-actions a:hover {
-  background: #232a45;
+.about-actions {
+  flex-wrap: wrap;
 }
 
 .about-logo {

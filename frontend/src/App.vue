@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Events } from '@wailsio/runtime'
+import { Events, Browser } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import DOMPurify from 'dompurify'
@@ -107,6 +107,11 @@ function handleError(e: unknown) {
 async function openAbout() {
   try { internalVersion.value = await ShellService.InternalVersion() } catch { /* 忽略 */ }
   showAbout.value = true
+}
+
+// openURL 用系统默认浏览器打开外部链接（源码 / 捐助 / 下载新版本）。
+function openURL(url: string) {
+  Browser.OpenURL(url).catch(() => {})
 }
 
 async function refreshMpvStatus() {
@@ -641,18 +646,17 @@ onMounted(() => {
 
       <section class="src-section">
         <h3>关于</h3>
-        <div class="src-add">
-          <span>当前版本：{{ currentVersion }}</span>
-          <button @click="checkUpdate">检查更新</button>
-        </div>
-        <p v-if="updateMsg" class="home-empty">{{ updateMsg }}</p>
-        <a v-if="updateInfo?.HasUpdate && updateInfo.URL" :href="updateInfo.URL" target="_blank" rel="noopener">点击下载新版本</a>
         <div class="src-add about-actions">
+          <button @click="checkUpdate">检查更新</button>
           <button @click="openAbout">关于我们</button>
           <button @click="showDisclaimer = true">免责条款</button>
           <button @click="showOpenSource = true">开源库</button>
-          <a href="https://github.com/teaGod-s/UnBox" target="_blank" rel="noopener">源码</a>
-          <a :href="DONATE_URL" target="_blank" rel="noopener">捐助</a>
+          <button @click="openURL('https://github.com/teaGod-s/UnBox')">源码</button>
+          <button @click="openURL(DONATE_URL)">捐助</button>
+        </div>
+        <p v-if="updateMsg" class="home-empty">{{ updateMsg }}</p>
+        <div v-if="updateInfo?.HasUpdate && updateInfo.URL" class="src-add">
+          <button @click="openURL(updateInfo.URL)">点击下载新版本</button>
         </div>
       </section>
 

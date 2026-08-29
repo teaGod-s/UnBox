@@ -49,9 +49,9 @@
 
 ## 已知限制 / 环境坑
 
-- **双龙源（影视仓）**：绝大多数站点是 `csp_` JAR 爬虫（type=3）+ xpath（type=0），
+- **某影视仓源（影视仓）**：绝大多数站点是 `csp_` JAR 爬虫（type=3）+ xpath（type=0），
   需内嵌 JS 引擎执行 JAR 才能跑。当前仅支持 type=1 CMS + type=3 http（drpy），
-  故双龙只显示 1 个 CMS 站「魔都资源」；「线路」（如「双龙收集网络线路」）也由
+  故某影视仓只显示 1 个 CMS 站「魔都资源」；「线路」（如「某影视仓收集网络线路」）也由
   「配置中心」`csp_Config` JAR 动态生成，静态配置里没有。→ 见「后续待办」最高优先。
 - **WSLg 中文输入法**：Windows IME 组合事件无法经 RDP→Weston→XWayland 转发到
   WebKitGTK（microsoft/wslg 已知限制），WSLg 里打不了中文；Windows 版（WebView2）正常。
@@ -63,7 +63,7 @@
 
 ## 后续待办
 
-- **JS 引擎 + JAR 爬虫**（最高优先，解锁双龙等影视仓源的完整站点/线路）：
+- **JS 引擎 + JAR 爬虫**（最高优先，解锁某影视仓等影视仓源的完整站点/线路）：
   引入 goja（纯 Go JS 引擎，符合「安装即用」），实现 TVBox 爬虫 JS 运行时
   （`req`/`pdfh`/`pdfa`/`pd` 等），支持 `csp_` JAR（type=3）与 xpath（type=0）。
 - **M3 本地媒体库**：未开始。
@@ -79,4 +79,4 @@
 - 播放路由：Web 优先（H.264 HTTP），mpv 兜底（HEVC/RTMP/本地/无 MSE）。
 - CMS JSON 协议实测要点（详见 M2 spec §2.1）：分类从 `type_id`/`type_name` 派生；
   `vod_play_from` 列表用 `,`、详情用 `$$$`；剧集 `$$$`/`#`/`$`。
-- 早期「排除 JAR 爬虫」的决定已随双龙需求反转：JAR 现在是解锁影视仓的关键。
+- 早期「排除 JAR 爬虫」的决定已随某影视仓需求反转：JAR 现在是解锁影视仓的关键。

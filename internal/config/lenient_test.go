@@ -9,7 +9,7 @@ import (
 func TestLenientPreservesURLSlashes(t *testing.T) {
 	in := []byte(`{
 //数据接口
-"jxurl":"http://jx.84jia.com/x.php?url=",
+"jxurl":"http://example.com/x.php?url=",
 "api":"https://example.com//double"
 }`)
 	out := Lenient(in)
@@ -17,7 +17,7 @@ func TestLenientPreservesURLSlashes(t *testing.T) {
 	if err := json.Unmarshal(out, &m); err != nil {
 		t.Fatalf("清洗后仍无法解析: %v\n输出: %s", err, out)
 	}
-	if m["jxurl"] != "http://jx.84jia.com/x.php?url=" {
+	if m["jxurl"] != "http://example.com/x.php?url=" {
 		t.Errorf("URL 被破坏: %q", m["jxurl"])
 	}
 	if m["api"] != "https://example.com//double" {

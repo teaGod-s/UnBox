@@ -59,7 +59,7 @@ TVBox `type=1`（CMS）站点指向苹果CMS v10 的 JSON API，`site.api` 为�
 
 ### 2.2 站点存量
 
-用户订阅（双龙）实测 8 个 CMS 站点（type=1）。M2 用其中站点作真实测试夹具；
+用户订阅（某影视仓）实测 8 个 CMS 站点（type=1）。M2 用其中站点作真实测试夹具；
 源派系（JAR 占 84%）不影响本里程碑，CMS 站点的协议是标准的。
 
 ---
@@ -190,7 +190,7 @@ type ShellService struct {
 
 沿用 M1「真实样本定正确性」：
 
-- **Task 1 先抓 fixture**：重新拉取双龙订阅、解出 type=1 站点，抓其
+- **Task 1 先抓 fixture**：重新拉取某影视仓订阅、解出 type=1 站点，抓其
   `ac=list` / `ac=videolist` / `ac=detail` 真实响应存入 `testdata/cms/`，并记录
   该站点的 `api` 基地址。
 - `episodes.go`（分隔符拆分）为纯函数，用真实 fixture + 构造样本覆盖
@@ -206,7 +206,7 @@ type ShellService struct {
 
 - [ ] `go test ./... -count=1` 全绿；`go vet` / `gofmt` 干净。
 - [ ] `testdata/cms/` 至少一个真实站点的 3 类响应入库，解析测试通过。
-- [ ] 导入双龙订阅后，前端「点播」tab 能看到 8 个 CMS 站点。
+- [ ] 导入某影视仓订阅后，前端「点播」tab 能看到 8 个 CMS 站点。
 - [ ] 进入某站点 → 出分类 → 出影片列表 → 点开详情见剧集 → 点剧集出画面。
 - [ ] 直播功能（M1）不受影响（回归测试全绿）。
 

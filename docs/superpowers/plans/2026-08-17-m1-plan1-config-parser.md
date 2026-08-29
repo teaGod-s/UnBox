@@ -231,7 +231,7 @@ import (
 func TestLenientPreservesURLSlashes(t *testing.T) {
 	in := []byte(`{
 //数据接口
-"jxurl":"http://jx.84jia.com/x.php?url=",
+"jxurl":"http://example.com/x.php?url=",
 "api":"https://example.com//double"
 }`)
 	out := Lenient(in)
@@ -239,7 +239,7 @@ func TestLenientPreservesURLSlashes(t *testing.T) {
 	if err := json.Unmarshal(out, &m); err != nil {
 		t.Fatalf("清洗后仍无法解析: %v\n输出: %s", err, out)
 	}
-	if m["jxurl"] != "http://jx.84jia.com/x.php?url=" {
+	if m["jxurl"] != "http://example.com/x.php?url=" {
 		t.Errorf("URL 被破坏: %q", m["jxurl"])
 	}
 	if m["api"] != "https://example.com//double" {
@@ -525,7 +525,7 @@ import (
 //
 // TVBox 生态的配置不携带任何加密方式标识，因此只能按特征逐一探测：
 //   1. gzip 魔数
-//   2. "<随机前缀>**<base64>" 形式（实测见于双龙仓库）
+//   2. "<随机前缀>**<base64>" 形式（实测见于某影视仓仓库）
 //   3. 裸 base64
 //   4. 明文
 func Decode(raw []byte) ([]byte, error) {

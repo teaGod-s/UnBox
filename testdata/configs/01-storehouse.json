@@ -1,6 +1,6 @@
 {"storeHouse":[
-{"sourceName":"🌹双龙主仓库🌹","sourceUrl":"https://xn--jory77o.u.xn--dkw.xn--6qq986b3xl/nxog/oua.php?b=双龙"},
-{"sourceName":"🌹双龙备1仓库🌹","sourceUrl":"https://by1.430520.xyz/?b=双龙"},
-{"sourceName":"🌷双龙备2仓库🌷","sourceUrl":"https://by2.nxog.eu.org/?b=双龙"},
-{"sourceName":"☘️双龙多线半本包仓库☘️","sourceUrl":"clan://localhost/tvbox/dc.txt"}
+{"sourceName":"🌹示例主仓库🌹","sourceUrl":"https://example.com"},
+{"sourceName":"🌹示例备1仓库🌹","sourceUrl":"https://example.com"},
+{"sourceName":"🌷示例备2仓库🌷","sourceUrl":"https://example.com"},
+{"sourceName":"☘️示例多线半本包仓库☘️","sourceUrl":"clan://localhost/tvbox/dc.txt"}
 ]}

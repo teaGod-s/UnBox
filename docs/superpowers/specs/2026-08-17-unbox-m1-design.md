@@ -33,12 +33,12 @@ Wails v3 实现。它把多种来源统一到一个 `Provider` 接口之后，�
 
 ### 2.1 源生态实测
 
-对用户提供的订阅链接 `https://双龙.u.欧.我爱你/apia.php?id=1` 实际抓取分析。
+对用户提供的订阅链接 `https://example.com/apia.php?id=1` 实际抓取分析。
 该链接为三层嵌套结构：
 
 ```
 apia.php?id=1              → storeHouse[] 多仓库列表（含 clan:// 协议）
-  └─ oua.php?b=双龙        → urls[] 聚合 55 条线路
+  └─ oua.php?b=某影视仓        → urls[] 聚合 55 条线路
        └─ apib.php?id=N    → 实际配置（`jhSPAyzn**<base64>` 混淆）
 ```
 

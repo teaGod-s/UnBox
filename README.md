@@ -78,13 +78,13 @@ mise run build:linux    # 或 build:win / build:mac
 
 ## 🗺️ 路线图
 
-- [ ] **JS 引擎 + JAR 爬虫**（goja）—— 解锁影视仓（双龙等）`csp_` JAR 爬虫站点的完整线路与站点
+- [ ] **JS 引擎 + JAR 爬虫**（goja）—— 解锁影视仓（某影视仓等）`csp_` JAR 爬虫站点的完整线路与站点
 - [ ] **M3 本地媒体库** —— 本地视频扫描、媒体库浏览与播放
 - [ ] Windows / macOS 完整实测与收尾
 
 ## ⚠️ 已知限制
 
-- 影视仓类源（双龙等）中基于 `csp_` JAR 爬虫 / xpath 的站点暂未支持，需待 JS 引擎落地；
+- 影视仓类源（某影视仓等）中基于 `csp_` JAR 爬虫 / xpath 的站点暂未支持，需待 JS 引擎落地；
   目前仅支持 type=1 CMS 与 type=3 http（drpy）。
 - Linux 的 WebKitGTK 无 MSE，HLS / FLV / TS 会自动切到 mpv 播放。
 

@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"runtime/debug"
-	"strings"
 	"sync"
 )
 
@@ -37,36 +36,14 @@ func (b *logBuffer) String() string {
 // appLogs 是全局日志缓冲（最近 64KB）。
 var appLogs = newLogBuffer(64 << 10)
 
-// internalVersion 返回内部构建版本标识。
-// 优先用 debug.ReadBuildInfo 的 Main.Version（go install pkg@version 时为真实版本）；
-// 本地/CI 直接 go build 时 Main.Version 恒为 "(devel)"，此时改用 VCS 信息
-// （vcs.time + vcs.revision，需 -buildvcs=true）拼成伪版本
-// 形如 v0.0.0-20260812151221-8f53fd3ee25c，便于区分不同构建。
+// internalVersion 返回内部构建版本（debug.ReadBuildInfo 的 Main.Version）。
+// 构建时开启 -buildvcs（默认 auto）且处于 git 仓库内，会原生产出伪版本：
+//   无 tag → v0.0.0-<时间>-<commit>
+//   有 tag → vX.Y.(Z+1)-0.<时间>-<commit>
+// 未开 -buildvcs 或不在 git 仓库内构建时为 "(devel)"。
 func internalVersion() string {
-	if bi, ok := debug.ReadBuildInfo(); ok {
-		if v := bi.Main.Version; v != "" && v != "(devel)" {
-			return v
-		}
-		var rev, ts string
-		for _, s := range bi.Settings {
-			switch s.Key {
-			case "vcs.revision":
-				rev = s.Value
-			case "vcs.time":
-				ts = s.Value
-			}
-		}
-		if rev != "" && ts != "" {
-			// ts 形如 2026-08-12T15:12:21Z → 压缩为 20260812151221（取前 14 位）
-			compact := strings.NewReplacer("-", "", ":", "", "T", "", "Z", "").Replace(ts)
-			if len(compact) > 14 {
-				compact = compact[:14]
-			}
-			if len(rev) > 12 {
-				rev = rev[:12]
-			}
-			return "v0.0.0-" + compact + "-" + rev
-		}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" {
+		return bi.Main.Version
 	}
 	return "(devel)"
 }

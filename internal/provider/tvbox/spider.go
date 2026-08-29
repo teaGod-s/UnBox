@@ -51,6 +51,21 @@ func (p *Spider) Home(ctx context.Context) ([]provider.Section, error) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if err := p.engine.Init(); err != nil {
+		return nil, err
+	}
+	if classes, err := p.engine.VodClasses(); err == nil && len(classes) > 0 {
+		sections := make([]provider.Section, 0, len(classes))
+		for _, class := range classes {
+			if strings.TrimSpace(class.TypeID) == "" || strings.TrimSpace(class.TypeName) == "" {
+				continue
+			}
+			sections = append(sections, provider.Section{ID: class.TypeID, Title: class.TypeName})
+		}
+		if len(sections) > 0 {
+			return sections, nil
+		}
+	}
 	rule, err := p.engine.Rule()
 	if err == nil && strings.TrimSpace(rule.ClassName) != "" {
 		names := strings.Split(rule.ClassName, "&")
@@ -92,6 +107,9 @@ func (p *Spider) Browse(ctx context.Context, cat string, page int) (provider.Pag
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if err := p.engine.Init(); err != nil {
+		return provider.Page{}, err
+	}
 	items, err := p.engine.VodCategory(cat, page)
 	if err != nil {
 		return provider.Page{}, err
@@ -105,6 +123,9 @@ func (p *Spider) Search(ctx context.Context, q string) ([]provider.Item, error) 
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if err := p.engine.Init(); err != nil {
+		return nil, err
+	}
 	items, err := p.engine.VodSearch(q)
 	if err != nil {
 		return nil, err
@@ -118,6 +139,9 @@ func (p *Spider) Detail(ctx context.Context, id string) (provider.Media, error) 
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if err := p.engine.Init(); err != nil {
+		return provider.Media{}, err
+	}
 	detail, err := p.engine.VodDetail(id)
 	if err != nil {
 		return provider.Media{}, err
@@ -155,6 +179,12 @@ func (p *Spider) Resolve(ctx context.Context, epID string) (player.Stream, error
 		if !ok {
 			return player.Stream{}, fmt.Errorf("剧集不存在: %s", epID)
 		}
+	}
+	p.mu.Lock()
+	playURL, err := p.engine.VodPlay(episode.Source, episode.URL)
+	p.mu.Unlock()
+	if err == nil && strings.TrimSpace(playURL) != "" {
+		episode.URL = playURL
 	}
 	return player.Stream{URL: episode.URL, Kind: kindForURL(episode.URL), Headers: map[string]string{"Referer": originOf(p.site.API)}}, nil
 }

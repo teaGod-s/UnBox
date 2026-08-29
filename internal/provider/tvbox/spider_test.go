@@ -47,3 +47,38 @@ function detail(id){ return {vod_id:id,vod_name:"甲",vod_pic:"https://example.c
 		t.Fatalf("Resolve=%+v err=%v", stream, err)
 	}
 }
+
+func TestSpiderRunsFongMiModuleCrawler(t *testing.T) {
+	script := `
+async function init(){ return JSON.stringify({}) }
+async function home(){ return JSON.stringify({class:[{type_id:"movie",type_name:"电影"}]}) }
+async function category(tid, pg){ return JSON.stringify({list:[{vod_id:"1",vod_name:"甲",type_name:tid}]}) }
+async function search(wd){ return JSON.stringify({list:[{vod_id:"1",vod_name:wd}]}) }
+async function detail(id){ return JSON.stringify({list:[{vod_id:id,vod_name:"甲",vod_play_from:"线路一",vod_play_url:"第01集$https://example.com/episode"}]}) }
+async function play(flag, id){ return JSON.stringify({parse:0,url:id+".m3u8"}) }
+export default { init, home, category, search, detail, play }
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(script)) }))
+	defer srv.Close()
+
+	p, err := NewSpider(config.Site{Key: "js0", Type: config.SiteTypeSpider, API: srv.URL + "/spider.js"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sections, err := p.Home(context.Background())
+	if err != nil || len(sections) != 1 || sections[0].ID != "movie" {
+		t.Fatalf("Home=%+v err=%v", sections, err)
+	}
+	page, err := p.Browse(context.Background(), "movie", 1)
+	if err != nil || len(page.Items) != 1 || page.Items[0].Group != "movie" {
+		t.Fatalf("Browse=%+v err=%v", page, err)
+	}
+	media, err := p.Detail(context.Background(), "1")
+	if err != nil || len(media.Episodes) != 1 {
+		t.Fatalf("Detail=%+v err=%v", media, err)
+	}
+	stream, err := p.Resolve(context.Background(), media.Episodes[0].ID)
+	if err != nil || stream.URL != "https://example.com/episode.m3u8" {
+		t.Fatalf("Resolve=%+v err=%v", stream, err)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/dop251/goja"
@@ -14,10 +15,11 @@ import (
 
 // Engine 封装一个 goja VM，加载并运行单个爬虫脚本。
 type Engine struct {
-	vm      *goja.Runtime
-	hc      *http.Client
-	headers map[string]string
-	cookies map[string]string
+	vm          *goja.Runtime
+	hc          *http.Client
+	headers     map[string]string
+	cookies     map[string]string
+	initialized bool
 }
 
 // New 返回已安装 TVBox 爬虫原语的引擎。
@@ -39,8 +41,32 @@ func (e *Engine) Load(src string) error {
 	if e == nil || e.vm == nil {
 		return fmt.Errorf("爬虫引擎未初始化")
 	}
-	_, err := e.vm.RunString(src)
-	return err
+	_, err := e.vm.RunString(normalizeModuleSource(src))
+	if err != nil {
+		return err
+	}
+	// FongMi JS0 scripts expose actions through export default. Copy exported
+	// methods to global scope to keep one action dispatcher for all script forms.
+	value := e.vm.Get("__crawler_exports")
+	if value == nil || goja.IsUndefined(value) || goja.IsNull(value) {
+		return nil
+	}
+	object := value.ToObject(e.vm)
+	for _, key := range object.Keys() {
+		_ = e.vm.Set(key, object.Get(key))
+	}
+	return nil
+}
+
+func normalizeModuleSource(src string) string {
+	// req() is synchronous in the embedded runtime. JS0 actions only await
+	// injected synchronous APIs, so normalize them to direct function returns.
+	src = strings.ReplaceAll(src, "async function", "function")
+	src = strings.ReplaceAll(src, "await ", "")
+	if index := strings.LastIndex(src, "export default"); index >= 0 {
+		src = src[:index] + "var __crawler_exports = " + src[index+len("export default"):]
+	}
+	return src
 }
 
 // LoadFromURL 下载并执行一个 JS 爬虫文件。
@@ -78,4 +104,18 @@ func (e *Engine) Call(name string, args ...goja.Value) (goja.Value, error) {
 		return nil, fmt.Errorf("爬虫未定义函数 %s", name)
 	}
 	return fn(goja.Undefined(), args...)
+}
+
+// Init runs the optional module initialization action once.
+func (e *Engine) Init() error {
+	if e.initialized {
+		return nil
+	}
+	if hasFunction(e, "init") {
+		if _, err := e.Call("init"); err != nil {
+			return err
+		}
+	}
+	e.initialized = true
+	return nil
 }

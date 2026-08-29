@@ -40,13 +40,45 @@ func (e *Engine) VodHome() ([]Vod, error) {
 	return e.fetchVods(joinURL(rule.Host, path), rule)
 }
 
+// VodClasses returns categories exposed by a JS0 home action or declaration.
+func (e *Engine) VodClasses() ([]Class, error) {
+	if hasFunction(e, "home") {
+		value, err := e.Call("home")
+		if err != nil {
+			return nil, err
+		}
+		var envelope struct {
+			Class []Class `json:"class"`
+		}
+		if err := decodeActionValue(value, &envelope); err != nil {
+			return nil, fmt.Errorf("爬虫分类返回格式错误: %w", err)
+		}
+		return envelope.Class, nil
+	}
+	rule, err := e.Rule()
+	if err != nil {
+		return nil, err
+	}
+	names, ids := strings.Split(rule.ClassName, "&"), strings.Split(rule.ClassURL, "&")
+	classes := make([]Class, 0, len(names))
+	for i, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		id := name
+		if i < len(ids) && strings.TrimSpace(ids[i]) != "" {
+			id = strings.TrimSpace(ids[i])
+		}
+		classes = append(classes, Class{TypeID: id, TypeName: name})
+	}
+	return classes, nil
+}
+
 func (e *Engine) VodCategory(tid string, pg int) ([]Vod, error) {
 	for _, name := range []string{"categoryContent", "category", "categoryVod"} {
 		if hasFunction(e, name) {
-			if name == "categoryContent" {
-				return e.callVods(name, e.vm.ToValue(tid), e.vm.ToValue(pg), e.vm.ToValue(false), e.vm.ToValue(nil))
-			}
-			return e.callVods(name, e.vm.ToValue(tid), e.vm.ToValue(pg))
+			return e.callVods(name, e.vm.ToValue(tid), e.vm.ToValue(pg), e.vm.ToValue(false), e.vm.ToValue(nil))
 		}
 	}
 	rule, err := e.Rule()
@@ -85,6 +117,27 @@ func (e *Engine) VodSearch(wd string) ([]Vod, error) {
 		path += url.QueryEscape(wd)
 	}
 	return e.fetchVods(joinURL(rule.Host, path), rule)
+}
+
+// VodPlay resolves a script-level playback action into a media URL.
+func (e *Engine) VodPlay(flag, id string) (string, error) {
+	for _, name := range []string{"play", "playContent", "playVod"} {
+		if !hasFunction(e, name) {
+			continue
+		}
+		value, err := e.Call(name, e.vm.ToValue(flag), e.vm.ToValue(id))
+		if err != nil {
+			return "", err
+		}
+		var envelope struct {
+			URL string `json:"url"`
+		}
+		if err := decodeActionValue(value, &envelope); err != nil {
+			return "", fmt.Errorf("爬虫播放返回格式错误: %w", err)
+		}
+		return envelope.URL, nil
+	}
+	return "", fmt.Errorf("爬虫未定义函数 play")
 }
 
 func (e *Engine) VodDetail(id string) (*Detail, error) {
@@ -140,15 +193,42 @@ func (e *Engine) callVods(name string, args ...goja.Value) ([]Vod, error) {
 	if err != nil {
 		return nil, err
 	}
-	var vods []Vod
-	b, err := json.Marshal(value.Export())
+	b, err := actionJSON(value)
 	if err != nil {
-		return nil, fmt.Errorf("爬虫列表返回非数组: %w", err)
+		return nil, fmt.Errorf("爬虫列表返回格式错误: %w", err)
 	}
-	if err := json.Unmarshal(b, &vods); err != nil {
-		return nil, fmt.Errorf("爬虫列表返回非数组: %w", err)
+	if len(strings.TrimSpace(string(b))) > 0 && strings.TrimSpace(string(b))[0] == '[' {
+		var vods []Vod
+		if err := json.Unmarshal(b, &vods); err != nil {
+			return nil, fmt.Errorf("爬虫列表返回格式错误: %w", err)
+		}
+		return vods, nil
 	}
-	return vods, nil
+	var envelope struct {
+		List []Vod `json:"list"`
+	}
+	if err := json.Unmarshal(b, &envelope); err != nil {
+		return nil, fmt.Errorf("爬虫列表返回格式错误: %w", err)
+	}
+	return envelope.List, nil
+}
+
+func actionJSON(value goja.Value) ([]byte, error) {
+	if value == nil || goja.IsUndefined(value) || goja.IsNull(value) {
+		return nil, fmt.Errorf("爬虫动作返回空值")
+	}
+	if raw, ok := value.Export().(string); ok {
+		return []byte(raw), nil
+	}
+	return json.Marshal(value.Export())
+}
+
+func decodeActionValue(value goja.Value, target any) error {
+	b, err := actionJSON(value)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, target)
 }
 
 func (e *Engine) fetchVods(target string, rule *Rule) ([]Vod, error) {
@@ -238,11 +318,24 @@ func parsePlay(doc *goquery.Document, rule *Rule) (string, string) {
 }
 
 func exportDetail(e *Engine, value goja.Value) (*Detail, error) {
-	var detail Detail
-	b, err := json.Marshal(value.Export())
+	b, err := actionJSON(value)
 	if err != nil {
 		return nil, fmt.Errorf("爬虫详情返回格式错误: %w", err)
 	}
+	if len(strings.TrimSpace(string(b))) > 0 && strings.TrimSpace(string(b))[0] == '[' {
+		var details []Detail
+		if err := json.Unmarshal(b, &details); err != nil || len(details) == 0 {
+			return nil, fmt.Errorf("爬虫详情返回列表为空")
+		}
+		return &details[0], nil
+	}
+	var envelope struct {
+		List []Detail `json:"list"`
+	}
+	if err := json.Unmarshal(b, &envelope); err == nil && len(envelope.List) > 0 {
+		return &envelope.List[0], nil
+	}
+	var detail Detail
 	if err := json.Unmarshal(b, &detail); err != nil {
 		return nil, fmt.Errorf("爬虫详情返回格式错误: %w", err)
 	}

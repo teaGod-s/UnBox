@@ -67,6 +67,10 @@
 - **WSLg COPY MODE**：`/mnt/shared_memory` 未挂载会导致窗口渲染空白（标题带
   `[WARN:COPY MODE]`）；挂载 tmpfs + `wsl --shutdown` 解决。
 - **WebKitGTK 无 MSE**：Linux 上 hls.js/mpegts.js 不可用，HLS 只能走 mpv。
+- **WSLg 鼠标光标不可见**：WSLg 的 XWayland 路径有光标渲染 bug；本 app 因 mpv `--wid`
+  嵌入强制 `GDK_BACKEND=x11`（XWayland），撞上该 bug（光标消失、hover 仍高亮）。Windows/macOS 正常。
+  缓解：Windows PowerShell 里 `wsl --shutdown` 重开（重置 WSLg 图形栈）/ `wsl --update` 更新；
+  跑 app 时试 `XCURSOR_THEME=Adwaita`。切 Wayland 可修光标，但会破坏窗口显示与 mpv 嵌入，不做。
 
 ## 后续待办
 

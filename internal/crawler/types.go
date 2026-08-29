@@ -9,6 +9,12 @@ type Vod struct {
 	VodRemarks string `json:"vod_remarks"`
 }
 
+// Class 是爬虫首页返回的分类。
+type Class struct {
+	TypeID   string `json:"type_id"`
+	TypeName string `json:"type_name"`
+}
+
 // Detail 是爬虫返回的详情。
 type Detail struct {
 	Vod

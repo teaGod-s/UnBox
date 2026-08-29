@@ -46,6 +46,16 @@ Go / Node 环境，下载对应平台的安装包即可使用。
 > 💡 **关于 mpv**：mpv 是一个可选的外部播放器，仅在播放 HEVC / RTMP / 本地文件时
 > 需要。应用内置探测与一键安装引导，未装时也能正常使用 Web 播放器看 H.264 内容。
 
+## 🖥️ 系统要求
+
+| 平台 | 最低版本 | 运行依赖 |
+|------|----------|----------|
+| Windows | Windows 10 1809+ | WebView2（安装包内置引导安装）；HEVC / RTMP 需 mpv（应用内一键下载） |
+| macOS | macOS 12 Monterey+ | 系统内置 WKWebView；HEVC 需 `brew install mpv` |
+| Linux | Ubuntu 24.04+ / Debian 13+（需 GTK4 ≥ 4.14 + WebKitGTK 6.0） | `libgtk-4-1`、`libwebkitgtk-6.0-4`（`.deb` 自动声明依赖）；HEVC 需 `sudo apt install mpv` |
+
+> 运行时**无需**安装 Go / Node 等开发环境 —— 前端资源已编译进二进制，除上表外无其他运行时依赖。
+
 ## 🚀 使用
 
 1. 打开 **设置** 页，粘贴导入 **点播源**（TVBox 源 JSON 地址）或 **直播源**（M3U / TXT / 订阅地址）。

@@ -61,7 +61,7 @@ func TestReportJSONValid(t *testing.T) {
 	}
 }
 
-// TVBox 配置 JSON 本身不携带直播频道，频道只存在于每个直播源各自的 m3u
+// FongMi多线路 配置 JSON 本身不携带直播频道，频道只存在于每个直播源各自的 m3u
 // 里，需要额外发一次网络请求才能拿到。unbox-scan 不做这一步展开，因此
 // Report 里不应该出现一个必然是 0 的 LiveChannels 字段——那是在假装做过
 // 一件实际没做的事。这里锁定该字段确实不存在。

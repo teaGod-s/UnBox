@@ -30,7 +30,7 @@ import (
 )
 
 // ImportResult 是导入订阅的摘要。
-// 播放列表导入时 Channels 立即可用；TVBox 配置导入时 Sites/LiveSources 非空，
+// 播放列表导入时 Channels 立即可用；FongMi多线路 配置导入时 Sites/LiveSources 非空，
 // 直播源需前端调用 LoadLive 按需加载。
 type ImportResult struct {
 	Sites       int // 点播站点数（配置导入）
@@ -206,7 +206,7 @@ func (s *ShellService) emitSearchProgress(p Progress) {
 }
 
 // ImportSubscription 拉取并解析订阅，重建 Provider。支持两类输入：
-//   - TVBox 订阅配置（JSON，含 lives/storeHouse/urls，可能多仓）
+//   - FongMi多线路 订阅配置（JSON，含 lives/storeHouse/urls，可能多仓）
 //   - 独立 M3U/TXT 播放列表（#EXTM3U 或「名称,URL」行）
 func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 	s.emitProgress(Progress{Stage: "resolve", Message: "正在解析订阅…", Done: -1, Total: -1})
@@ -583,7 +583,7 @@ func (s *ShellService) importPlaylist(ref string, raw []byte, clearVod bool) (Im
 	return ImportResult{Channels: len(channels)}, nil
 }
 
-// resolveConfigs 解析 TVBox 配置；索引节点（storeHouse/urls 非空）交给 Resolver 展开。
+// resolveConfigs 解析 FongMi多线路 配置；索引节点（storeHouse/urls 非空）交给 Resolver 展开。
 func resolveConfigs(ctx context.Context, ref string, raw []byte) ([]*config.Config, error) {
 	cfg, err := config.Parse(raw)
 	if err != nil {

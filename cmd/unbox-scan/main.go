@@ -1,4 +1,4 @@
-// unbox-scan 体检 TVBox 订阅源，报告其中有多少站点可被 Unbox 使用。
+// unbox-scan 体检 FongMi多线路 订阅源，报告其中有多少站点可被 Unbox 使用。
 package main
 
 import (

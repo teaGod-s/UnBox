@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// okhttpUA 是 TVBox 安卓客户端使用的 User-Agent。实测发现部分源站会依据
+// okhttpUA 是 FongMi多线路 安卓客户端使用的 User-Agent。实测发现部分源站会依据
 // UA 决定返回内容甚至直接拒绝访问，因此这里伪装成同一客户端。
 const okhttpUA = "okhttp/3.12.11"
 
@@ -22,7 +22,7 @@ const fetchTimeout = 15 * time.Second
 
 // Fetcher 负责获取配置内容，支持 http(s)://、file:// 以及裸本地路径。
 //
-// clan:// 是 TVBox 安卓客户端用于引用其自身本地仓库内文件的私有协议，
+// clan:// 是 FongMi多线路 安卓客户端用于引用其自身本地仓库内文件的私有协议，
 // 在桌面端没有对应含义，无法解析，Fetch 会直接返回明确错误。
 type Fetcher struct {
 	Client *http.Client
@@ -53,7 +53,7 @@ func NewFetcherWithTimeout(d time.Duration) *Fetcher {
 func (f *Fetcher) Fetch(ctx context.Context, ref string) ([]byte, error) {
 	switch {
 	case strings.HasPrefix(ref, "clan://"):
-		return nil, fmt.Errorf("clan:// 是 TVBox 安卓客户端本地仓库协议，脱离其运行环境无法解析，不支持: %s", ref)
+		return nil, fmt.Errorf("clan:// 是 FongMi多线路 安卓客户端本地仓库协议，脱离其运行环境无法解析，不支持: %s", ref)
 
 	case strings.HasPrefix(ref, "http://"), strings.HasPrefix(ref, "https://"):
 		return f.fetchHTTP(ctx, ref)

@@ -2,7 +2,7 @@ package config
 
 import "bytes"
 
-// Lenient 将 TVBox 生态中常见的非标准 JSON 转换为标准 JSON。
+// Lenient 将 FongMi多线路 生态中常见的非标准 JSON 转换为标准 JSON。
 //
 // 处理四类问题：
 //  1. // 行注释与 /* */ 块注释

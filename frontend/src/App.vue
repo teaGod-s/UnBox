@@ -707,7 +707,7 @@ onMounted(() => {
         </div>
         <div class="about-body">
           <img class="about-logo" src="/appicon.png" alt="UnBox logo" />
-          <p>UnBox 是一个跨平台（Windows / macOS / Linux）的 TVBox 兼容桌面播放器，支持 IPTV 直播与视频点播，一个安装包装好即用。</p>
+          <p>UnBox 是一个跨平台（Windows / macOS / Linux）的 FongMi多线路 兼容桌面播放器，支持 IPTV 直播与视频点播，一个安装包装好即用。</p>
           <p class="about-ver">当前版本：{{ currentVersion }}</p>
           <p class="about-ver">内部版本：{{ internalVersion }}</p>
           <p>技术栈：Go 1.26 + Wails v3 + Vue 3 + TypeScript。完全开源，源码见「源码」按钮。</p>
@@ -723,7 +723,7 @@ onMounted(() => {
         </div>
         <div class="disclaimer">
           <p>UnBox 是一个开源的「空壳」播放器，本身不提供、不存储、不制作任何影视内容，也不内置任何内容源。</p>
-          <p>本软件仅为用户提供技术性的播放能力。用户自行导入的内容源（订阅、M3U、TVBox 源等）及其所指向的资源，均由第三方提供，与本软件无关。</p>
+          <p>本软件仅为用户提供技术性的播放能力。用户自行导入的内容源（订阅、M3U、FongMi多线路 源等）及其所指向的资源，均由第三方提供，与本软件无关。</p>
           <p>请遵守当地法律法规，仅将本软件用于访问您拥有合法权利或已获授权的内容。用户因使用本软件而产生的任何法律后果由用户自行承担，本软件及作者不承担任何责任。</p>
         </div>
       </div>

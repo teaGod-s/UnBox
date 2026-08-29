@@ -9,7 +9,7 @@ import (
 
 // Resolver 递归展开多仓/聚合结构，直到得到终端配置。
 //
-// 实测的 TVBox 订阅结构是三层 storeHouse → urls[] → 配置：一个节点可能
+// 实测的 FongMi多线路 订阅结构是三层 storeHouse → urls[] → 配置：一个节点可能
 // 是继续指向其它节点的索引（storeHouse/urls 非空），也可能是含 sites/lives
 // 的终端配置。仓库之间可以互相引用，因此展开过程必须同时具备深度上限与
 // 环检测，否则会无限递归。

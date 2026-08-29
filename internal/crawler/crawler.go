@@ -1,4 +1,4 @@
-// Package crawler 在桌面端运行 TVBox 爬虫 JS（goja 运行时）。
+// Package crawler 在桌面端运行 FongMi多线路 爬虫 JS（goja 运行时）。
 // 本包不依赖 provider/Wails，只暴露爬虫原语与返回类型。
 package crawler
 
@@ -23,7 +23,7 @@ type Engine struct {
 	initialized bool
 }
 
-// New 返回已安装 TVBox 爬虫原语的引擎。
+// New 返回已安装 FongMi多线路 爬虫原语的引擎。
 func New() *Engine {
 	e := &Engine{
 		vm:      goja.New(),

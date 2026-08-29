@@ -1,4 +1,4 @@
-// Package tvbox 实现 TVBox 点播站点的 Provider（首期仅 CMS JSON，type=1）。
+// Package tvbox 实现 FongMi多线路 点播站点的 Provider（首期仅 CMS JSON，type=1）。
 package tvbox
 
 import (

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// tvboxUA 是 TVBox 客户端惯例 UA，部分 CMS 按它鉴权。
+// tvboxUA 是 FongMi多线路 客户端惯例 UA，部分 CMS 按它鉴权。
 const tvboxUA = "okhttp/3.12.11"
 
 // cmsVideo 是 CMS 接口返回的影片条目（列表与详情共用）。

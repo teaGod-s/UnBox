@@ -6,10 +6,10 @@
 		"0000": {
 			"ProductVersion": "0.0.1",
 			"CompanyName": "RejectCode",
-			"FileDescription": "UnBox - 跨平台 FongMi多线路 兼容播放器",
+			"FileDescription": "UnBox - 跨平台 TVBox 兼容播放器",
 			"LegalCopyright": "© 2026, RejectCode",
 			"ProductName": "UnBox",
-			"Comments": "跨平台 FongMi多线路 兼容桌面播放器"
+			"Comments": "跨平台 TVBox 兼容桌面播放器"
 		}
 	}
 }

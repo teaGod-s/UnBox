@@ -78,8 +78,10 @@ func ruleForEntry(rule string, item *goquery.Selection) string {
 		return rule
 	}
 	parts := strings.Split(rule, "&&")
-	if len(parts) > 0 && strings.EqualFold(strings.TrimSpace(parts[0]), item.Nodes[0].Data) {
-		return strings.Join(parts[1:], "&&")
+	for i, part := range parts {
+		if strings.EqualFold(strings.TrimSpace(part), item.Nodes[0].Data) {
+			return strings.Join(parts[i+1:], "&&")
+		}
 	}
 	return rule
 }

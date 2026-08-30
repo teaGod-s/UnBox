@@ -28,3 +28,9 @@ GOCACHE=/tmp/unbox-m53-task4-all go test ./internal/crawler -count=1
 ```
 
 结果：受沙箱网络权限限制，既有 `TestReqInjectsAndCalls` 在 `httptest.NewServer` 监听 IPv6 回环地址时 panic（`listen tcp6 [::1]:0: operation not permitted`），与本任务代码无关。
+
+## Review 修复
+
+补充回归测试覆盖无关元素和非法段数。实现改为先按完整选择器链取得条目，再对每个条目分别执行名称和 ID 规则；同时严格拒绝非四段声明。
+
+修复后的 focused 测试需在同包新增的 `extractVods` 实现完成后运行；此前工作区的 `inline_test.go` 因依赖尚未实现而阻止 Go 编译。

@@ -12,7 +12,7 @@ import (
 // selector;name rule;id rule;id extraction regexp.
 func parseClasses(html, classParse string) ([]Class, error) {
 	parts := strings.Split(classParse, ";")
-	if len(parts) < 4 {
+	if len(parts) != 4 {
 		return nil, fmt.Errorf("class_parse 需要四段规则")
 	}
 	selectorRule, nameRule, idRule, idPattern := parts[0], parts[1], parts[2], parts[3]
@@ -25,8 +25,7 @@ func parseClasses(html, classParse string) ([]Class, error) {
 		return nil, fmt.Errorf("解析分类页面失败: %w", err)
 	}
 	entries := evalRule(doc, normalizeClassRule(selectorRule))
-	names := evalRule(doc, normalizeClassRule(nameRule))
-	ids := evalRule(doc, normalizeClassRule(idRule))
+	selection := selectClassEntries(doc, selectorRule)
 
 	var re *regexp.Regexp
 	if strings.TrimSpace(idPattern) != "" {
@@ -37,13 +36,16 @@ func parseClasses(html, classParse string) ([]Class, error) {
 	}
 	classes := make([]Class, 0, len(entries))
 	for i := range entries {
-		name := ""
-		if i < len(names) {
-			name = strings.TrimSpace(names[i])
-		}
-		id := ""
-		if i < len(ids) {
-			id = strings.TrimSpace(ids[i])
+		name, id := "", ""
+		if i < selection.Length() {
+			item := selection.Eq(i)
+			itemDoc := itemToDocument(item)
+			if values := evalRule(itemDoc, normalizeClassRule(ruleForEntry(nameRule, item))); len(values) > 0 {
+				name = strings.TrimSpace(values[0])
+			}
+			if values := evalRule(itemDoc, normalizeClassRule(ruleForEntry(idRule, item))); len(values) > 0 {
+				id = strings.TrimSpace(values[0])
+			}
 		}
 		if re != nil {
 			matches := re.FindStringSubmatch(id)
@@ -56,6 +58,30 @@ func parseClasses(html, classParse string) ([]Class, error) {
 		classes = append(classes, Class{TypeID: id, TypeName: name})
 	}
 	return classes, nil
+}
+
+func selectClassEntries(doc *goquery.Document, rule string) *goquery.Selection {
+	parts := strings.Split(rule, "&&")
+	sel := doc.Selection
+	for _, raw := range parts {
+		seg := strings.TrimSpace(raw)
+		if seg == "" || seg == "Text" || seg == "Text()" || seg == "Html" || seg == "Html()" || seg == "href" || seg == "src" || strings.HasPrefix(seg, "attr(") {
+			break
+		}
+		sel = sel.Find(seg)
+	}
+	return sel
+}
+
+func ruleForEntry(rule string, item *goquery.Selection) string {
+	if len(item.Nodes) == 0 {
+		return rule
+	}
+	parts := strings.Split(rule, "&&")
+	if len(parts) > 0 && strings.EqualFold(strings.TrimSpace(parts[0]), item.Nodes[0].Data) {
+		return strings.Join(parts[1:], "&&")
+	}
+	return rule
 }
 
 // drpy commonly omits parentheses for terminal Text/Html operators.

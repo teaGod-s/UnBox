@@ -35,6 +35,7 @@ func New() *Engine {
 	e.installReq(e.hc)
 	e.installRule()
 	e.installHelpers()
+	installMuban(e)
 	return e
 }
 

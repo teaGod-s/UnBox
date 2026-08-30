@@ -7,6 +7,7 @@ type Vod struct {
 	VodPic     string `json:"vod_pic"`
 	TypeName   string `json:"type_name"`
 	VodRemarks string `json:"vod_remarks"`
+	VodContent string `json:"vod_content"`
 }
 
 // Class 是爬虫首页返回的分类。

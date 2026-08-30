@@ -68,6 +68,15 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 
 > 运行时**无需**安装 Go / Node 等开发环境 —— 前端资源已编译进二进制，除上表外无其他运行时依赖。
 
+> 🐧 **Linux 沙箱（userns）**：WebKitGTK 用 bubblewrap 做 web 进程沙箱，依赖**非特权用户命名空间**（unprivileged userns）。Ubuntu 24.04+ 默认以 AppArmor 限制该能力，若首次运行报 `bwrap: setting up uid map: Permission denied`，请执行：
+>
+> ```bash
+> sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0   # 本次生效
+> echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/99-unbox.conf  # 持久化
+> ```
+>
+> 旧内核（Ubuntu 22.04 等）改用 `kernel.unprivileged_userns_clone=1`。应用已内置启动前探测，缺该能力时会直接打印上述指引而非崩溃。
+
 ## 🚀 使用
 
 1. 打开 **设置** 页，粘贴导入 **点播源**（TVBox 单线路 / FongMi 多线路 JSON 地址）或 **直播源**（M3U / TXT / 订阅地址）。

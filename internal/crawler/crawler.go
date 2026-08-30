@@ -31,6 +31,7 @@ func New() *Engine {
 		headers: make(map[string]string),
 		cookies: make(map[string]string),
 	}
+	e.vm.SetFieldNameMapper(goja.TagFieldNameMapper("json", true))
 	e.installReq(e.hc)
 	e.installRule()
 	e.installHelpers()

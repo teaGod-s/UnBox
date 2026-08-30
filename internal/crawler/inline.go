@@ -25,6 +25,185 @@ func (e *Engine) extractVods(kind string, html string, rule *Rule) ([]Vod, error
 	return extractHTMLVods(html, &effective), nil
 }
 
+// extractDetail interprets a dr_py detail rule. Inline json:/js: rules take
+// precedence; declaration/template selectors remain the fallback.
+func (e *Engine) extractDetail(html string, rule *Rule, id string) (*Detail, error) {
+	inline := strings.TrimSpace(e.inlineRule("二级"))
+	switch {
+	case strings.HasPrefix(inline, "json:"):
+		return extractJSONDetail(html, strings.TrimPrefix(inline, "json:"), id)
+	case strings.HasPrefix(inline, "js:"):
+		return e.extractJSDetail(html, strings.TrimPrefix(inline, "js:"), rule, id)
+	}
+
+	effective := Rule{}
+	if rule != nil {
+		effective = *rule
+	}
+	applyMubanDetail(&effective, e.readMuban())
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		return nil, fmt.Errorf("详情页面解析失败: %w", err)
+	}
+	detail := &Detail{Vod: Vod{VodID: id}}
+	detail.Vod.VodName = firstNonEmpty(firstRule(doc, effective.DetailNameSelector), firstRule(doc, effective.NameSelector))
+	detail.Vod.VodPic = firstRule(doc, effective.PicSelector)
+	detail.Vod.VodRemarks = firstRule(doc, effective.RemarksSelector)
+	detail.Vod.TypeName = firstRule(doc, effective.TypeSelector)
+	detail.VodContent = firstRule(doc, effective.DetailContentSelector)
+	detail.VodYear = firstRule(doc, effective.DetailYearSelector)
+	detail.VodArea = firstRule(doc, effective.DetailAreaSelector)
+	detail.VodPlayFrom, detail.VodPlayURL = parsePlay(doc, &effective)
+	return detail, nil
+}
+
+func extractJSONDetail(raw, rule, id string) (*Detail, error) {
+	parts := strings.Split(strings.TrimSpace(rule), ";")
+	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" {
+		return nil, fmt.Errorf("json 详情规则格式错误")
+	}
+	var document any
+	if err := json.Unmarshal([]byte(raw), &document); err != nil {
+		return nil, fmt.Errorf("json 详情响应解析失败: %w", err)
+	}
+	value, ok := navigateJSON(document, parts[0])
+	if !ok {
+		return nil, fmt.Errorf("json 详情路径不存在: %s", parts[0])
+	}
+	obj, ok := value.(map[string]any)
+	if !ok {
+		if items, isArray := value.([]any); isArray && len(items) > 0 {
+			obj, ok = items[0].(map[string]any)
+		}
+	}
+	if !ok {
+		return nil, fmt.Errorf("json 详情路径不是对象: %s", parts[0])
+	}
+	detail := &Detail{Vod: Vod{VodID: id}}
+	for _, field := range parts[1:] {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		setDetailField(detail, field, evalJSONExpr(obj, field))
+	}
+	return detail, nil
+}
+
+func (e *Engine) extractJSDetail(html, script string, rule *Rule, id string) (*Detail, error) {
+	if e == nil || e.vm == nil {
+		return nil, fmt.Errorf("爬虫引擎未初始化")
+	}
+	_ = e.vm.Set("input", html)
+	vod := e.vm.NewObject()
+	_ = vod.Set("vod_id", id)
+	_ = e.vm.Set("VOD", vod)
+	if req := e.vm.Get("req"); req != nil {
+		_ = e.vm.Set("fetch", req)
+		_ = e.vm.Set("request", req)
+	}
+	host := ""
+	if rule != nil {
+		host = rule.Host
+	}
+	_ = e.vm.Set("urljoin2", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return e.vm.ToValue("")
+		}
+		base := host
+		path := call.Argument(0).String()
+		if len(call.Arguments) > 1 {
+			base = call.Argument(0).String()
+			path = call.Argument(1).String()
+		}
+		return e.vm.ToValue(joinURL(base, path))
+	})
+	if _, err := e.vm.RunString(script); err != nil {
+		return nil, fmt.Errorf("js 详情规则执行失败: %w", err)
+	}
+	detail, err := exportDetail(e.vm.Get("VOD"))
+	if err != nil {
+		return nil, err
+	}
+	if detail.VodID == "" {
+		detail.VodID = id
+	}
+	return detail, nil
+}
+
+func setDetailField(detail *Detail, field, value string) {
+	switch canonicalDetailField(field) {
+	case "title", "name", "vod_name":
+		detail.VodName = value
+	case "id", "url", "vod_id":
+		detail.VodID = value
+	case "cover", "pic", "image", "vod_pic":
+		detail.VodPic = value
+	case "description", "desc", "content", "vod_content":
+		detail.VodContent = value
+	case "year", "vod_year":
+		detail.VodYear = value
+	case "area", "vod_area":
+		detail.VodArea = value
+	case "cat_name", "type_name", "type":
+		detail.TypeName = value
+	case "remarks", "remark", "vod_remarks":
+		detail.VodRemarks = value
+	case "play_from", "vod_play_from":
+		detail.VodPlayFrom = value
+	case "play_url", "vod_play_url":
+		detail.VodPlayURL = value
+	}
+}
+
+func canonicalDetailField(expr string) string {
+	for _, part := range strings.Split(expr, "+") {
+		for _, candidate := range strings.Split(part, "||") {
+			name := strings.ToLower(strings.TrimSpace(candidate))
+			switch name {
+			case "title", "name", "vod_name", "id", "url", "vod_id", "cover", "pic", "image", "vod_pic", "description", "desc", "content", "vod_content", "year", "vod_year", "area", "vod_area", "cat_name", "type_name", "type", "remarks", "remark", "vod_remarks", "play_from", "vod_play_from", "play_url", "vod_play_url":
+				return name
+			}
+		}
+	}
+	return strings.ToLower(strings.TrimSpace(expr))
+}
+
+func applyMubanDetail(rule *Rule, values map[string]any) {
+	if rule == nil {
+		return
+	}
+	for key, raw := range values {
+		if !strings.Contains(key, ".二级.") {
+			continue
+		}
+		field := key[strings.LastIndexByte(key, '.')+1:]
+		value := jsonScalarString(raw)
+		switch strings.ToLower(strings.TrimSpace(field)) {
+		case "title", "name":
+			rule.DetailNameSelector = value
+		case "desc", "description", "content":
+			rule.DetailContentSelector = value
+		case "pic", "cover", "image":
+			rule.PicSelector = value
+		case "year":
+			rule.DetailYearSelector = value
+		case "area":
+			rule.DetailAreaSelector = value
+		case "type", "type_name":
+			rule.TypeSelector = value
+		case "remarks", "remark":
+			rule.RemarksSelector = value
+		case "play", "play_selector":
+			rule.PlaySelector = value
+		case "play_name", "play_name_selector":
+			rule.PlayNameSelector = value
+		case "play_url", "play_url_selector":
+			rule.PlayURLSelector = value
+		}
+	}
+}
+
 func (e *Engine) inlineRule(kind string) string {
 	if e == nil || e.vm == nil {
 		return ""

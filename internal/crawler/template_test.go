@@ -1,6 +1,9 @@
 package crawler
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -86,5 +89,65 @@ export default { init, homeContent, categoryContent, searchContent, detailConten
 	playURL, err := e.VodPlay("线路", "https://example.com/play.m3u8")
 	if err != nil || playURL != "https://example.com/play.m3u8" {
 		t.Fatalf("playURL=%q err=%v", playURL, err)
+	}
+}
+
+func TestDrpyRuleEndToEnd(t *testing.T) {
+	script := ""
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/spider.js":
+			_, _ = w.Write([]byte(script))
+		case "/":
+			_, _ = w.Write([]byte(`<ul class="nav"><li><a href="/list/movie.html">电影</a></li></ul>`))
+		case "/list/-1.json", "/list/movie-1.json", "/search":
+			_, _ = w.Write([]byte(`{"data":{"movies":[{"title":"甲","cover":"p.jpg","id":"1","description":"简介","type_name":"电影"}]}}`))
+		case "/detail/1.json":
+			_, _ = w.Write([]byte(`{"data":{"title":"甲","cover":"p.jpg","content":"简介","play_from":"线路","play_url":"第一集$https://example.com/a.m3u8?token=1"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	script = fmt.Sprintf(`var rule={
+  host:%q,
+  url:"/list/fyclass-fypage.json",
+  searchUrl:"/search?wd=**&page=fypage",
+  detailUrl:"/detail/{id}.json",
+  class_parse:".nav&&li;a&&Text;a&&href;/([a-z]+).html",
+  一级:"json:data.movies;title;cover;id;description;type_name",
+  搜索:"json:data.movies;title;cover;id;description;type_name",
+  二级:"json:data;title;cover;content;play_from;play_url",
+  lazy:"js:input={url:input.url.split('?')[0]}"
+}`, srv.URL)
+
+	e := New()
+	if err := e.Load(script); err != nil {
+		t.Fatal(err)
+	}
+	classes, err := e.VodClasses()
+	if err != nil || len(classes) != 1 || classes[0].TypeID != "movie" {
+		t.Fatalf("classes=%+v err=%v", classes, err)
+	}
+	items, err := e.VodHome()
+	if err != nil || len(items) != 1 || items[0].VodName != "甲" {
+		t.Fatalf("home=%+v err=%v", items, err)
+	}
+	items, err = e.VodCategory("movie", 1)
+	if err != nil || len(items) != 1 || items[0].VodName != "甲" {
+		t.Fatalf("category=%+v err=%v", items, err)
+	}
+	items, err = e.VodSearch("甲")
+	if err != nil || len(items) != 1 || items[0].VodID != "1" {
+		t.Fatalf("search=%+v err=%v", items, err)
+	}
+	detail, err := e.VodDetail("1")
+	if err != nil || detail.VodName != "甲" || detail.VodPlayURL == "" {
+		t.Fatalf("detail=%+v err=%v", detail, err)
+	}
+	playURL, err := e.VodPlay("线路", "https://example.com/a.m3u8?token=1")
+	if err != nil || playURL != "https://example.com/a.m3u8" {
+		t.Fatalf("play=%q err=%v", playURL, err)
 	}
 }

@@ -323,9 +323,13 @@ func setVodField(vod *Vod, field, value string) {
 	switch field {
 	case "title", "name", "vod_name":
 		vod.VodName = value
+	case "titletxt", "titlealias":
+		vod.VodName = value
 	case "cover", "pic", "image", "vod_pic":
 		vod.VodPic = value
 	case "id", "url", "vod_id":
+		vod.VodID = value
+	case "cat_id", "en_id":
 		vod.VodID = value
 	case "description", "desc", "content", "vod_content":
 		vod.VodContent = value
@@ -341,7 +345,7 @@ func canonicalVodField(expr string) string {
 		for _, candidate := range strings.Split(part, "||") {
 			name := strings.ToLower(strings.TrimSpace(candidate))
 			switch name {
-			case "title", "name", "vod_name", "cover", "pic", "image", "vod_pic", "id", "url", "vod_id", "description", "desc", "content", "vod_content", "cat_name", "type_name", "type", "remarks", "remark", "vod_remarks":
+			case "title", "name", "vod_name", "titletxt", "titlealias", "cover", "pic", "image", "vod_pic", "id", "url", "vod_id", "cat_id", "en_id", "description", "desc", "content", "vod_content", "cat_name", "type_name", "type", "remarks", "remark", "vod_remarks":
 				return name
 			}
 		}

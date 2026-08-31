@@ -26,6 +26,17 @@ func TestExtractVodsJSON(t *testing.T) {
 	}
 }
 
+func TestExtractVodsJSONRealFieldAliases(t *testing.T) {
+	e := New()
+	if err := e.Load(`var rule={搜索:"json:data.rows;titleTxt||titlealias;cover;cat_name;cat_id+en_id;description"}`); err != nil {
+		t.Fatal(err)
+	}
+	vods, err := e.extractVods("搜索", `{"data":{"rows":[{"titleTxt":"甲","cover":"p.jpg","cat_name":"电视剧","cat_id":"2","en_id":"Pb1","description":"简介"}]}}`, &Rule{})
+	if err != nil || len(vods) != 1 || vods[0].VodName != "甲" || vods[0].VodID != "2Pb1" || vods[0].TypeName != "电视剧" {
+		t.Fatalf("vods=%+v err=%v", vods, err)
+	}
+}
+
 func TestExtractVodsMubanHTMLFallback(t *testing.T) {
 	e := New()
 	if err := e.Load(`muban.首图2.一级.vod = ".item"; muban.首图2.一级.name = ".name&&Text"; var rule={}`); err != nil {

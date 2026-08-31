@@ -98,10 +98,7 @@ func (e *Engine) extractJSDetail(html, script string, rule *Rule, id string) (*D
 	vod := e.vm.NewObject()
 	_ = vod.Set("vod_id", id)
 	_ = e.vm.Set("VOD", vod)
-	if req := e.vm.Get("req"); req != nil {
-		_ = e.vm.Set("fetch", req)
-		_ = e.vm.Set("request", req)
-	}
+	e.setFetchParams(rule)
 	host := ""
 	if rule != nil {
 		host = rule.Host

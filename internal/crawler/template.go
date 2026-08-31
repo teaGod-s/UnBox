@@ -232,10 +232,15 @@ func (e *Engine) VodDetail(id string) (*Detail, error) {
 		if path == "" {
 			path = id
 		}
-		path = fillURL(path, id, 1)
+		path = fillURL(path, detailCategoryID(rule), 1)
 		path = strings.ReplaceAll(path, "fyid", id)
 		path = strings.ReplaceAll(path, "{id}", url.QueryEscape(id))
-		html, fetchErr := e.fetchHTMLWithRule(joinURL(rule.Host, path), rule)
+		target := joinURL(rule.Host, path)
+		inline := strings.TrimSpace(e.inlineRule("二级"))
+		if strings.HasPrefix(inline, "js:") {
+			return e.extractJSDetail(target, strings.TrimSpace(strings.TrimPrefix(inline, "js:")), rule, id)
+		}
+		html, fetchErr := e.fetchHTMLWithRule(target, rule)
 		if fetchErr != nil {
 			return nil, fetchErr
 		}
@@ -259,6 +264,18 @@ func (e *Engine) VodDetail(id string) (*Detail, error) {
 	}
 	detail.VodPlayFrom, detail.VodPlayURL = parsePlay(doc, rule)
 	return detail, nil
+}
+
+func detailCategoryID(rule *Rule) string {
+	if rule == nil {
+		return ""
+	}
+	for _, id := range strings.Split(rule.ClassURL, "&") {
+		if id = strings.TrimSpace(id); id != "" {
+			return id
+		}
+	}
+	return ""
 }
 
 func firstNonEmpty(values ...string) string {

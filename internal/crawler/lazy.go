@@ -26,6 +26,7 @@ func (e *Engine) resolveLazy(flag, id string) (string, error) {
 	if strings.HasPrefix(script, "js:") {
 		script = strings.TrimSpace(strings.TrimPrefix(script, "js:"))
 	}
+	e.setFetchParams(rule)
 
 	input := e.vm.NewObject()
 	_ = input.Set("flag", flag)

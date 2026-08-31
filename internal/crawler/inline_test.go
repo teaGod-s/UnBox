@@ -1,6 +1,11 @@
 package crawler
 
-import "testing"
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
 
 func TestExtractVodsJSON(t *testing.T) {
 	html := `{"data":{"movies":[{"title":"","name":"乙","cover":"p.jpg","cover2":"?v=2","id":"1","description":"简介","cat_name":"电影"}]}}`
@@ -65,7 +70,7 @@ func TestExtractDetailJS(t *testing.T) {
 
 func TestDrpyHelpersAreAvailable(t *testing.T) {
 	e := New()
-	if err := e.Load(`function check(){ print("ok"); return [typeof buildUrl, typeof urlDeal, buildUrl("https://example.test/", "v"), urlDeal("https://example.test/", "p")] }`); err != nil {
+	if err := e.Load(`function check(){ print("ok"); return [typeof buildUrl, typeof urlDeal, buildUrl("https://example.test/", "v"), urlDeal("https://example.test/", "p"), buildUrl("https://example.test/v", {start:1,site:"qiyi"})] }`); err != nil {
 		t.Fatal(err)
 	}
 	v, err := e.Call("check")
@@ -76,7 +81,23 @@ func TestDrpyHelpersAreAvailable(t *testing.T) {
 	if err := e.vm.ExportTo(v, &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 4 || got[0] != "function" || got[1] != "function" || got[2] != "https://example.test/v" || got[3] != "https://example.test/p" {
+	if len(got) != 5 || got[0] != "function" || got[1] != "function" || got[2] != "https://example.test/v" || got[3] != "https://example.test/p" || got[4] != "https://example.test/v?site=qiyi&start=1" {
 		t.Fatalf("helpers=%v", got)
+	}
+}
+
+func TestExtractDetailJSFetchReturnsContent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"title":"真实响应"}`))
+	}))
+	defer srv.Close()
+
+	e := New()
+	if err := e.Load(`var rule={二级:"js:let data=JSON.parse(fetch(input,fetch_params)); VOD.vod_name=data.title"}`); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := e.extractDetail(fmt.Sprintf("%s/detail", srv.URL), &Rule{}, "42")
+	if err != nil || detail.VodName != "真实响应" {
+		t.Fatalf("detail=%+v err=%v", detail, err)
 	}
 }

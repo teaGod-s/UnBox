@@ -183,3 +183,23 @@ func TestDrpyPlayURLTemplate(t *testing.T) {
 		t.Fatalf("play=%q err=%v", got, err)
 	}
 }
+
+func TestDrpyJSDetailReceivesDetailURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/detail" || r.URL.Query().Get("cat") != "2" || r.URL.Query().Get("id") != "42" {
+			t.Errorf("url=%s", r.URL.String())
+		}
+		_, _ = w.Write([]byte(`{"title":"详情正文"}`))
+	}))
+	defer srv.Close()
+
+	e := New()
+	script := fmt.Sprintf(`var rule={host:%q,class_url:"2&1",detailUrl:"/detail?cat=fyclass&id=fyid",二级:"js:let data=JSON.parse(fetch(input,fetch_params)); VOD.vod_name=data.title"}`, srv.URL)
+	if err := e.Load(script); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := e.VodDetail("42")
+	if err != nil || detail.VodName != "详情正文" {
+		t.Fatalf("detail=%+v err=%v", detail, err)
+	}
+}

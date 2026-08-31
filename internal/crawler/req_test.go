@@ -64,6 +64,52 @@ func TestReqPostData(t *testing.T) {
 	}
 }
 
+func TestDecodeBody(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        []byte
+		contentType string
+		want        string
+	}{
+		{
+			name:        "GBK",
+			body:        []byte{0xd6, 0xd0, 0xce, 0xc4}, // 中文
+			contentType: "text/html; charset=GBK",
+			want:        "中文",
+		},
+		{
+			name:        "UTF-8 fallback",
+			body:        []byte("中文"),
+			contentType: "application/json; charset=utf-8",
+			want:        "中文",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := decodeBody(tt.body, tt.contentType); got != tt.want {
+				t.Fatalf("decodeBody() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReqDecodesGBKResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=gb2312")
+		_, _ = w.Write([]byte{0xd6, 0xd0, 0xce, 0xc4})
+	}))
+	defer srv.Close()
+
+	e := New()
+	if err := e.Load(fmt.Sprintf(`function go(){ return req(%q).content }`, srv.URL)); err != nil {
+		t.Fatal(err)
+	}
+	v, err := e.Call("go")
+	if err != nil || v.String() != "中文" {
+		t.Fatalf("req GBK content = %v, %v", v, err)
+	}
+}
+
 func TestLoadFromURL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`function loaded(){ return "ok" }`))

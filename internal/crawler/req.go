@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dop251/goja"
 	"golang.org/x/text/encoding/simplifiedchinese"
@@ -109,7 +110,8 @@ func (e *Engine) installReq(hc *http.Client) {
 
 func decodeBody(b []byte, contentType string) string {
 	contentType = strings.ToLower(contentType)
-	if !strings.Contains(contentType, "gbk") && !strings.Contains(contentType, "gb2312") {
+	gbk := strings.Contains(contentType, "gbk") || strings.Contains(contentType, "gb2312")
+	if !gbk && (contentType != "" || utf8.Valid(b)) {
 		return string(b)
 	}
 	decoded, _, err := transform.String(simplifiedchinese.GBK.NewDecoder(), string(b))

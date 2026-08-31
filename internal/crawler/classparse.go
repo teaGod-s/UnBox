@@ -68,7 +68,7 @@ func selectClassEntries(doc *goquery.Document, rule string) *goquery.Selection {
 		if seg == "" || seg == "Text" || seg == "Text()" || seg == "Html" || seg == "Html()" || seg == "href" || seg == "src" || strings.HasPrefix(seg, "attr(") {
 			break
 		}
-		sel = sel.Find(seg)
+		sel = findRuleSelection(sel, seg)
 	}
 	return sel
 }

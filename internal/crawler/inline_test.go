@@ -62,3 +62,21 @@ func TestExtractDetailJS(t *testing.T) {
 		t.Fatalf("detail=%+v", detail)
 	}
 }
+
+func TestDrpyHelpersAreAvailable(t *testing.T) {
+	e := New()
+	if err := e.Load(`function check(){ print("ok"); return [typeof buildUrl, typeof urlDeal, buildUrl("https://example.test/", "v"), urlDeal("https://example.test/", "p")] }`); err != nil {
+		t.Fatal(err)
+	}
+	v, err := e.Call("check")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	if err := e.vm.ExportTo(v, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 || got[0] != "function" || got[1] != "function" || got[2] != "https://example.test/v" || got[3] != "https://example.test/p" {
+		t.Fatalf("helpers=%v", got)
+	}
+}

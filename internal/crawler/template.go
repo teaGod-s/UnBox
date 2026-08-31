@@ -43,7 +43,7 @@ func (e *Engine) VodHome() ([]Vod, error) {
 		if rule.URL != "" {
 			path = fillURL(rule.URL, "", 1)
 		}
-		html, fetchErr := e.fetchHTML(joinURL(rule.Host, path))
+		html, fetchErr := e.fetchHTMLWithRule(joinURL(rule.Host, path), rule)
 		if fetchErr != nil {
 			return nil, fetchErr
 		}
@@ -84,7 +84,7 @@ func (e *Engine) VodClasses() ([]Class, error) {
 		if path == "" {
 			path = "/"
 		}
-		html, fetchErr := e.fetchHTML(joinURL(rule.Host, path))
+		html, fetchErr := e.fetchHTMLWithRule(joinURL(rule.Host, path), rule)
 		if fetchErr != nil {
 			return nil, fetchErr
 		}
@@ -118,7 +118,7 @@ func (e *Engine) VodCategory(tid string, pg int) ([]Vod, error) {
 	}
 	if rule.URL != "" {
 		path := fillURL(rule.URL, tid, pg)
-		html, fetchErr := e.fetchHTML(joinURL(rule.Host, path))
+		html, fetchErr := e.fetchHTMLWithRule(joinURL(rule.Host, path), rule)
 		if fetchErr != nil {
 			return nil, fetchErr
 		}
@@ -154,7 +154,7 @@ func (e *Engine) VodSearch(wd string) ([]Vod, error) {
 	}
 	if rule.SearchURL != "" && (strings.Contains(rule.SearchURL, "**") || e.inlineRule("搜索") != "") {
 		path := fillURL(rule.SearchURL, wd, 1)
-		html, fetchErr := e.fetchHTML(joinURL(rule.Host, path))
+		html, fetchErr := e.fetchHTMLWithRule(joinURL(rule.Host, path), rule)
 		if fetchErr != nil {
 			return nil, fetchErr
 		}
@@ -198,6 +198,11 @@ func (e *Engine) VodPlay(flag, id string) (string, error) {
 	if strings.TrimSpace(rule.Lazy) != "" {
 		return e.resolveLazy(flag, id)
 	}
+	if rule.PlayURL != "" {
+		path := strings.ReplaceAll(fillURL(rule.PlayURL, id, 1), "fyid", id)
+		path = strings.ReplaceAll(path, "{id}", url.QueryEscape(id))
+		return joinURL(rule.Host, path), nil
+	}
 	return id, nil
 }
 
@@ -230,7 +235,7 @@ func (e *Engine) VodDetail(id string) (*Detail, error) {
 		path = fillURL(path, id, 1)
 		path = strings.ReplaceAll(path, "fyid", id)
 		path = strings.ReplaceAll(path, "{id}", url.QueryEscape(id))
-		html, fetchErr := e.fetchHTML(joinURL(rule.Host, path))
+		html, fetchErr := e.fetchHTMLWithRule(joinURL(rule.Host, path), rule)
 		if fetchErr != nil {
 			return nil, fetchErr
 		}
@@ -345,6 +350,27 @@ func (e *Engine) fetchVods(target string, rule *Rule) ([]Vod, error) {
 
 func (e *Engine) fetchHTML(target string) (string, error) {
 	value, err := e.Call("req", e.vm.ToValue(target), e.vm.NewObject())
+	if err != nil {
+		return "", err
+	}
+	return value.ToObject(e.vm).Get("content").String(), nil
+}
+
+func (e *Engine) fetchHTMLWithRule(target string, rule *Rule) (string, error) {
+	opts := e.vm.NewObject()
+	if rule != nil {
+		if len(rule.Headers) > 0 {
+			headers := e.vm.NewObject()
+			for key, value := range rule.Headers {
+				_ = headers.Set(key, value)
+			}
+			_ = opts.Set("headers", headers)
+		}
+		if rule.Timeout > 0 {
+			_ = opts.Set("timeout", rule.Timeout)
+		}
+	}
+	value, err := e.Call("req", e.vm.ToValue(target), opts)
 	if err != nil {
 		return "", err
 	}

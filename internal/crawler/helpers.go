@@ -20,6 +20,26 @@ func (e *Engine) installHelpers() {
 		log.Print(args...)
 		return goja.Undefined()
 	})
+	_ = e.vm.Set("print", func(call goja.FunctionCall) goja.Value {
+		args := make([]any, len(call.Arguments))
+		for i, a := range call.Arguments {
+			args[i] = a.Export()
+		}
+		log.Print(args...)
+		return goja.Undefined()
+	})
+	urlHelper := func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return e.vm.ToValue("")
+		}
+		if len(call.Arguments) == 1 {
+			return e.vm.ToValue(call.Argument(0).String())
+		}
+		return e.vm.ToValue(joinURL(call.Argument(0).String(), call.Argument(1).String()))
+	}
+	_ = e.vm.Set("urljoin2", urlHelper)
+	_ = e.vm.Set("buildUrl", urlHelper)
+	_ = e.vm.Set("urlDeal", urlHelper)
 	_ = e.vm.Set("base64Encode", func(call goja.FunctionCall) goja.Value {
 		return e.vm.ToValue(base64.StdEncoding.EncodeToString([]byte(call.Argument(0).String())))
 	})

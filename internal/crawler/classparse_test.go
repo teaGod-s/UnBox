@@ -26,3 +26,11 @@ func TestParseClassesRequiresFourSegments(t *testing.T) {
 		t.Fatal("expected error for extra class_parse segment")
 	}
 }
+
+func TestParseClassesSupportsJQueryLimit(t *testing.T) {
+	html := `<ul class="nav"><li><a href="/movie.html">电影</a></li><li><a href="/tv.html">电视剧</a></li><li><a href="/anime.html">动漫</a></li></ul>`
+	cls, err := parseClasses(html, `.nav&&li:lt(2);a&&Text;a&&href;/([a-z]+)\.html`)
+	if err != nil || len(cls) != 2 || cls[1].TypeID != "tv" {
+		t.Fatalf("cls=%+v err=%v", cls, err)
+	}
+}

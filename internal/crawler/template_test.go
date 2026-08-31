@@ -151,3 +151,35 @@ func TestDrpyRuleEndToEnd(t *testing.T) {
 		t.Fatalf("play=%q err=%v", playURL, err)
 	}
 }
+
+func TestDrpyRuleAppliesHeaders(t *testing.T) {
+	seen := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Get("X-Rule")
+		_, _ = w.Write([]byte(`{"data":{"movies":[]}}`))
+	}))
+	defer srv.Close()
+
+	e := New()
+	script := fmt.Sprintf(`var rule={host:%q,url:"/list/fyclass-fypage.json",headers:{"X-Rule":"yes"},一级:"json:data.movies;title;id"}`, srv.URL)
+	if err := e.Load(script); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.VodCategory("movie", 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-seen; got != "yes" {
+		t.Fatalf("X-Rule=%q", got)
+	}
+}
+
+func TestDrpyPlayURLTemplate(t *testing.T) {
+	e := New()
+	if err := e.Load(`var rule={host:"https://example.test",playUrl:"/play/fyid.m3u8"}`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.VodPlay("线路", "movie-1")
+	if err != nil || got != "https://example.test/play/movie-1.m3u8" {
+		t.Fatalf("play=%q err=%v", got, err)
+	}
+}

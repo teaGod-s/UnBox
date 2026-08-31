@@ -83,6 +83,12 @@ func TestDecodeBody(t *testing.T) {
 			contentType: "application/json; charset=utf-8",
 			want:        "中文",
 		},
+		{
+			name:        "GBK without charset",
+			body:        []byte{0xd6, 0xd0, 0xce, 0xc4},
+			contentType: "",
+			want:        "中文",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

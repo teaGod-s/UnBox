@@ -37,6 +37,7 @@ const vodItems = ref<VodItem[]>([])
 const vodDetail = ref<VodMedia | null>(null)
 const episodePage = ref(0)
 const currentEpisodeID = ref('')
+const episodePagination = ref<HTMLElement | null>(null)
 const vodQuery = ref('')
 const vodPage = ref(0)
 const livePlaybackPlan = ref<PlaybackPlan | null>(null)
@@ -92,6 +93,12 @@ function selectEpisodePage(page: number) {
 function selectEpisodeSource(source: string) {
   activeSource.value = source
   resetEpisodePage()
+}
+
+function scrollEpisodePages(direction: number) {
+  const element = episodePagination.value
+  if (!element) return
+  element.scrollBy({ left: direction * Math.max(element.clientWidth * 0.75, 160), behavior: 'smooth' })
 }
 
 const vodSites = computed(() => sources.value.filter(s => s.Kind === 'vod'))
@@ -625,10 +632,14 @@ onMounted(() => {
                 <div v-if="(vodDetail.Sources ?? []).length" class="ep-src-tabs">
                   <button v-for="src in vodDetail.Sources" :key="src" :class="{ active: src === activeSource }" @click="selectEpisodeSource(src)">{{ src }}</button>
                 </div>
-                <div v-if="episodeRanges.length > 1" class="ep-pagination" role="navigation" aria-label="剧集分页">
-                  <button v-for="(range, index) in episodeRanges" :key="range.start" type="button"
-                          :class="{ active: index === episodePage }" :aria-current="index === episodePage ? 'page' : undefined"
-                          @click="selectEpisodePage(index)">{{ range.start }}~{{ range.end }}集</button>
+                <div v-if="episodeRanges.length > 1" class="ep-pagination-wrap" role="navigation" aria-label="剧集分页">
+                  <button class="ep-pagination-arrow" type="button" aria-label="向左滚动剧集分页" title="向左滚动" @click="scrollEpisodePages(-1)">‹</button>
+                  <div ref="episodePagination" class="ep-pagination">
+                    <button v-for="(range, index) in episodeRanges" :key="range.start" type="button"
+                            :class="{ active: index === episodePage }" :aria-current="index === episodePage ? 'page' : undefined"
+                            @click="selectEpisodePage(index)">{{ range.start }}~{{ range.end }}集</button>
+                  </div>
+                  <button class="ep-pagination-arrow" type="button" aria-label="向右滚动剧集分页" title="向右滚动" @click="scrollEpisodePages(1)">›</button>
                 </div>
                 <div class="ep-list">
                   <button v-for="ep in visibleEpisodes" :key="ep.ID" :class="{ active: ep.ID === currentEpisodeID }"

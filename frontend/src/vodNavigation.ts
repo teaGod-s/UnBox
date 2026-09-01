@@ -19,3 +19,7 @@ export function createVodSearchCache<T>(query: string, items: T[], now = Date.no
 export function isVodSearchCacheValid<T>(cache: VodSearchCache<T> | null, now = Date.now()): boolean {
   return !!cache && cache.expiresAt > now
 }
+
+export function vodSearchQueryForReturn<T>(cache: VodSearchCache<T> | null, currentQuery: string): string {
+  return cache?.query || currentQuery
+}

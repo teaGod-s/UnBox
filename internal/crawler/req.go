@@ -111,7 +111,8 @@ func (e *Engine) installReq(hc *http.Client) {
 func decodeBody(b []byte, contentType string) string {
 	contentType = strings.ToLower(contentType)
 	gbk := strings.Contains(contentType, "gbk") || strings.Contains(contentType, "gb2312")
-	if !gbk && (contentType != "" || utf8.Valid(b)) {
+	utf8Declared := strings.Contains(contentType, "utf-8") || strings.Contains(contentType, "utf8")
+	if !gbk && (utf8Declared || utf8.Valid(b)) {
 		return string(b)
 	}
 	decoded, _, err := transform.String(simplifiedchinese.GBK.NewDecoder(), string(b))

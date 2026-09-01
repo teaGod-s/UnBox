@@ -4,6 +4,7 @@ import { Events, Browser } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
+import { playbackPlanForMode } from './playbackScope'
 import DOMPurify from 'dompurify'
 
 // 爱发电赞助主页
@@ -19,7 +20,8 @@ const channels = ref<ChannelInfo[]>([])
 const favorites = ref<ChannelInfo[]>([])
 const activeGroup = ref('*')
 const query = ref('')
-const nowPlaying = ref('')
+const liveNowPlaying = ref('')
+const vodNowPlaying = ref('')
 const importSummary = ref('')
 const errMsg = ref('')
 const importProgress = ref<Progress | null>(null)
@@ -37,7 +39,8 @@ const episodePage = ref(0)
 const currentEpisodeID = ref('')
 const vodQuery = ref('')
 const vodPage = ref(0)
-const playbackPlan = ref<PlaybackPlan | null>(null)
+const livePlaybackPlan = ref<PlaybackPlan | null>(null)
+const vodPlaybackPlan = ref<PlaybackPlan | null>(null)
 const mpvReady = ref(false)
 const mpvInstallMode = ref('')
 const installMessage = ref('')
@@ -72,6 +75,10 @@ const activeEpisodes = computed(() => (vodDetail.value?.Episodes ?? []).filter(e
 const episodePages = computed(() => paginateEpisodes(activeEpisodes.value))
 const episodeRanges = computed(() => episodePageRanges(activeEpisodes.value.length))
 const visibleEpisodes = computed(() => episodePages.value[episodePage.value] ?? [])
+const activePlaybackPlan = computed(() => playbackPlanForMode(mode.value, {
+  live: livePlaybackPlan.value,
+  vod: vodPlaybackPlan.value,
+}))
 
 function resetEpisodePage() {
   episodePage.value = 0
@@ -197,7 +204,7 @@ async function resumeVod(h: VodHistoryInfo) {
       pendingSeek.value = h.Progress
       await doPlayEpisode(h.Site, h.EpID, h.EpName, resumeSource)
       episodePage.value = episodePageIndex(activeEpisodes.value, h.EpID)
-      if (h.Progress > 0 && playbackPlan.value?.Backend === 'mpv') {
+      if (h.Progress > 0 && vodPlaybackPlan.value?.Backend === 'mpv') {
         await ShellService.Seek(h.Progress)
       }
     }
@@ -278,8 +285,8 @@ async function play(c: ChannelInfo) {
   errMsg.value = ''
   currentVod.value = null
   try {
-    playbackPlan.value = await ShellService.PrepareChannel(c.ID) as unknown as PlaybackPlan
-    nowPlaying.value = c.Name
+    livePlaybackPlan.value = await ShellService.PrepareChannel(c.ID) as unknown as PlaybackPlan
+    liveNowPlaying.value = c.Name
   } catch (e) { handleError(e) }
 }
 
@@ -374,8 +381,8 @@ async function openVodDetail(item: VodItem) {
 }
 
 async function doPlayEpisode(site: string, epID: string, epName: string, source: string) {
-  playbackPlan.value = await ShellService.PrepareVod(site, epID) as unknown as PlaybackPlan
-  nowPlaying.value = epName
+  vodPlaybackPlan.value = await ShellService.PrepareVod(site, epID) as unknown as PlaybackPlan
+  vodNowPlaying.value = epName
   currentEpisodeID.value = epID
   if (vodDetail.value) {
     currentVod.value = { site, vodID: vodDetail.value.ID }
@@ -392,7 +399,11 @@ async function playEpisode(ep: EpisodeInfo) {
 }
 
 async function fallbackToMpv(id: string) {
-  try { playbackPlan.value = await ShellService.FallbackToMPV(id) as unknown as PlaybackPlan }
+  try {
+    const plan = await ShellService.FallbackToMPV(id) as unknown as PlaybackPlan
+    if (mode.value === 'live') livePlaybackPlan.value = plan
+    else if (mode.value === 'vod') vodPlaybackPlan.value = plan
+  }
   catch (e) { handleError(e) }
 }
 
@@ -438,7 +449,7 @@ async function copyLogs() {
 }
 
 async function pollMpvProgress() {
-  if (!currentVod.value || playbackPlan.value?.Backend !== 'mpv') return
+  if (!currentVod.value || activePlaybackPlan.value?.Backend !== 'mpv') return
   try {
     const pos = await ShellService.Position()
     await ShellService.UpdateVodProgress(currentVod.value.site, currentVod.value.vodID, pos, 0)
@@ -536,9 +547,9 @@ onMounted(() => {
       </aside>
 
       <aside class="player">
-        <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
-        <PlaybackView :plan="playbackPlan" :seek-to="pendingSeek" @fallback="fallbackToMpv" @progress="onProgress" />
-        <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
+        <p v-if="liveNowPlaying" class="now">正在播放：{{ liveNowPlaying }}</p>
+        <PlaybackView :plan="livePlaybackPlan" @fallback="fallbackToMpv" />
+        <div class="controls" v-if="liveNowPlaying && livePlaybackPlan?.Backend === 'mpv'">
           <button @click="pause">暂停</button>
           <button @click="resume">继续</button>
           <input type="range" min="0" max="100" @input="setVolume" />
@@ -604,9 +615,9 @@ onMounted(() => {
           <div v-else class="vod-detail">
             <div class="vod-detail-top" :class="{ 'info-collapsed': infoCollapsed }">
               <div class="vod-player">
-                <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
-                <PlaybackView :plan="playbackPlan" :seek-to="pendingSeek" @fallback="fallbackToMpv" @progress="onProgress" />
-                <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
+                <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>
+                <PlaybackView :plan="vodPlaybackPlan" :seek-to="pendingSeek" @fallback="fallbackToMpv" @progress="onProgress" />
+                <div class="controls" v-if="vodNowPlaying && vodPlaybackPlan?.Backend === 'mpv'">
                   <button @click="pause">暂停</button>
                   <button @click="resume">继续</button>
                   <input type="range" min="0" max="100" @input="setVolume" />

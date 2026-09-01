@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { Events, Browser } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
+import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
 import DOMPurify from 'dompurify'
 
 // 爱发电赞助主页
@@ -32,6 +33,8 @@ const vodCategories = ref<Section[]>([])
 const vodActiveCat = ref('')
 const vodItems = ref<VodItem[]>([])
 const vodDetail = ref<VodMedia | null>(null)
+const episodePage = ref(0)
+const currentEpisodeID = ref('')
 const vodQuery = ref('')
 const vodPage = ref(0)
 const playbackPlan = ref<PlaybackPlan | null>(null)
@@ -64,6 +67,25 @@ const showOpenSource = ref(false)
 const catsCollapsed = ref(false)
 const infoCollapsed = ref(false)
 let lastProgressSave = 0
+
+const activeEpisodes = computed(() => (vodDetail.value?.Episodes ?? []).filter(ep => ep.Source === activeSource.value))
+const episodePages = computed(() => paginateEpisodes(activeEpisodes.value))
+const episodeRanges = computed(() => episodePageRanges(activeEpisodes.value.length))
+const visibleEpisodes = computed(() => episodePages.value[episodePage.value] ?? [])
+
+function resetEpisodePage() {
+  episodePage.value = 0
+  currentEpisodeID.value = ''
+}
+
+function selectEpisodePage(page: number) {
+  episodePage.value = clampEpisodePage(page, activeEpisodes.value.length)
+}
+
+function selectEpisodeSource(source: string) {
+  activeSource.value = source
+  resetEpisodePage()
+}
 
 const vodSites = computed(() => sources.value.filter(s => s.Kind === 'vod'))
 const vodLines = computed(() => {
@@ -166,10 +188,15 @@ async function resumeVod(h: VodHistoryInfo) {
     activeSite.value = h.Site
     detailSite.value = h.Site
     vodDetail.value = await ShellService.VodDetail(h.Site, h.VodID)
-    activeSource.value = vodDetail.value.Sources?.[0] ?? ''
+    const resumeSource = h.Source && vodDetail.value.Sources?.includes(h.Source)
+      ? h.Source
+      : vodDetail.value.Sources?.[0] ?? ''
+    activeSource.value = resumeSource
+    resetEpisodePage()
     if (h.EpID) {
       pendingSeek.value = h.Progress
-      await doPlayEpisode(h.Site, h.EpID, h.EpName, h.Source)
+      await doPlayEpisode(h.Site, h.EpID, h.EpName, resumeSource)
+      episodePage.value = episodePageIndex(activeEpisodes.value, h.EpID)
       if (h.Progress > 0 && playbackPlan.value?.Backend === 'mpv') {
         await ShellService.Seek(h.Progress)
       }
@@ -342,12 +369,14 @@ async function openVodDetail(item: VodItem) {
     d.Description = DOMPurify.sanitize(d.Description)
     vodDetail.value = d
     activeSource.value = d.Sources?.[0] ?? ''
+    resetEpisodePage()
   } catch (e) { handleError(e) }
 }
 
 async function doPlayEpisode(site: string, epID: string, epName: string, source: string) {
   playbackPlan.value = await ShellService.PrepareVod(site, epID) as unknown as PlaybackPlan
   nowPlaying.value = epName
+  currentEpisodeID.value = epID
   if (vodDetail.value) {
     currentVod.value = { site, vodID: vodDetail.value.ID }
     await ShellService.RecordVodHistory(site, vodDetail.value.ID, vodDetail.value.Title, vodDetail.value.Logo, epID, epName, source)
@@ -457,6 +486,7 @@ onMounted(() => {
   })
   setInterval(pollMpvProgress, 10000)
 })
+
 </script>
 
 <template>
@@ -582,10 +612,15 @@ onMounted(() => {
                   <input type="range" min="0" max="100" @input="setVolume" />
                 </div>
                 <div v-if="(vodDetail.Sources ?? []).length" class="ep-src-tabs">
-                  <button v-for="src in vodDetail.Sources" :key="src" :class="{ active: src === activeSource }" @click="activeSource = src">{{ src }}</button>
+                  <button v-for="src in vodDetail.Sources" :key="src" :class="{ active: src === activeSource }" @click="selectEpisodeSource(src)">{{ src }}</button>
+                </div>
+                <div v-if="episodeRanges.length > 1" class="ep-pagination" role="navigation" aria-label="剧集分页">
+                  <button v-for="(range, index) in episodeRanges" :key="range.start" type="button"
+                          :class="{ active: index === episodePage }" :aria-current="index === episodePage ? 'page' : undefined"
+                          @click="selectEpisodePage(index)">{{ range.start }}~{{ range.end }}集</button>
                 </div>
                 <div class="ep-list">
-                  <button v-for="ep in (vodDetail.Episodes ?? []).filter(e => e.Source === activeSource)" :key="ep.ID"
+                  <button v-for="ep in visibleEpisodes" :key="ep.ID" :class="{ active: ep.ID === currentEpisodeID }"
                           @click="playEpisode(ep)">{{ ep.Name }}</button>
                 </div>
               </div>

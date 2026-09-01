@@ -256,8 +256,16 @@ func (e *Engine) VodDetail(id string) (*Detail, error) {
 	}
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
 	detail := &Detail{
-		Vod:        Vod{VodID: id, VodName: firstRule(doc, firstNonEmpty(rule.DetailNameSelector, rule.NameSelector)), VodPic: firstRule(doc, rule.PicSelector), VodRemarks: firstRule(doc, rule.RemarksSelector), TypeName: firstRule(doc, rule.TypeSelector)},
-		VodContent: firstRule(doc, rule.DetailContentSelector), VodYear: firstRule(doc, rule.DetailYearSelector), VodArea: firstRule(doc, rule.DetailAreaSelector),
+		Vod: Vod{
+			VodID:      id,
+			VodName:    firstRule(doc, firstNonEmpty(rule.DetailNameSelector, rule.NameSelector)),
+			VodPic:     firstRule(doc, rule.PicSelector),
+			VodRemarks: firstRule(doc, rule.RemarksSelector),
+			TypeName:   firstRule(doc, rule.TypeSelector),
+			VodContent: firstRule(doc, rule.DetailContentSelector),
+		},
+		VodYear: firstRule(doc, rule.DetailYearSelector),
+		VodArea: firstRule(doc, rule.DetailAreaSelector),
 	}
 	if detail.VodName == "" {
 		detail.VodName = id

@@ -19,7 +19,6 @@ type Class struct {
 // Detail 是爬虫返回的详情。
 type Detail struct {
 	Vod
-	VodContent  string `json:"vod_content"`
 	VodYear     string `json:"vod_year"`
 	VodArea     string `json:"vod_area"`
 	VodPlayFrom string `json:"vod_play_from"`

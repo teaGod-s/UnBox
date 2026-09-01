@@ -15,14 +15,14 @@
   - mpv 插件：探测 + 一键安装（Linux/macOS 弹命令，Windows 下载 mpv.exe 并校验 SHA）。
   - 丢弃 mpvlib，三平台统一「Web + 外部 mpv」。
 
-- **M5.1 已完成**（分支 `feat/m5.1-js-crawler`，待合入 master）：
+- **M5.1 已完成**（已合入 master）：
   - 内嵌 goja JS 引擎跑 FongMi js0 爬虫（`export default` 模块 + `req`/`pdfh`/`pdfa`/`pd` 原语）。
   - 方法名/签名对齐 FongMi 官方协议（`homeContent`/`categoryContent`/`searchContent`/`detailContent`/`playerContent`），
     同时兼容 dr_py 旧名（`home`/`category`/`search`/`detail`/`play`）。
   - `Spider` Provider 集成 `.js` 站点（classify `js` → Spider）。
   - 实测结论：`csp_` JAR 是编译 dex（非 JS），本地不可行 → M5.2 搁置（见 spec §11）。
 
-- **M5.3 dr_py 方言适配已完成**（分支 `feat/m5.3-drpy-crawler`，待合入 master）：
+- **M5.3 dr_py 方言适配已完成**（已合入 master，merge commit `4aa0367a`）：
   - 支持 `var rule` 的 `class_parse`、`url`/`searchUrl` 占位、`muban` 覆盖、`json:`/`js:` 内联规则、`lazy` 和 GBK 解码。
   - 保留 M5.1 FongMi `export default` 动作分发路径，并补齐真实 dr_py 常用的 `fetch`/`request`/`fetch_params`、`buildUrl`、`urlDeal`、`print` 语义。
   - 公开 `hjdhnx/dr_py` 的 `360影视.js` 真实验收通过：分类 4 个、一级列表 35 条、搜索“重器” 8 条、详情与播放地址解析成功。

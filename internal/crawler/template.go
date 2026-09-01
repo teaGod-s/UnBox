@@ -39,6 +39,20 @@ func (e *Engine) VodHome() ([]Vod, error) {
 	if path == "" {
 		path = "/"
 	}
+	if rule.URL != "" || e.inlineRule("推荐") != "" || e.inlineRule("一级") != "" {
+		if rule.URL != "" {
+			path = fillURL(rule.URL, "", 1)
+		}
+		html, fetchErr := e.fetchHTMLWithRule(joinURL(rule.Host, path), rule)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		kind := "推荐"
+		if e.inlineRule(kind) == "" {
+			kind = "一级"
+		}
+		return e.extractVods(kind, html, rule)
+	}
 	return e.fetchVods(joinURL(rule.Host, path), rule)
 }
 
@@ -65,6 +79,17 @@ func (e *Engine) VodClasses() ([]Class, error) {
 	if err != nil {
 		return nil, err
 	}
+	if rule.ClassParse != "" {
+		path := rule.HomeURL
+		if path == "" {
+			path = "/"
+		}
+		html, fetchErr := e.fetchHTMLWithRule(joinURL(rule.Host, path), rule)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		return parseClasses(html, rule.ClassParse)
+	}
 	names, ids := strings.Split(rule.ClassName, "&"), strings.Split(rule.ClassURL, "&")
 	classes := make([]Class, 0, len(names))
 	for i, name := range names {
@@ -90,6 +115,14 @@ func (e *Engine) VodCategory(tid string, pg int) ([]Vod, error) {
 	rule, err := e.Rule()
 	if err != nil {
 		return nil, err
+	}
+	if rule.URL != "" {
+		path := fillURL(rule.URL, tid, pg)
+		html, fetchErr := e.fetchHTMLWithRule(joinURL(rule.Host, path), rule)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		return e.extractVods("一级", html, rule)
 	}
 	paths := strings.Split(rule.ClassURL, "&")
 	path := tid
@@ -118,6 +151,14 @@ func (e *Engine) VodSearch(wd string) ([]Vod, error) {
 	rule, err := e.Rule()
 	if err != nil {
 		return nil, err
+	}
+	if rule.SearchURL != "" && (strings.Contains(rule.SearchURL, "**") || e.inlineRule("搜索") != "") {
+		path := fillURL(rule.SearchURL, wd, 1)
+		html, fetchErr := e.fetchHTMLWithRule(joinURL(rule.Host, path), rule)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		return e.extractVods("搜索", html, rule)
 	}
 	path := strings.ReplaceAll(rule.SearchURL, "{wd}", url.QueryEscape(wd))
 	if !strings.Contains(path, url.QueryEscape(wd)) {
@@ -150,7 +191,19 @@ func (e *Engine) VodPlay(flag, id string) (string, error) {
 		}
 		return envelope.URL, nil
 	}
-	return "", fmt.Errorf("爬虫未定义函数 playerContent")
+	rule, err := e.Rule()
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(rule.Lazy) != "" {
+		return e.resolveLazy(flag, id)
+	}
+	if rule.PlayURL != "" {
+		path := strings.ReplaceAll(fillURL(rule.PlayURL, id, 1), "fyid", id)
+		path = strings.ReplaceAll(path, "{id}", url.QueryEscape(id))
+		return joinURL(rule.Host, path), nil
+	}
+	return id, nil
 }
 
 func (e *Engine) VodDetail(id string) (*Detail, error) {
@@ -174,6 +227,25 @@ func (e *Engine) VodDetail(id string) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
+	if rule.DetailURL != "" || e.inlineRule("二级") != "" {
+		path := rule.DetailURL
+		if path == "" {
+			path = id
+		}
+		path = fillURL(path, detailCategoryID(rule), 1)
+		path = strings.ReplaceAll(path, "fyid", id)
+		path = strings.ReplaceAll(path, "{id}", url.QueryEscape(id))
+		target := joinURL(rule.Host, path)
+		inline := strings.TrimSpace(e.inlineRule("二级"))
+		if strings.HasPrefix(inline, "js:") {
+			return e.extractJSDetail(target, strings.TrimSpace(strings.TrimPrefix(inline, "js:")), rule, id)
+		}
+		html, fetchErr := e.fetchHTMLWithRule(target, rule)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		return e.extractDetail(html, rule, id)
+	}
 	path := strings.ReplaceAll(rule.DetailURL, "{id}", url.QueryEscape(id))
 	if !strings.Contains(path, url.QueryEscape(id)) {
 		path += url.QueryEscape(id)
@@ -184,14 +256,34 @@ func (e *Engine) VodDetail(id string) (*Detail, error) {
 	}
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(html))
 	detail := &Detail{
-		Vod:        Vod{VodID: id, VodName: firstRule(doc, firstNonEmpty(rule.DetailNameSelector, rule.NameSelector)), VodPic: firstRule(doc, rule.PicSelector), VodRemarks: firstRule(doc, rule.RemarksSelector), TypeName: firstRule(doc, rule.TypeSelector)},
-		VodContent: firstRule(doc, rule.DetailContentSelector), VodYear: firstRule(doc, rule.DetailYearSelector), VodArea: firstRule(doc, rule.DetailAreaSelector),
+		Vod: Vod{
+			VodID:      id,
+			VodName:    firstRule(doc, firstNonEmpty(rule.DetailNameSelector, rule.NameSelector)),
+			VodPic:     firstRule(doc, rule.PicSelector),
+			VodRemarks: firstRule(doc, rule.RemarksSelector),
+			TypeName:   firstRule(doc, rule.TypeSelector),
+			VodContent: firstRule(doc, rule.DetailContentSelector),
+		},
+		VodYear: firstRule(doc, rule.DetailYearSelector),
+		VodArea: firstRule(doc, rule.DetailAreaSelector),
 	}
 	if detail.VodName == "" {
 		detail.VodName = id
 	}
 	detail.VodPlayFrom, detail.VodPlayURL = parsePlay(doc, rule)
 	return detail, nil
+}
+
+func detailCategoryID(rule *Rule) string {
+	if rule == nil {
+		return ""
+	}
+	for _, id := range strings.Split(rule.ClassURL, "&") {
+		if id = strings.TrimSpace(id); id != "" {
+			return id
+		}
+	}
+	return ""
 }
 
 func firstNonEmpty(values ...string) string {
@@ -283,6 +375,27 @@ func (e *Engine) fetchVods(target string, rule *Rule) ([]Vod, error) {
 
 func (e *Engine) fetchHTML(target string) (string, error) {
 	value, err := e.Call("req", e.vm.ToValue(target), e.vm.NewObject())
+	if err != nil {
+		return "", err
+	}
+	return value.ToObject(e.vm).Get("content").String(), nil
+}
+
+func (e *Engine) fetchHTMLWithRule(target string, rule *Rule) (string, error) {
+	opts := e.vm.NewObject()
+	if rule != nil {
+		if len(rule.Headers) > 0 {
+			headers := e.vm.NewObject()
+			for key, value := range rule.Headers {
+				_ = headers.Set(key, value)
+			}
+			_ = opts.Set("headers", headers)
+		}
+		if rule.Timeout > 0 {
+			_ = opts.Set("timeout", rule.Timeout)
+		}
+	}
+	value, err := e.Call("req", e.vm.ToValue(target), opts)
 	if err != nil {
 		return "", err
 	}

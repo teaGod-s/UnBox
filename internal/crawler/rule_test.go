@@ -54,6 +54,17 @@ func TestPdfSpecialMethods(t *testing.T) {
 	}
 }
 
+func TestRuleParsesDrpyFields(t *testing.T) {
+	e := New()
+	if err := e.Load(`var rule={host:"https://example.com",url:"/list/fyclass-fypage.html",searchUrl:"/s?wd=**",class_parse:".nav&&li;a&&Text;a&&href;/(\\w+).html",lazy:"js:input=input",headers:{"User-Agent":"UA"}}`); err != nil {
+		t.Fatal(err)
+	}
+	r, err := e.Rule()
+	if err != nil || r.URL != "/list/fyclass-fypage.html" || r.ClassParse == "" || r.Lazy == "" {
+		t.Fatalf("rule=%+v err=%v", r, err)
+	}
+}
+
 func quoteJS(s string) string {
 	return `"` + jsEscape(s) + `"`
 }

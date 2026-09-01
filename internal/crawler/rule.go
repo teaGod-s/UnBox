@@ -9,6 +9,8 @@ import (
 	"github.com/dop251/goja"
 )
 
+var jqueryPositionalRe = regexp.MustCompile(`(?i)^(.*):((?:lt|eq))\((-?\d+)\)$`)
+
 // evalRule 执行一条 pdfh/pdfa 规则，返回全部命中值。
 func evalRule(doc *goquery.Document, rule string) []string {
 	selection := doc.Selection
@@ -52,7 +54,7 @@ func evalRule(doc *goquery.Document, rule string) []string {
 				values = selection.Map(func(_ int, s *goquery.Selection) string { return strings.Split(s.Text(), sep)[0] })
 				stringMode = true
 			default:
-				selection = selection.Find(seg)
+				selection = findRuleSelection(selection, seg)
 			}
 			continue
 		}
@@ -107,6 +109,33 @@ func evalRule(doc *goquery.Document, rule string) []string {
 	out := make([]string, 0, selection.Length())
 	selection.Each(func(_ int, s *goquery.Selection) { out = append(out, strings.TrimSpace(s.Text())) })
 	return out
+}
+
+// findRuleSelection adds the small jQuery selector subset commonly used by
+// dr_py. goquery's CSS parser does not understand :lt/:eq, so strip the
+// pseudo, select normally, then apply the positional operation to the result.
+func findRuleSelection(selection *goquery.Selection, selector string) *goquery.Selection {
+	if match := jqueryPositionalRe.FindStringSubmatch(selector); len(match) == 4 {
+		base := selection.Find(strings.TrimSpace(match[1]))
+		index, _ := strconv.Atoi(match[3])
+		if strings.EqualFold(match[2], "lt") {
+			if index < 0 {
+				index = 0
+			}
+			if index > base.Length() {
+				index = base.Length()
+			}
+			return base.Slice(0, index)
+		}
+		if index < 0 {
+			index = base.Length() + index
+		}
+		if index < 0 || index >= base.Length() {
+			return base.Slice(0, 0)
+		}
+		return base.Eq(index)
+	}
+	return selection.Find(selector)
 }
 
 func substring(s string, start, end int) string {

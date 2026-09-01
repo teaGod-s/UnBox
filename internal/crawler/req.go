@@ -6,8 +6,11 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dop251/goja"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
 
 const crawlerUA = "okhttp/3.12.11"
@@ -86,7 +89,7 @@ func (e *Engine) installReq(hc *http.Client) {
 			panic(e.vm.NewGoError(fmt.Errorf("req 读响应失败: %w", err)))
 		}
 		out := e.vm.NewObject()
-		_ = out.Set("content", string(b))
+		_ = out.Set("content", decodeBody(b, resp.Header.Get("Content-Type")))
 		_ = out.Set("statusCode", resp.StatusCode)
 		if resp.Request != nil && resp.Request.URL != nil {
 			_ = out.Set("finalUrl", resp.Request.URL.String())
@@ -103,6 +106,20 @@ func (e *Engine) installReq(hc *http.Client) {
 		}
 		return out
 	})
+}
+
+func decodeBody(b []byte, contentType string) string {
+	contentType = strings.ToLower(contentType)
+	gbk := strings.Contains(contentType, "gbk") || strings.Contains(contentType, "gb2312")
+	utf8Declared := strings.Contains(contentType, "utf-8") || strings.Contains(contentType, "utf8")
+	if !gbk && (utf8Declared || utf8.Valid(b)) {
+		return string(b)
+	}
+	decoded, _, err := transform.String(simplifiedchinese.GBK.NewDecoder(), string(b))
+	if err != nil {
+		return string(b)
+	}
+	return decoded
 }
 
 func valueString(value goja.Value) string {

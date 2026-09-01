@@ -18,6 +18,11 @@ import (
 
 func main() {
 	shell.InitLogging()
+	// Linux 下 WebKit 沙箱依赖非特权 userns（Ubuntu 24.04 默认禁用），缺失会裸崩。
+	// 启动最早处探测，失败给可操作指引而非等 WebKit 崩了才报错。
+	if err := shell.CheckLinuxPrerequisites(); err != nil {
+		log.Fatal(err)
+	}
 	p, err := shell.PickPlayer()
 	if err != nil {
 		log.Printf("播放器初始化失败（继续以未就绪状态启动）: %v", err)

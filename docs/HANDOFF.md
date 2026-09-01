@@ -1,4 +1,4 @@
-# Handoff — 当前状态与待办（2026-08-28）
+# Handoff — 当前状态与待办（2026-08-31）
 
 接手时先读 `AGENTS.md` 建立上下文，再读本文件了解进度与卡点。
 
@@ -21,6 +21,13 @@
     同时兼容 dr_py 旧名（`home`/`category`/`search`/`detail`/`play`）。
   - `Spider` Provider 集成 `.js` 站点（classify `js` → Spider）。
   - 实测结论：`csp_` JAR 是编译 dex（非 JS），本地不可行 → M5.2 搁置（见 spec §11）。
+
+- **M5.3 dr_py 方言适配已完成**（分支 `feat/m5.3-drpy-crawler`，待合入 master）：
+  - 支持 `var rule` 的 `class_parse`、`url`/`searchUrl` 占位、`muban` 覆盖、`json:`/`js:` 内联规则、`lazy` 和 GBK 解码。
+  - 保留 M5.1 FongMi `export default` 动作分发路径，并补齐真实 dr_py 常用的 `fetch`/`request`/`fetch_params`、`buildUrl`、`urlDeal`、`print` 语义。
+  - 公开 `hjdhnx/dr_py` 的 `360影视.js` 真实验收通过：分类 4 个、一级列表 35 条、搜索“重器” 8 条、详情与播放地址解析成功。
+  - 代码提交：`c54c23cd`、`30b3cd27`、`69119f3e`、`83bf134d`、`641a0df6`、`94922abd`、`386a7774`、`1be06d6b`、`24c6315b`；真实源校准为 `6274940e`、`77c5d8f3`、`832903e0`。
+  - 最终验证：`go test ./... -count=1`、`go vet ./...`、`CGO_ENABLED=1 go build ./...`、`gofmt` 全部通过。
 
 设计文档：`docs/superpowers/specs/2026-08-17-unbox-m1-design.md`（M1）、
 `docs/superpowers/specs/2026-08-24-unbox-m2-design.md`（M2）、
@@ -71,13 +78,19 @@
   嵌入强制 `GDK_BACKEND=x11`（XWayland），撞上该 bug（光标消失、hover 仍高亮）。Windows/macOS 正常。
   缓解：Windows PowerShell 里 `wsl --shutdown` 重开（重置 WSLg 图形栈）/ `wsl --update` 更新；
   跑 app 时试 `XCURSOR_THEME=Adwaita`。切 Wayland 可修光标，但会破坏窗口显示与 mpv 嵌入，不做。
+- **Linux 沙箱（userns）崩溃**：WebKitGTK 的 web 进程沙箱依赖 bwrap（bubblewrap）+ 非特权
+  userns。Ubuntu 24.04+ 默认 `kernel.apparmor_restrict_unprivileged_userns=1` 拦掉 bwrap 建 userns，
+  表现为 `bwrap: setting up uid map: Permission denied` → `dbus-proxy` 失败 → webview 在 cgo 里
+  SIGTRAP 裸崩。已在 `cmd/unbox/main.go` 启动最早处加 `CheckLinuxPrerequisites()`：探测
+  `unshare -U true`，失败打印可操作指引（sysctl 放开 userns）并干净退出，而非裸崩。
+  探针依赖 `unshare`（util-linux，几乎总在）；缺失则放行不误拦。用户侧修复见 README「系统要求」。
 
 ## 后续待办
 
 - **M5.2 `csp_` JAR**：已实测为编译 dex，本地不可行，搁置（见 M5 spec §11）。若要解锁
   FongMi多线路源完整站点，只两条路：远程爬虫代理 / 接受放弃。
-- **M5.3 dr_py 方言**（可选）：`var rule` 重型方言（`muban`/`class_parse`/`lazy`/
-  `filter` + `json:`/`js:` 内联规则），多数在 server 源（已被 `tvbox.Drpy` 覆盖），视需求再定。
+- **M5.3 dr_py 方言**：核心适配已完成。后续仅保留非本次范围的 `filter`/`filter_url`/`filter_def`、crypto-js
+  和 `muban` 全量模板对齐。
 - **M3 本地媒体库**：未开始。
 - **Windows/macOS 实测**：打包已由 GH Actions 自动化，但 mpv 插件下载/安装、Web 播放的
   运行时行为仍需各自宿主机实测。

@@ -5,6 +5,7 @@ import { ShellService, type SourceInfo, type Section, type VodItem, type Episode
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
 import { playbackPlanForMode } from './playbackScope'
+import { createVodSearchCache, isVodSearchCacheValid, vodBackTarget, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
 
 // 爱发电赞助主页
@@ -33,8 +34,12 @@ const activeSource = ref('')
 const detailSite = ref('')
 const vodCategories = ref<Section[]>([])
 const vodActiveCat = ref('')
-const vodItems = ref<VodItem[]>([])
+const vodListItems = ref<VodItem[]>([])
+const vodSearchItems = ref<VodItem[]>([])
 const vodDetail = ref<VodMedia | null>(null)
+const vodView = ref<VodView>('list')
+const vodDetailOrigin = ref<VodDetailOrigin>('list')
+const vodSearchCache = ref<VodSearchCache<VodItem> | null>(null)
 const episodePage = ref(0)
 const currentEpisodeID = ref('')
 const episodePagination = ref<HTMLElement | null>(null)
@@ -76,6 +81,7 @@ const activeEpisodes = computed(() => (vodDetail.value?.Episodes ?? []).filter(e
 const episodePages = computed(() => paginateEpisodes(activeEpisodes.value))
 const episodeRanges = computed(() => episodePageRanges(activeEpisodes.value.length))
 const visibleEpisodes = computed(() => episodePages.value[episodePage.value] ?? [])
+const visibleVodItems = computed(() => vodView.value === 'search' ? vodSearchItems.value : vodListItems.value)
 const activePlaybackPlan = computed(() => playbackPlanForMode(mode.value, {
   live: livePlaybackPlan.value,
   vod: vodPlaybackPlan.value,
@@ -175,7 +181,11 @@ async function recheckMpv() {
 
 async function switchMode(m: 'home' | 'vod' | 'live' | 'settings') {
   mode.value = m
-  if (m === 'vod') await refreshVod()
+  if (m === 'vod') {
+    vodView.value = 'list'
+    vodDetail.value = null
+    await refreshVod()
+  }
   else if (m === 'live') await reloadGroups()
   else if (m === 'home') await refreshHome()
   else if (m === 'settings') { await reloadSourceHistory(); await refreshLogs(); await loadSearchThreads() }
@@ -201,6 +211,8 @@ async function resumeVod(h: VodHistoryInfo) {
     await loadSources()
     activeSite.value = h.Site
     detailSite.value = h.Site
+    vodDetailOrigin.value = 'home'
+    vodView.value = 'detail'
     vodDetail.value = await ShellService.VodDetail(h.Site, h.VodID)
     const resumeSource = h.Source && vodDetail.value.Sources?.includes(h.Source)
       ? h.Source
@@ -335,6 +347,7 @@ async function selectLine(line: string) {
   if (first) {
     activeSite.value = first.ID
     vodDetail.value = null
+    vodView.value = 'list'
     vodPage.value = 0
     await reloadVodCategories()
     await ShellService.SetLastVodSite(first.ID)
@@ -344,6 +357,7 @@ async function selectLine(line: string) {
 async function selectSite(id: string) {
   activeSite.value = id
   vodDetail.value = null
+  vodView.value = 'list'
   vodPage.value = 0
   await reloadVodCategories()
   await ShellService.SetLastVodSite(id)
@@ -356,21 +370,31 @@ async function reloadVodCategories() {
 }
 
 async function reloadVodList() {
-  vodItems.value = (await ShellService.VodList(activeSite.value, vodActiveCat.value, vodPage.value)) ?? []
+  vodListItems.value = (await ShellService.VodList(activeSite.value, vodActiveCat.value, vodPage.value)) ?? []
 }
 
 async function vodSearch() {
-  if (!vodQuery.value) { await reloadVodList(); return }
+  const searchQuery = vodQuery.value.trim()
+  if (!searchQuery) {
+    vodView.value = 'list'
+    vodDetail.value = null
+    await reloadVodList()
+    return
+  }
   searching.value = true
-  vodItems.value = []
+  vodView.value = 'search'
+  vodDetail.value = null
+  vodSearchItems.value = []
   try {
-    vodItems.value = (await ShellService.VodSearchAll(vodQuery.value)) ?? []
+    vodSearchItems.value = (await ShellService.VodSearchAll(searchQuery)) ?? []
+    vodSearchCache.value = createVodSearchCache(searchQuery, vodSearchItems.value)
   } catch (e) { handleError(e) }
   finally { searching.value = false }
 }
 
 async function cancelSearch() {
   searching.value = false
+  vodSearchCache.value = createVodSearchCache(vodQuery.value.trim(), vodSearchItems.value)
   try { await ShellService.CancelSearch() } catch { /* 忽略 */ }
 }
 
@@ -378,13 +402,41 @@ async function openVodDetail(item: VodItem) {
   errMsg.value = ''
   try {
     const site = item.Site || activeSite.value
+    vodDetailOrigin.value = vodView.value === 'search' ? 'search' : 'list'
     detailSite.value = site
     const d = await ShellService.VodDetail(site, item.ID)
     d.Description = DOMPurify.sanitize(d.Description)
     vodDetail.value = d
+    vodView.value = 'detail'
     activeSource.value = d.Sources?.[0] ?? ''
     resetEpisodePage()
   } catch (e) { handleError(e) }
+}
+
+async function backFromVodDetail() {
+  const target = vodBackTarget(vodDetailOrigin.value)
+  vodDetail.value = null
+  if (target === 'home') {
+    mode.value = 'home'
+    await refreshHome()
+    return
+  }
+  if (target === 'search') {
+    if (isVodSearchCacheValid(vodSearchCache.value)) {
+      vodQuery.value = vodSearchCache.value!.query
+      vodSearchItems.value = [...vodSearchCache.value!.items]
+      vodView.value = 'search'
+      return
+    }
+    await vodSearch()
+    return
+  }
+  vodView.value = 'list'
+}
+
+function backFromVodSearch() {
+  vodView.value = 'list'
+  vodDetail.value = null
 }
 
 async function doPlayEpisode(site: string, epID: string, epName: string, source: string) {
@@ -499,7 +551,8 @@ onMounted(() => {
   Events.On('search:progress', (ev: any) => { searchProgress.value = ev.data as Progress })
   Events.On('search:result', (ev: any) => {
     if (searching.value) {
-      vodItems.value = [...vodItems.value, ...(ev.data as VodItem[])]
+      vodSearchItems.value = [...vodSearchItems.value, ...(ev.data as VodItem[])]
+      vodSearchCache.value = createVodSearchCache(vodQuery.value.trim(), vodSearchItems.value)
     }
   })
   setInterval(pollMpvProgress, 10000)
@@ -587,7 +640,7 @@ onMounted(() => {
 
     <!-- 点播 -->
     <section v-if="mode === 'vod'" class="vod">
-      <div class="vod-toolbar">
+      <div v-if="vodView === 'list'" class="vod-toolbar">
         <select v-if="vodLines.length > 1" v-model="activeLine" @change="selectLine(activeLine)">
           <option v-for="l in vodLines" :key="l" :value="l">{{ l || '默认线路' }}</option>
         </select>
@@ -596,8 +649,14 @@ onMounted(() => {
         </select>
       </div>
 
-      <div class="vod-layout" :class="{ 'cats-collapsed': catsCollapsed }">
-        <aside class="vod-cats" :class="{ collapsed: catsCollapsed }">
+      <div class="vod-search-row">
+        <button v-if="vodView === 'detail'" class="vod-back" type="button" @click="backFromVodDetail">← 返回</button>
+        <button v-else-if="vodView === 'search'" class="vod-back" type="button" @click="backFromVodSearch">← 点播列表</button>
+        <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button><button v-if="searching" type="button" @click="cancelSearch">取消</button><span v-if="searchProgress" class="progress">{{ searchProgress.Message }}</span></form>
+      </div>
+
+      <div class="vod-layout" :class="{ 'cats-collapsed': catsCollapsed, 'without-cats': vodView !== 'list' }">
+        <aside v-if="vodView === 'list'" class="vod-cats" :class="{ collapsed: catsCollapsed }">
           <div class="cats-head">
             <span class="cats-title">类目</span>
             <button class="cats-toggle" :title="catsCollapsed ? '展开类目' : '收起类目'" @click="catsCollapsed = !catsCollapsed">{{ catsCollapsed ? '»' : '«' }}</button>
@@ -609,17 +668,13 @@ onMounted(() => {
         </aside>
 
         <section class="vod-main">
-          <div class="vod-search-row">
-            <button v-if="vodDetail" class="vod-back" type="button" @click="vodDetail = null">← 返回</button>
-            <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button><button v-if="searching" type="button" @click="cancelSearch">取消</button><span v-if="searchProgress" class="progress">{{ searchProgress.Message }}</span></form>
-          </div>
-          <ul v-if="!vodDetail">
-            <li v-for="it in vodItems" :key="it.ID" class="channel" @click="openVodDetail(it)">
+          <ul v-if="vodView !== 'detail'">
+            <li v-for="it in visibleVodItems" :key="it.ID + (it.Site || '')" class="channel" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
               <span class="name">{{ it.Title }}</span><span class="group">{{ vodItemSub(it) }}</span>
             </li>
           </ul>
-          <div v-else class="vod-detail">
+          <div v-else-if="vodView === 'detail' && vodDetail" class="vod-detail">
             <div class="vod-detail-top" :class="{ 'info-collapsed': infoCollapsed }">
               <div class="vod-player">
                 <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>

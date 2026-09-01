@@ -249,7 +249,12 @@ body {
 .vod-search-row {
   display: flex;
   align-items: stretch;
-  border-bottom: 1px solid #23283a;
+  flex: 0 0 auto;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+  background: #0a0d1a;
+  border: 1px solid #23283a;
+  border-radius: 0.5rem;
 }
 
 .vod-search-row .search {
@@ -782,11 +787,16 @@ body {
   grid-template-columns: 34px minmax(0, 1fr);
 }
 
+.vod-layout.without-cats {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .vod-cats {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
   padding: 0.6rem;
+  min-height: 0;
   overflow-y: auto;
   background: #0a0d1a;
   border: 1px solid #23283a;
@@ -1022,6 +1032,12 @@ body {
   color: #ffffff;
   background: #2c3350;
   border-color: #7ee787;
+}
+
+@media (max-width: 900px) {
+  .ep-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 /* ---- 关于：关于我们 / 免责条款 / 开源库 ---- */

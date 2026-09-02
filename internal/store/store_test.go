@@ -5,6 +5,71 @@ import (
 	"testing"
 )
 
+func TestVodSearchHistoryCRUD(t *testing.T) {
+	s := openTemp(t)
+	defer s.Close()
+	if err := s.RecordVodSearch("  斗罗  "); err != nil {
+		t.Fatalf("RecordVodSearch: %v", err)
+	}
+	if err := s.RecordVodSearch("庆余年"); err != nil {
+		t.Fatalf("RecordVodSearch: %v", err)
+	}
+	if err := s.RecordVodSearch("斗罗"); err != nil {
+		t.Fatalf("RecordVodSearch duplicate: %v", err)
+	}
+	history, err := s.ListVodSearchHistory(10)
+	if err != nil || len(history) != 2 || history[0] != "斗罗" {
+		t.Fatalf("ListVodSearchHistory = %#v, %v", history, err)
+	}
+	if err := s.DeleteVodSearch("斗罗"); err != nil {
+		t.Fatalf("DeleteVodSearch: %v", err)
+	}
+	history, err = s.ListVodSearchHistory(10)
+	if err != nil || len(history) != 1 || history[0] != "庆余年" {
+		t.Fatalf("history after delete = %#v, %v", history, err)
+	}
+}
+
+func TestVodFavoriteCRUD(t *testing.T) {
+	s := openTemp(t)
+	defer s.Close()
+	if err := s.AddVodFavorite("site-a", "vod-1", "影片一", "logo", "电影"); err != nil {
+		t.Fatalf("AddVodFavorite: %v", err)
+	}
+	if err := s.AddVodFavorite("site-a", "vod-1", "影片一（更新）", "logo2", "电视剧"); err != nil {
+		t.Fatalf("AddVodFavorite duplicate: %v", err)
+	}
+	ok, err := s.IsVodFavorite("site-a", "vod-1")
+	if err != nil || !ok {
+		t.Fatalf("IsVodFavorite = %v, %v", ok, err)
+	}
+	favs, err := s.ListVodFavorites()
+	if err != nil || len(favs) != 1 || favs[0].Title != "影片一（更新）" {
+		t.Fatalf("ListVodFavorites = %#v, %v", favs, err)
+	}
+	if err := s.RemoveVodFavorite("site-a", "vod-1"); err != nil {
+		t.Fatalf("RemoveVodFavorite: %v", err)
+	}
+	if ok, _ := s.IsVodFavorite("site-a", "vod-1"); ok {
+		t.Fatal("favorite still exists after removal")
+	}
+}
+
+func TestDeleteVodHistory(t *testing.T) {
+	s := openTemp(t)
+	defer s.Close()
+	if err := s.UpsertVodHistory(VodHistory{Site: "site-a", VodID: "vod-1", VodTitle: "影片一"}); err != nil {
+		t.Fatalf("UpsertVodHistory: %v", err)
+	}
+	if err := s.DeleteVodHistory("site-a", "vod-1"); err != nil {
+		t.Fatalf("DeleteVodHistory: %v", err)
+	}
+	history, err := s.ListVodHistory(10)
+	if err != nil || len(history) != 0 {
+		t.Fatalf("history after delete = %#v, %v", history, err)
+	}
+}
+
 func TestFavoriteCRUD(t *testing.T) {
 	s := openTemp(t)
 	defer s.Close()

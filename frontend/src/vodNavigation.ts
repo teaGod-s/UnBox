@@ -27,3 +27,17 @@ export function isVodSearchCacheValid<T>(cache: VodSearchCache<T> | null, now = 
 export function vodSearchQueryForReturn<T>(cache: VodSearchCache<T> | null, currentQuery: string): string {
   return cache?.query || currentQuery
 }
+
+export function upsertVodSearchHistory(history: string[], query: string, limit = 30): string[] {
+  const value = query.trim()
+  if (!value) return history.slice(0, limit)
+  return [value, ...history.filter(item => item !== value)].slice(0, limit)
+}
+
+export function removeVodSearchHistory(history: string[], query: string): string[] {
+  return history.filter(item => item !== query)
+}
+
+export function removeVodHistory<T extends { Site: string; VodID: string }>(items: T[], site: string, vodID: string): T[] {
+  return items.filter(item => item.Site !== site || item.VodID !== vodID)
+}

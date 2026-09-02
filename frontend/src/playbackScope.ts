@@ -1,4 +1,4 @@
-export type PlaybackMode = 'home' | 'vod' | 'live' | 'settings'
+export type PlaybackMode = 'home' | 'vod' | 'live' | 'search' | 'favorites' | 'settings'
 export type PlaybackScope = 'live' | 'vod'
 
 export interface ActivePlaybackSession {

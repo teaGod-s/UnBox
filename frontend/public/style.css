@@ -212,6 +212,7 @@ body {
 
 .search {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   padding: 0.5rem;
   border-bottom: 1px solid #23283a;
@@ -278,6 +279,87 @@ body {
 
 .vod-back:hover {
   background: #232a45;
+}
+
+.search-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.search-page-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  min-width: 0;
+  background: #0a0d1a;
+  border: 1px solid #23283a;
+  border-radius: 0.5rem;
+}
+
+.search-page-head .search {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.search-history {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  min-height: 2rem;
+}
+
+.search-history-title {
+  color: #8b91a3;
+  font-size: 0.85rem;
+}
+
+.search-history-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.1rem 0.2rem 0.1rem 0.45rem;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.35rem;
+}
+
+.search-history-item > button:first-child {
+  padding: 0.2rem 0.15rem;
+  color: #c6cbd9;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.search-history-item > button:first-child:hover {
+  color: #ffffff;
+}
+
+.row-delete {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.45rem;
+  color: #ff7b72;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+
+.row-delete:hover {
+  background: rgba(255, 123, 114, 0.12);
+  border-color: rgba(255, 123, 114, 0.3);
+}
+
+.search-results {
+  flex: 1;
+  min-height: 0;
 }
 
 .channels ul {
@@ -553,6 +635,8 @@ body {
 .home-info { display: flex; flex-direction: column; min-width: 0; }
 .home-info .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-info .sub { color: #8b91a3; font-size: 0.85rem; }
+
+.home-list .row-delete { margin-left: auto; }
 
 .tabs .settings-btn { margin-left: auto; }
 

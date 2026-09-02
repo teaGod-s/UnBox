@@ -4,7 +4,7 @@ import { Events, Browser } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type VodFavoriteInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
-import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
+import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
 import { createVodSearchCache, isVodSearchCacheValid, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
 
@@ -60,6 +60,7 @@ const livePlaybackError = ref('')
 const vodPlaybackError = ref('')
 let nextPlaybackToken = 0
 const mpvReady = ref(false)
+const mpvFallbackRequested = ref(false)
 const mpvInstallMode = ref('')
 const installMessage = ref('')
 const vodSources = ref<SourceRecord[]>([])
@@ -92,6 +93,8 @@ const showOpenSource = ref(false)
 const catsCollapsed = ref(false)
 const infoCollapsed = ref(false)
 let lastProgressSave = 0
+
+const showMpvInstallPrompt = computed(() => shouldShowMpvInstallPrompt(platform.value, mpvReady.value, mpvFallbackRequested.value))
 
 const activeEpisodes = computed(() => (vodDetail.value?.Episodes ?? []).filter(ep => ep.Source === activeSource.value))
 const episodePages = computed(() => paginateEpisodes(activeEpisodes.value))
@@ -180,6 +183,7 @@ async function refreshMpvStatus() {
   const s = await ShellService.MPVStatus()
   mpvReady.value = s.Available
   mpvInstallMode.value = s.InstallMode
+  if (s.Available) mpvFallbackRequested.value = false
 }
 
 async function installMpv() {
@@ -639,6 +643,7 @@ async function playEpisode(ep: EpisodeInfo) {
 }
 
 async function fallbackToMpv(scope: PlaybackScope, id: string, token: number) {
+  mpvFallbackRequested.value = true
   if (scope === 'live') {
     livePlaybackStatus.value = 'preparing'
     livePlaybackError.value = ''
@@ -663,6 +668,9 @@ async function fallbackToMpv(scope: PlaybackScope, id: string, token: number) {
       },
     )
     if (!applied) await pauseStalePlayback(token)
+    else {
+      try { await refreshMpvStatus() } catch { /* 播放已回退，状态检测失败不影响播放 */ }
+    }
   }
   catch (e) {
     if (isCurrentPlayback(scope, token)) {
@@ -838,7 +846,7 @@ onMounted(() => {
       <p class="subtitle">{{ platform }} · 播放器{{ playerReady ? '就绪' : '未就绪' }}</p>
     </header>
 
-    <div v-if="!mpvReady" class="mpv-install">
+    <div v-if="showMpvInstallPrompt" class="mpv-install" aria-live="polite">
       <span>mpv 插件未安装（HEVC / RTMP / 本地文件需要它）</span>
       <button @click="installMpv">{{ mpvInstallMode === 'download' ? '下载并安装 mpv' : '显示安装命令' }}</button>
       <button v-if="mpvInstallMode && mpvInstallMode !== 'download'" @click="recheckMpv">我已安装，重新检测</button>

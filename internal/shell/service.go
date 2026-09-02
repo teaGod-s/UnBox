@@ -159,6 +159,29 @@ type Progress struct {
 	Total   int
 }
 
+// SearchStartEvent 标识一次全站搜索，前端据此丢弃过期搜索事件。
+type SearchStartEvent struct {
+	ID    uint64
+	Token uint64
+	Query string
+}
+
+// SearchProgressEvent 是带请求身份的全站搜索进度。
+type SearchProgressEvent struct {
+	ID    uint64
+	Token uint64
+	Query string
+	Progress
+}
+
+// SearchResultEvent 是带请求身份的渐进搜索结果。
+type SearchResultEvent struct {
+	ID    uint64
+	Token uint64
+	Query string
+	Items []VodItem
+}
+
 // NewShellService 组装壳层服务。pv 为直播 Provider（可为 nil）；p 可为 nil（播放器未就绪）。
 func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *ShellService {
 	root, _ := os.UserConfigDir()
@@ -195,14 +218,14 @@ func (s *ShellService) emitProgress(p Progress) {
 }
 
 // emitSearchProgress 把全站搜索进度经 Wails 事件推给前端。
-func (s *ShellService) emitSearchProgress(p Progress) {
+func (s *ShellService) emitSearchProgress(id, token uint64, q string, p Progress) {
 	app := application.Get()
 	if app == nil {
 		return
 	}
 	progressMu.Lock()
 	defer progressMu.Unlock()
-	app.Event.Emit("search:progress", p)
+	app.Event.Emit("search:progress", SearchProgressEvent{ID: id, Token: token, Query: q, Progress: p})
 }
 
 // ImportSubscription 拉取并解析订阅，重建 Provider。支持两类输入：
@@ -748,6 +771,19 @@ func (s *ShellService) PlayChannel(id string) error {
 }
 
 func (s *ShellService) PrepareChannel(id string) (playback.Plan, error) {
+	return s.prepareChannel(id, 0)
+}
+
+// PrepareChannelWithToken 准备直播播放，并让后端丢弃已过期的前端请求。
+func (s *ShellService) PrepareChannelWithToken(id string, token uint64) (playback.Plan, error) {
+	return s.prepareChannel(id, token)
+}
+
+func (s *ShellService) prepareChannel(id string, token uint64) (playback.Plan, error) {
+	requestID, accepted := s.claimPlayback(token)
+	if !accepted {
+		return playback.Plan{}, nil
+	}
 	s.mu.RLock()
 	pv := s.live
 	s.mu.RUnlock()
@@ -758,6 +794,11 @@ func (s *ShellService) PrepareChannel(id string) (playback.Plan, error) {
 	if err != nil {
 		log.Printf("解析直播频道失败 id=%s: %v", id, err)
 		return playback.Plan{}, err
+	}
+	s.playbackMu.Lock()
+	defer s.playbackMu.Unlock()
+	if !s.playbackCurrent(token, requestID) {
+		return playback.Plan{}, nil
 	}
 	plan, err := s.playback.Prepare(context.Background(), st)
 	if err != nil {
@@ -938,11 +979,27 @@ func (s *ShellService) VodSearch(site, q string) ([]VodItem, error) {
 // VodSearchAll 全站搜索点播，返回结果带所属站点（Site 字段）。
 // 并发度由 SearchThreads 控制，进度经 search:progress 事件推给前端。
 func (s *ShellService) VodSearchAll(q string) ([]VodItem, error) {
-	s.cancelSearch() // 取消上一次搜索
+	return s.vodSearchAll(q, 0)
+}
+
+// VodSearchAllWithToken 全站搜索并透传前端请求 token，用于隔离重复搜索。
+func (s *ShellService) VodSearchAllWithToken(q string, token uint64) ([]VodItem, error) {
+	return s.vodSearchAll(q, token)
+}
+
+func (s *ShellService) vodSearchAll(q string, token uint64) ([]VodItem, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.mu.Lock()
+	if s.searchCancel != nil {
+		s.searchCancel()
+	}
+	s.searchSeq++
+	searchID := s.searchSeq
 	s.searchCancel = cancel
 	s.mu.Unlock()
+	if app := application.Get(); app != nil {
+		app.Event.Emit("search:start", SearchStartEvent{ID: searchID, Token: token, Query: q})
+	}
 
 	s.mu.RLock()
 	type sp struct {
@@ -980,18 +1037,20 @@ func (s *ShellService) VodSearchAll(q string) ([]VodItem, error) {
 				mu.Lock()
 				out = append(out, v...)
 				mu.Unlock()
-				s.emitSearchResults(v) // 逐步推送结果
+				s.emitSearchResults(searchID, token, q, v) // 逐步推送结果
 			}
 			n := int(done.Add(1))
-			s.emitSearchProgress(Progress{Stage: "search", Message: fmt.Sprintf("全站搜索 %d/%d", n, total), Done: n, Total: total})
+			s.emitSearchProgress(searchID, token, q, Progress{Stage: "search", Message: fmt.Sprintf("全站搜索 %d/%d", n, total), Done: n, Total: total})
 		}(p.site, p.pv)
 	}
 	wg.Wait()
 
 	s.mu.Lock()
-	s.searchCancel = nil
+	if s.searchSeq == searchID {
+		s.searchCancel = nil
+	}
 	s.mu.Unlock()
-	s.emitSearchProgress(Progress{Stage: "search", Message: "搜索完成", Done: total, Total: total})
+	s.emitSearchProgress(searchID, token, q, Progress{Stage: "search", Message: "搜索完成", Done: total, Total: total})
 	return out, nil
 }
 
@@ -999,6 +1058,8 @@ func (s *ShellService) VodSearchAll(q string) ([]VodItem, error) {
 func (s *ShellService) cancelSearch() {
 	s.mu.Lock()
 	cancel := s.searchCancel
+	s.searchSeq++
+	s.searchCancel = nil
 	s.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -1011,12 +1072,12 @@ func (s *ShellService) CancelSearch() {
 }
 
 // emitSearchResults 把一批搜索结果推给前端（渐进渲染）。
-func (s *ShellService) emitSearchResults(items []VodItem) {
+func (s *ShellService) emitSearchResults(id, token uint64, q string, items []VodItem) {
 	app := application.Get()
 	if app == nil {
 		return
 	}
-	app.Event.Emit("search:result", items)
+	app.Event.Emit("search:result", SearchResultEvent{ID: id, Token: token, Query: q, Items: items})
 }
 
 // SearchThreads 返回全站搜索的并发线程数（默认 1，上限 16）。
@@ -1188,6 +1249,19 @@ func (s *ShellService) PlayVod(site, epID string) error {
 }
 
 func (s *ShellService) PrepareVod(site, epID string) (playback.Plan, error) {
+	return s.prepareVod(site, epID, 0)
+}
+
+// PrepareVodWithToken 准备点播播放，并让后端丢弃已过期的前端请求。
+func (s *ShellService) PrepareVodWithToken(site, epID string, token uint64) (playback.Plan, error) {
+	return s.prepareVod(site, epID, token)
+}
+
+func (s *ShellService) prepareVod(site, epID string, token uint64) (playback.Plan, error) {
+	requestID, accepted := s.claimPlayback(token)
+	if !accepted {
+		return playback.Plan{}, nil
+	}
 	pv, err := s.vodOf(site)
 	if err != nil {
 		return playback.Plan{}, err
@@ -1197,6 +1271,11 @@ func (s *ShellService) PrepareVod(site, epID string) (playback.Plan, error) {
 		log.Printf("解析点播剧集失败 site=%s ep=%s: %v", site, epID, err)
 		return playback.Plan{}, err
 	}
+	s.playbackMu.Lock()
+	defer s.playbackMu.Unlock()
+	if !s.playbackCurrent(token, requestID) {
+		return playback.Plan{}, nil
+	}
 	plan, err := s.playback.Prepare(context.Background(), st)
 	if err != nil {
 		log.Printf("准备点播播放失败 site=%s ep=%s: %v", site, epID, err)
@@ -1205,7 +1284,71 @@ func (s *ShellService) PrepareVod(site, epID string) (playback.Plan, error) {
 }
 
 func (s *ShellService) FallbackToMPV(id string) (playback.Plan, error) {
+	return s.fallbackToMPV(id, 0)
+}
+
+// FallbackToMPVWithToken 执行网页播放失败后的 mpv 切换，并隔离过期请求。
+func (s *ShellService) FallbackToMPVWithToken(id string, token uint64) (playback.Plan, error) {
+	return s.fallbackToMPV(id, token)
+}
+
+func (s *ShellService) fallbackToMPV(id string, token uint64) (playback.Plan, error) {
+	requestID, accepted := s.claimPlayback(token)
+	if !accepted {
+		return playback.Plan{}, nil
+	}
+	s.playbackMu.Lock()
+	defer s.playbackMu.Unlock()
+	if !s.playbackCurrent(token, requestID) {
+		return playback.Plan{}, nil
+	}
 	return s.playback.Fallback(context.Background(), id)
+}
+
+func (s *ShellService) claimPlayback(token uint64) (uint64, bool) {
+	s.mu.Lock()
+	if token == 0 {
+		s.playbackSeq++
+		requestID := s.playbackSeq
+		if s.playbackToken > s.playbackFloor {
+			s.playbackFloor = s.playbackToken
+		}
+		s.playbackToken = 0
+		s.mu.Unlock()
+		return requestID, true
+	}
+	if token <= s.playbackFloor || (s.playbackToken != 0 && token < s.playbackToken) {
+		requestID := s.playbackSeq
+		s.mu.Unlock()
+		return requestID, false
+	}
+	if token > s.playbackToken {
+		s.playbackSeq++
+		s.playbackToken = token
+	}
+	requestID := s.playbackSeq
+	if token > s.playbackFloor {
+		s.playbackToken = token
+	}
+	s.mu.Unlock()
+	return requestID, true
+}
+
+func (s *ShellService) playbackCurrent(token, requestID uint64) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.playbackSeq == requestID && (token == 0 || (token > s.playbackFloor && s.playbackToken == token))
+}
+
+// StopPlayback 使所有已在途的播放请求失效，再暂停共享播放器。
+func (s *ShellService) StopPlayback() error {
+	requestID, _ := s.claimPlayback(0)
+	s.playbackMu.Lock()
+	defer s.playbackMu.Unlock()
+	if !s.playbackCurrent(0, requestID) || s.player == nil {
+		return nil
+	}
+	return s.player.Pause()
 }
 
 func (s *ShellService) MPVReady() bool { return s.playback.MPVReady() }

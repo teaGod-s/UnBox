@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { playbackPlanForMode, resolvePlaybackFallback, shouldRecordVodProgress } from './playbackScope'
+import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress } from './playbackScope'
 
 describe('playback scope', () => {
   it('only exposes the plan belonging to the active page', () => {
@@ -22,6 +22,11 @@ describe('playback scope', () => {
     await expect(pending).resolves.toBe(false)
 
     expect(applied).toEqual([])
+  })
+
+  it('only pauses a stale request when no newer session owns the player', () => {
+    expect(shouldPauseStalePlayback(null)).toBe(true)
+    expect(shouldPauseStalePlayback({ scope: 'live', token: 2 })).toBe(false)
   })
 
   it('rejects late vod progress outside the vod detail page', () => {

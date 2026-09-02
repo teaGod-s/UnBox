@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createVodSearchCache, isVodSearchCacheValid, vodBackTarget, vodSearchQueryForReturn } from './vodNavigation'
+import { createVodSearchCache, isVodSearchCacheValid, nextVodSearchRequest, vodBackTarget, vodSearchQueryForReturn } from './vodNavigation'
 
 describe('vod navigation', () => {
   it('returns to the page that opened the detail view', () => {
@@ -19,5 +19,11 @@ describe('vod navigation', () => {
     const cache = createVodSearchCache('原搜索', [], 1_000)
     expect(vodSearchQueryForReturn(cache, '详情页临时输入')).toBe('原搜索')
     expect(vodSearchQueryForReturn(null, '当前输入')).toBe('当前输入')
+  })
+
+  it('creates monotonically increasing request tokens', () => {
+    const first = nextVodSearchRequest(0)
+    const second = nextVodSearchRequest(first)
+    expect(second).toBe(first + 1)
   })
 })

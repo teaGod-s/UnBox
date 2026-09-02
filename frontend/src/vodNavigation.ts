@@ -2,6 +2,10 @@ export type VodView = 'list' | 'search' | 'detail'
 export type VodDetailOrigin = 'home' | 'search' | 'list'
 export const VOD_SEARCH_CACHE_TTL = 5 * 60 * 1000
 
+export function nextVodSearchRequest(previous: number): number {
+  return previous + 1
+}
+
 export interface VodSearchCache<T> {
   query: string
   items: T[]

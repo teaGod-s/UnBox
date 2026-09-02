@@ -1,6 +1,15 @@
 export type PlaybackMode = 'home' | 'vod' | 'live' | 'settings'
 export type PlaybackScope = 'live' | 'vod'
 
+export interface ActivePlaybackSession {
+  scope: PlaybackScope
+  token: number
+}
+
+export function shouldPauseStalePlayback(active: ActivePlaybackSession | null): boolean {
+  return active === null
+}
+
 export function playbackPlanForMode<T>(mode: PlaybackMode, plans: { live: T | null; vod: T | null }, owner?: PlaybackScope): T | null {
   if (owner && owner !== mode) return null
   if (mode === 'live') return plans.live

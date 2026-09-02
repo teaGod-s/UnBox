@@ -327,3 +327,19 @@ func TestPlaybackTokenRejectsStaleRequests(t *testing.T) {
 		t.Fatal("older token should not reclaim newer playback")
 	}
 }
+
+func TestStopPlaybackDoesNotInvalidateNewerToken(t *testing.T) {
+	svc := &ShellService{}
+	if _, ok := svc.claimPlayback(1); !ok {
+		t.Fatal("first playback token should be accepted")
+	}
+	if _, ok := svc.claimPlayback(2); !ok {
+		t.Fatal("newer playback token should be accepted")
+	}
+	if _, invalidated := svc.invalidatePlayback(1); invalidated {
+		t.Fatal("stale stop must not invalidate a newer playback token")
+	}
+	if svc.playbackToken != 2 {
+		t.Fatalf("newer playback token was cleared: got %d", svc.playbackToken)
+	}
+}

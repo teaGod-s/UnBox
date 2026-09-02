@@ -1342,7 +1342,10 @@ func (s *ShellService) playbackCurrent(token, requestID uint64) bool {
 
 // StopPlayback 使指定 token 及之前的播放请求失效，再暂停共享播放器。
 func (s *ShellService) StopPlayback(token uint64) error {
-	requestID := s.invalidatePlayback(token)
+	requestID, invalidated := s.invalidatePlayback(token)
+	if !invalidated {
+		return nil
+	}
 	s.playbackMu.Lock()
 	defer s.playbackMu.Unlock()
 	if !s.playbackCurrent(0, requestID) || s.player == nil {
@@ -1351,8 +1354,13 @@ func (s *ShellService) StopPlayback(token uint64) error {
 	return s.player.Pause()
 }
 
-func (s *ShellService) invalidatePlayback(token uint64) uint64 {
+func (s *ShellService) invalidatePlayback(token uint64) (uint64, bool) {
 	s.mu.Lock()
+	if token != 0 && s.playbackToken > token {
+		requestID := s.playbackSeq
+		s.mu.Unlock()
+		return requestID, false
+	}
 	s.playbackSeq++
 	requestID := s.playbackSeq
 	if s.playbackToken > s.playbackFloor {
@@ -1363,7 +1371,7 @@ func (s *ShellService) invalidatePlayback(token uint64) uint64 {
 	}
 	s.playbackToken = 0
 	s.mu.Unlock()
-	return requestID
+	return requestID, true
 }
 
 func (s *ShellService) MPVReady() bool { return s.playback.MPVReady() }

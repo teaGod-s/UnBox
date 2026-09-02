@@ -327,7 +327,7 @@ async function play(c: ChannelInfo) {
   liveNowPlaying.value = ''
   try {
     const plan = await ShellService.PrepareChannelWithToken(c.ID, token) as unknown as PlaybackPlan
-    if (!isCurrentPlayback('live', token)) { await pauseStalePlayback(); return }
+    if (!isCurrentPlayback('live', token)) { await pauseStalePlayback(token); return }
     livePlaybackPlan.value = plan
     livePlaybackToken.value = token
     liveNowPlaying.value = c.Name
@@ -507,7 +507,7 @@ async function doPlayEpisode(site: string, epID: string, epName: string, source:
     if (isCurrentPlayback('vod', token)) throw e
     return false
   }
-  if (!isCurrentPlayback('vod', token)) { await pauseStalePlayback(); return false }
+  if (!isCurrentPlayback('vod', token)) { await pauseStalePlayback(token); return false }
   vodPlaybackPlan.value = plan
   vodPlaybackToken.value = token
   vodNowPlaying.value = epName
@@ -541,7 +541,7 @@ async function fallbackToMpv(scope: PlaybackScope, id: string, token: number) {
         else vodPlaybackPlan.value = plan
       },
     )
-    if (!applied) await pauseStalePlayback()
+    if (!applied) await pauseStalePlayback(token)
   }
   catch (e) {
     if (isCurrentPlayback(scope, token)) handleError(e)
@@ -568,9 +568,9 @@ async function stopPlayback(scope: PlaybackScope) {
   }
 }
 
-async function pauseStalePlayback() {
+async function pauseStalePlayback(token: number) {
   if (!shouldPauseStalePlayback(activePlayback.value)) return
-  try { await ShellService.StopPlayback(0) } catch { /* 过期播放尚未建立时无需处理 */ }
+  try { await ShellService.StopPlayback(token) } catch { /* 过期播放尚未建立时无需处理 */ }
 }
 
 function beginPlayback(scope: PlaybackScope): number {

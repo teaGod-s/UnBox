@@ -1,5 +1,6 @@
 export type PlaybackMode = 'home' | 'vod' | 'live' | 'search' | 'favorites' | 'settings'
 export type PlaybackScope = 'live' | 'vod'
+export type PlaybackStatus = 'idle' | 'preparing' | 'playing' | 'error'
 
 export interface ActivePlaybackSession {
   scope: PlaybackScope

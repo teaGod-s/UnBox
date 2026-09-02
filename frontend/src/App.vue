@@ -4,7 +4,7 @@ import { Events, Browser } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type VodFavoriteInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
-import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, type ActivePlaybackSession, type PlaybackScope } from './playbackScope'
+import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
 import { createVodSearchCache, isVodSearchCacheValid, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
 
@@ -54,6 +54,10 @@ const playbackOwner = ref<'live' | 'vod' | null>(null)
 const activePlayback = ref<ActivePlaybackSession | null>(null)
 const livePlaybackToken = ref(0)
 const vodPlaybackToken = ref(0)
+const livePlaybackStatus = ref<PlaybackStatus>('idle')
+const vodPlaybackStatus = ref<PlaybackStatus>('idle')
+const livePlaybackError = ref('')
+const vodPlaybackError = ref('')
 let nextPlaybackToken = 0
 const mpvReady = ref(false)
 const mpvInstallMode = ref('')
@@ -389,15 +393,23 @@ async function play(c: ChannelInfo) {
   const token = beginPlayback('live')
   livePlaybackPlan.value = null
   livePlaybackToken.value = 0
-  liveNowPlaying.value = ''
+  livePlaybackStatus.value = 'preparing'
+  livePlaybackError.value = ''
+  liveNowPlaying.value = c.Name
   try {
     const plan = await ShellService.PrepareChannelWithToken(c.ID, token) as unknown as PlaybackPlan
     if (!isCurrentPlayback('live', token)) { await pauseStalePlayback(token); return }
     livePlaybackPlan.value = plan
     livePlaybackToken.value = token
-    liveNowPlaying.value = c.Name
+    livePlaybackStatus.value = 'playing'
   } catch (e) {
-    if (isCurrentPlayback('live', token)) handleError(e)
+    if (isCurrentPlayback('live', token)) {
+      livePlaybackPlan.value = null
+      livePlaybackToken.value = 0
+      livePlaybackStatus.value = 'error'
+      livePlaybackError.value = String(e)
+      handleError(e)
+    }
   }
 }
 
@@ -588,18 +600,26 @@ async function doPlayEpisode(site: string, epID: string, epName: string, source:
   const token = beginPlayback('vod')
   vodPlaybackPlan.value = null
   vodPlaybackToken.value = 0
-  vodNowPlaying.value = ''
+  vodPlaybackStatus.value = 'preparing'
+  vodPlaybackError.value = ''
+  vodNowPlaying.value = epName
   let plan: PlaybackPlan
   try {
     plan = await ShellService.PrepareVodWithToken(site, epID, token) as unknown as PlaybackPlan
   } catch (e) {
-    if (isCurrentPlayback('vod', token)) throw e
+    if (isCurrentPlayback('vod', token)) {
+      vodPlaybackPlan.value = null
+      vodPlaybackToken.value = 0
+      vodPlaybackStatus.value = 'error'
+      vodPlaybackError.value = String(e)
+      throw e
+    }
     return false
   }
   if (!isCurrentPlayback('vod', token)) { await pauseStalePlayback(token); return false }
   vodPlaybackPlan.value = plan
   vodPlaybackToken.value = token
-  vodNowPlaying.value = epName
+  vodPlaybackStatus.value = 'playing'
   currentEpisodeID.value = epID
   if (vodDetail.value) {
     currentVod.value = { site, vodID: vodDetail.value.ID }
@@ -619,6 +639,13 @@ async function playEpisode(ep: EpisodeInfo) {
 }
 
 async function fallbackToMpv(scope: PlaybackScope, id: string, token: number) {
+  if (scope === 'live') {
+    livePlaybackStatus.value = 'preparing'
+    livePlaybackError.value = ''
+  } else {
+    vodPlaybackStatus.value = 'preparing'
+    vodPlaybackError.value = ''
+  }
   try {
     const applied = await resolvePlaybackFallback(
       scope,
@@ -626,14 +653,32 @@ async function fallbackToMpv(scope: PlaybackScope, id: string, token: number) {
       () => isCurrentPlayback(scope, token) &&
         (scope === 'live' ? mode.value === 'live' : mode.value === 'vod' && vodView.value === 'detail'),
       (target, plan) => {
-        if (target === 'live') livePlaybackPlan.value = plan
-        else vodPlaybackPlan.value = plan
+        if (target === 'live') {
+          livePlaybackPlan.value = plan
+          livePlaybackStatus.value = 'playing'
+        } else {
+          vodPlaybackPlan.value = plan
+          vodPlaybackStatus.value = 'playing'
+        }
       },
     )
     if (!applied) await pauseStalePlayback(token)
   }
   catch (e) {
-    if (isCurrentPlayback(scope, token)) handleError(e)
+    if (isCurrentPlayback(scope, token)) {
+      if (scope === 'live') {
+        livePlaybackPlan.value = null
+        livePlaybackToken.value = 0
+        livePlaybackStatus.value = 'error'
+        livePlaybackError.value = String(e)
+      } else {
+        vodPlaybackPlan.value = null
+        vodPlaybackToken.value = 0
+        vodPlaybackStatus.value = 'error'
+        vodPlaybackError.value = String(e)
+      }
+      handleError(e)
+    }
   }
 }
 
@@ -644,11 +689,15 @@ async function stopPlayback(scope: PlaybackScope) {
     livePlaybackPlan.value = null
     livePlaybackToken.value = 0
     liveNowPlaying.value = ''
+    livePlaybackStatus.value = 'idle'
+    livePlaybackError.value = ''
   } else {
     vodPlaybackPlan.value = null
     vodPlaybackToken.value = 0
     vodNowPlaying.value = ''
     currentVod.value = null
+    vodPlaybackStatus.value = 'idle'
+    vodPlaybackError.value = ''
   }
   if (ownsPlayer) {
     activePlayback.value = null
@@ -878,6 +927,8 @@ onMounted(() => {
 
       <aside class="player">
         <p v-if="liveNowPlaying" class="now">正在播放：{{ liveNowPlaying }}</p>
+        <p v-if="livePlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在切换频道…</p>
+        <p v-if="livePlaybackStatus === 'error'" class="playback-error" aria-live="assertive">频道播放失败：{{ livePlaybackError }}</p>
         <PlaybackView :plan="livePagePlaybackPlan" @fallback="id => fallbackToMpv('live', id, livePlaybackToken)" />
         <div class="controls" v-if="liveNowPlaying && livePagePlaybackPlan?.Backend === 'mpv'">
           <button @click="pause">暂停</button>
@@ -943,6 +994,8 @@ onMounted(() => {
             <div class="vod-detail-top" :class="{ 'info-collapsed': infoCollapsed }">
               <div class="vod-player">
                 <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>
+                <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载剧集…</p>
+                <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">剧集播放失败：{{ vodPlaybackError }}</p>
                 <PlaybackView :plan="vodPagePlaybackPlan" :seek-to="pendingSeek" @fallback="id => fallbackToMpv('vod', id, vodPlaybackToken)" @progress="(time, duration) => onVodProgress(vodPlaybackToken, time, duration)" />
                 <div class="controls" v-if="vodNowPlaying && vodPagePlaybackPlan?.Backend === 'mpv'">
                   <button @click="pause">暂停</button>

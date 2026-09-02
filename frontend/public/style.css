@@ -426,7 +426,8 @@ body {
   height: auto;
   min-height: 180px;
   max-height: min(50vh, 480px);
-  overflow: visible;
+  overflow: hidden;
+  contain: layout paint;
 }
 
 .vod-info {
@@ -505,9 +506,20 @@ body {
   border-radius: 0.5rem;
 }
 
-.playback-view { background: #05060b; min-height: 180px; aspect-ratio: 16 / 9; display: grid; place-items: center; }
-.playback-view video { width: 100%; height: 100%; object-fit: contain; }
+.playback-view { position: relative; width: 100%; background: #05060b; min-height: 180px; aspect-ratio: 16 / 9; display: grid; place-items: center; overflow: hidden; }
+.playback-view video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .mpv-status, .playback-empty { color: #8b91a3; font-size: 0.9rem; }
+
+.playback-status,
+.playback-error {
+  flex: 0 0 auto;
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.playback-status { color: #8b91a3; }
+.playback-error { color: #ff7b72; overflow-wrap: anywhere; }
 
 .mpv-install {
   display: flex;

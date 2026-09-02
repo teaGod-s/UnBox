@@ -158,7 +158,7 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(130px, 15vw) minmax(0, 1fr) minmax(220px, 28vw);
   gap: 0.75rem;
 }
 
@@ -382,8 +382,27 @@ body {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.channel .name-text {
+  display: inline-block;
+  min-width: 100%;
+  width: max-content;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.channel .name:hover .name-text {
+  overflow: visible;
+  text-overflow: clip;
+  animation: channel-name-marquee 5s ease-in-out infinite alternate;
+}
+
+@keyframes channel-name-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-40%); }
 }
 
 .channel .thumb {
@@ -465,6 +484,9 @@ body {
 }
 
 .channel .group {
+  max-width: 26%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: #8b91a3;
   font-size: 0.85rem;
   white-space: nowrap;
@@ -1038,6 +1060,7 @@ body {
 .ep-src-tabs {
   flex: 0 0 auto;
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 0.35rem;
   margin: 0.75rem 0 0.5rem;
@@ -1054,6 +1077,7 @@ body {
 
 .ep-pagination {
   display: flex;
+  align-items: center;
   flex: 1 1 auto;
   flex-wrap: nowrap;
   gap: 0.35rem;
@@ -1068,6 +1092,8 @@ body {
   width: 1.5rem;
   height: 1.5rem;
   padding: 0;
+  display: grid;
+  place-items: center;
   color: #c6cbd9;
   background: #1b2137;
   border: 1px solid #2c3350;

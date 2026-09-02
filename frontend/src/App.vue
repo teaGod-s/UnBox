@@ -958,7 +958,7 @@ onMounted(() => {
         <form class="search" @submit.prevent="doSearch"><input v-model="query" placeholder="搜索频道" /><button type="submit">搜索</button></form>
         <ul>
           <li v-for="c in channels" :key="c.ID" class="channel">
-            <span class="name">{{ c.Name }}</span>
+            <span class="name" :title="c.Name"><span class="name-text">{{ c.Name }}</span></span>
             <span class="group">{{ c.Group }}</span>
             <button @click="play(c)">▶ 播放</button>
             <button @click="toggleFav(c)">{{ c.Favorited ? '★' : '☆' }}</button>

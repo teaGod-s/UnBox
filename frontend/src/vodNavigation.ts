@@ -1,5 +1,5 @@
 export type VodView = 'list' | 'search' | 'detail'
-export type VodDetailOrigin = 'home' | 'search' | 'list'
+export type VodDetailOrigin = 'home' | 'search' | 'list' | 'favorites'
 export const VOD_SEARCH_CACHE_TTL = 5 * 60 * 1000
 
 export function nextVodSearchRequest(previous: number): number {
@@ -12,7 +12,7 @@ export interface VodSearchCache<T> {
   expiresAt: number
 }
 
-export function vodBackTarget(origin: VodDetailOrigin): Exclude<VodView, 'detail'> | 'home' {
+export function vodBackTarget(origin: VodDetailOrigin): Exclude<VodView, 'detail'> | 'home' | 'favorites' {
   return origin
 }
 
@@ -39,5 +39,9 @@ export function removeVodSearchHistory(history: string[], query: string): string
 }
 
 export function removeVodHistory<T extends { Site: string; VodID: string }>(items: T[], site: string, vodID: string): T[] {
+  return items.filter(item => item.Site !== site || item.VodID !== vodID)
+}
+
+export function removeVodFavorite<T extends { Site: string; VodID: string }>(items: T[], site: string, vodID: string): T[] {
   return items.filter(item => item.Site !== site || item.VodID !== vodID)
 }

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { Events, Browser } from '@wailsio/runtime'
-import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
+import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type VodFavoriteInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, type ActivePlaybackSession, type PlaybackScope } from './playbackScope'
-import { createVodSearchCache, isVodSearchCacheValid, nextVodSearchRequest, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
+import { createVodSearchCache, isVodSearchCacheValid, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
 
 // 爱发电赞助主页
@@ -26,7 +26,7 @@ const vodNowPlaying = ref('')
 const importSummary = ref('')
 const errMsg = ref('')
 const importProgress = ref<Progress | null>(null)
-const mode = ref<'home' | 'vod' | 'live' | 'search' | 'settings'>('home')
+const mode = ref<'home' | 'vod' | 'live' | 'search' | 'favorites' | 'settings'>('home')
 const sources = ref<SourceInfo[]>([])
 const activeSite = ref('')
 const activeLine = ref('')
@@ -45,6 +45,8 @@ const currentEpisodeID = ref('')
 const episodePagination = ref<HTMLElement | null>(null)
 const vodQuery = ref('')
 const vodSearchHistory = ref<string[]>([])
+const vodFavorites = ref<VodFavoriteInfo[]>([])
+const vodFavorited = ref(false)
 const vodPage = ref(0)
 const livePlaybackPlan = ref<PlaybackPlan | null>(null)
 const vodPlaybackPlan = ref<PlaybackPlan | null>(null)
@@ -193,7 +195,7 @@ async function recheckMpv() {
   } catch (e) { handleError(e) }
 }
 
-async function switchMode(m: 'home' | 'vod' | 'live' | 'search' | 'settings') {
+async function switchMode(m: 'home' | 'vod' | 'live' | 'search' | 'favorites' | 'settings') {
   if (m !== 'search' && searching.value) await invalidateSearch()
   if (m !== 'live' && activePlayback.value?.scope === 'live') await stopPlayback('live')
   if (m !== 'vod' && activePlayback.value?.scope === 'vod') await stopPlayback('vod')
@@ -210,6 +212,11 @@ async function switchMode(m: 'home' | 'vod' | 'live' | 'search' | 'settings') {
     vodDetail.value = null
     await loadVodSearchHistory()
   }
+  else if (m === 'favorites') {
+    vodView.value = 'list'
+    vodDetail.value = null
+    await loadVodFavorites()
+  }
   else if (m === 'home') await refreshHome()
   else if (m === 'settings') { await reloadSourceHistory(); await refreshLogs(); await loadSearchThreads() }
 }
@@ -222,6 +229,10 @@ async function refreshHome() {
 
 async function loadVodSearchHistory() {
   try { vodSearchHistory.value = (await ShellService.ListVodSearchHistory()) ?? [] } catch (e) { handleError(e) }
+}
+
+async function loadVodFavorites() {
+  try { vodFavorites.value = (await ShellService.ListVodFavorites()) ?? [] } catch (e) { handleError(e) }
 }
 
 async function deleteHomeHistory(h: VodHistoryInfo) {
@@ -241,6 +252,31 @@ async function deleteVodSearchHistory(query: string) {
 async function useVodSearchHistory(query: string) {
   vodQuery.value = query
   await vodSearch()
+}
+
+async function deleteVodFavorite(favorite: VodFavoriteInfo) {
+  try {
+    await ShellService.RemoveVodFavorite(favorite.Site, favorite.VodID)
+    vodFavorites.value = removeVodFavorite(vodFavorites.value, favorite.Site, favorite.VodID)
+    if (currentVod.value?.site === favorite.Site && currentVod.value.vodID === favorite.VodID) vodFavorited.value = false
+  } catch (e) { handleError(e) }
+}
+
+async function toggleVodFavorite() {
+  const detail = vodDetail.value
+  const site = detailSite.value || activeSite.value
+  if (!detail || !site) return
+  try {
+    if (vodFavorited.value) {
+      await ShellService.RemoveVodFavorite(site, detail.ID)
+      vodFavorited.value = false
+      vodFavorites.value = removeVodFavorite(vodFavorites.value, site, detail.ID)
+    } else {
+      await ShellService.AddVodFavorite(site, detail.ID, detail.Title, detail.Logo, detail.Group)
+      vodFavorited.value = true
+      await loadVodFavorites()
+    }
+  } catch (e) { handleError(e) }
 }
 
 function fmtProgress(sec: number) {
@@ -484,7 +520,9 @@ async function openVodDetail(item: VodItem) {
   try {
     if (searching.value) await cancelSearch()
     const site = item.Site || activeSite.value
-    vodDetailOrigin.value = mode.value === 'search' || vodView.value === 'search' ? 'search' : 'list'
+    vodDetailOrigin.value = mode.value === 'favorites'
+      ? 'favorites'
+      : mode.value === 'search' || vodView.value === 'search' ? 'search' : 'list'
     detailSite.value = site
     const d = await ShellService.VodDetail(site, item.ID)
     d.Description = DOMPurify.sanitize(d.Description)
@@ -493,7 +531,18 @@ async function openVodDetail(item: VodItem) {
     vodView.value = 'detail'
     activeSource.value = d.Sources?.[0] ?? ''
     resetEpisodePage()
+    vodFavorited.value = await ShellService.IsVodFavorite(site, d.ID)
   } catch (e) { handleError(e) }
+}
+
+async function openVodFavorite(favorite: VodFavoriteInfo) {
+  await openVodDetail({
+    ID: favorite.VodID,
+    Title: favorite.Title,
+    Logo: favorite.Logo,
+    Group: favorite.Group,
+    Site: favorite.Site,
+  })
 }
 
 async function backFromVodDetail() {
@@ -516,6 +565,11 @@ async function backFromVodDetail() {
     }
     vodQuery.value = vodSearchQueryForReturn(vodSearchCache.value, vodQuery.value.trim())
     await vodSearch()
+    return
+  }
+  if (target === 'favorites') {
+    mode.value = 'favorites'
+    await loadVodFavorites()
     return
   }
   vodView.value = 'list'
@@ -747,6 +801,7 @@ onMounted(() => {
       <button :class="{ active: mode === 'vod' }" @click="switchMode('vod')">点播</button>
       <button :class="{ active: mode === 'live' }" @click="switchMode('live')">直播</button>
       <button :class="{ active: mode === 'search' }" @click="switchMode('search')">搜索</button>
+      <button :class="{ active: mode === 'favorites' }" @click="switchMode('favorites')">收藏</button>
       <button class="settings-btn" :class="{ active: mode === 'settings' }" @click="switchMode('settings')">设置</button>
     </nav>
 
@@ -793,6 +848,22 @@ onMounted(() => {
           </li>
         </ul>
       </section>
+    </section>
+
+    <!-- 点播收藏 -->
+    <section v-if="mode === 'favorites'" class="favorites-page">
+      <h2>点播收藏</h2>
+      <p v-if="!vodFavorites.length" class="home-empty">暂无点播收藏</p>
+      <ul v-else class="favorites-list">
+        <li v-for="favorite in vodFavorites" :key="favorite.Site + favorite.VodID" @click="openVodFavorite(favorite)">
+          <img v-if="favorite.Logo" :src="favorite.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
+          <span class="home-info">
+            <span class="name">{{ favorite.Title }}</span>
+            <span class="sub">{{ siteName(favorite.Site) || favorite.Site }}{{ favorite.Group ? ' · ' + favorite.Group : '' }}</span>
+          </span>
+          <button class="row-delete" type="button" title="删除收藏" @click.stop="deleteVodFavorite(favorite)">删除</button>
+        </li>
+      </ul>
     </section>
 
     <!-- 直播 -->
@@ -901,6 +972,7 @@ onMounted(() => {
                   <img v-if="vodDetail.Logo" :src="vodDetail.Logo" class="poster" referrerpolicy="no-referrer" @error="imgError" />
                   <h2>{{ vodDetail.Title }}</h2>
                   <p class="meta">{{ vodDetail.Type }} · {{ vodDetail.Year }} · {{ vodDetail.Area }}</p>
+                  <button class="favorite-toggle" type="button" :aria-pressed="vodFavorited" @click="toggleVodFavorite">{{ vodFavorited ? '取消收藏' : '收藏' }}</button>
                   <div class="desc" v-html="vodDetail.Description"></div>
                 </div>
               </div>

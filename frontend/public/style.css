@@ -617,6 +617,33 @@ body {
 .home h2 { margin: 0.25rem 0 0.75rem; }
 .home-empty { color: #8b91a3; }
 
+.favorites-page { flex: 1; min-height: 0; overflow-y: auto; }
+.favorites-page h2 { margin: 0.25rem 0 0.75rem; }
+.favorites-list { margin: 0; padding: 0; list-style: none; }
+.favorites-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid #161a2b;
+  cursor: pointer;
+}
+.favorites-list li:hover { background: #1b2137; }
+.favorites-list .thumb { width: 44px; height: 60px; object-fit: cover; border-radius: 0.3rem; background: #161a2b; flex-shrink: 0; }
+.favorites-list .row-delete { margin-left: auto; }
+
+.favorite-toggle {
+  align-self: flex-start;
+  margin: 0 0 0.65rem;
+  padding: 0.35rem 0.7rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+.favorite-toggle:hover { background: #232a45; }
+
 .home-list { margin: 0; padding: 0; list-style: none; }
 
 .home-list li {

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { createVodSearchCache, isVodSearchCacheValid, nextVodSearchRequest, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn } from './vodNavigation'
+import { createVodSearchCache, isVodSearchCacheValid, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn } from './vodNavigation'
 
 describe('vod navigation', () => {
   it('returns to the page that opened the detail view', () => {
     expect(vodBackTarget('home')).toBe('home')
     expect(vodBackTarget('search')).toBe('search')
     expect(vodBackTarget('list')).toBe('list')
+    expect(vodBackTarget('favorites')).toBe('favorites')
   })
 
   it('keeps search results valid for five minutes and expires them afterwards', () => {
@@ -35,5 +36,10 @@ describe('vod navigation', () => {
   it('removes only the selected home history item', () => {
     const items = [{ Site: 'a', VodID: '1' }, { Site: 'b', VodID: '1' }, { Site: 'a', VodID: '2' }]
     expect(removeVodHistory(items, 'a', '1')).toEqual([{ Site: 'b', VodID: '1' }, { Site: 'a', VodID: '2' }])
+  })
+
+  it('removes only one site-scoped vod favorite', () => {
+    const items = [{ Site: 'a', VodID: '1' }, { Site: 'b', VodID: '1' }, { Site: 'a', VodID: '2' }]
+    expect(removeVodFavorite(items, 'a', '1')).toEqual([{ Site: 'b', VodID: '1' }, { Site: 'a', VodID: '2' }])
   })
 })

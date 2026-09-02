@@ -550,6 +550,7 @@ async function fallbackToMpv(scope: PlaybackScope, id: string, token: number) {
 
 async function stopPlayback(scope: PlaybackScope) {
   const ownsPlayer = activePlayback.value?.scope === scope
+  const token = ownsPlayer ? activePlayback.value!.token : 0
   if (scope === 'live') {
     livePlaybackPlan.value = null
     livePlaybackToken.value = 0
@@ -563,13 +564,13 @@ async function stopPlayback(scope: PlaybackScope) {
   if (ownsPlayer) {
     activePlayback.value = null
     playbackOwner.value = null
-    try { await ShellService.StopPlayback() } catch { /* 播放器未就绪时无需处理 */ }
+    try { await ShellService.StopPlayback(token) } catch { /* 播放器未就绪时无需处理 */ }
   }
 }
 
 async function pauseStalePlayback() {
   if (!shouldPauseStalePlayback(activePlayback.value)) return
-  try { await ShellService.StopPlayback() } catch { /* 过期播放尚未建立时无需处理 */ }
+  try { await ShellService.StopPlayback(0) } catch { /* 过期播放尚未建立时无需处理 */ }
 }
 
 function beginPlayback(scope: PlaybackScope): number {

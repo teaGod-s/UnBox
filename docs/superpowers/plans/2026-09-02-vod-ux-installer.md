@@ -83,7 +83,7 @@
 
 - [ ] 写测试覆盖收藏/取消收藏按钮调用和收藏页条目打开详情。
 - [ ] 运行单测确认失败。
-- [ ] 实现收藏模式、详情按钮和列表空状态；收藏条目携带 site/id/title/logo/group，不与直播收藏混用。
+- [ ] 实现收藏模式、详情按钮、收藏条目逐条删除和列表空状态；收藏条目携带 site/id/title/logo/group，不与直播收藏混用。
 - [ ] 运行前端单测和生产构建，提交：`feat(ui): add vod favorites`。
 
 ### Task 5: 播放器固定 frame、切台反馈与居中布局
@@ -103,6 +103,21 @@
 - [ ] 为播放请求设置 preparing/playing/error 状态，检查 token 后才更新状态；PlaybackView 外层使用稳定 frame 和 overflow 约束。
 - [ ] 统一搜索进度、播放器控制、集数分页的 `align-items:center` 与 frame 之外滚动。
 - [ ] 运行前端测试和 `npm run build`，提交：`fix(ui): stabilize playback frame and switching feedback`。
+
+### Task 5a: 按需提示 mpv 安装
+
+**Files:**
+- Modify: `frontend/src/App.vue`
+- Modify: `frontend/public/style.css`（如需提示样式）
+- Modify: `frontend/src/*test.ts`
+
+**Interfaces:**
+- Windows/macOS 在 Web 播放能力可用时不主动调用 `MPVStatus`/显示安装提示；只有 PlaybackView 触发 fallback 且 mpv 未就绪时显示安装提示。
+
+- [ ] 写测试：初次打开点播/直播页面不显示 mpv 安装提示；收到 Web fallback 事件后才显示；Linux 保留现有 mpv 就绪提示策略。
+- [ ] 运行单测确认失败。
+- [ ] 将 mpv 检查从启动/页面进入路径移到 fallback 处理路径，提示包含安装和继续回退的明确操作。
+- [ ] 运行前端测试和生产构建，提交：`fix(ui): defer mpv install prompt until web playback fallback`。
 
 ### Task 6: 集数与直播频道展示
 

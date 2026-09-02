@@ -673,11 +673,16 @@ onMounted(() => {
   })
   Events.On('search:progress', (ev: any) => {
     const data = ev.data as Progress & { ID?: number; Token?: number; Query?: string }
-    if (searching.value && data.Token === searchRequest.value && data.ID === activeSearchID.value && data.Query === activeSearchQuery.value) searchProgress.value = data
+    if (searching.value && data.Token === searchRequest.value && data.ID !== undefined && data.ID > searchFloorID.value && data.Query === activeSearchQuery.value) {
+      if (activeSearchID.value === 0) activeSearchID.value = data.ID
+      if (data.ID === activeSearchID.value) searchProgress.value = data
+    }
   })
   Events.On('search:result', (ev: any) => {
     const data = ev.data as { ID: number; Token: number; Query: string; Items: VodItem[] }
-    if (searching.value && data.Token === searchRequest.value && data.ID === activeSearchID.value && data.Query === activeSearchQuery.value) {
+    if (searching.value && data.Token === searchRequest.value && data.ID > searchFloorID.value && data.Query === activeSearchQuery.value) {
+      if (activeSearchID.value === 0) activeSearchID.value = data.ID
+      if (data.ID !== activeSearchID.value) return
       vodSearchItems.value = [...vodSearchItems.value, ...(data.Items ?? [])]
       vodSearchCache.value = createVodSearchCache(activeSearchQuery.value, vodSearchItems.value)
     }

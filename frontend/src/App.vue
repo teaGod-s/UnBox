@@ -4,6 +4,8 @@ import { Events, Browser } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
+import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, type ActivePlaybackSession, type PlaybackScope } from './playbackScope'
+import { createVodSearchCache, isVodSearchCacheValid, nextVodSearchRequest, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
 
 // 爱发电赞助主页
@@ -19,7 +21,8 @@ const channels = ref<ChannelInfo[]>([])
 const favorites = ref<ChannelInfo[]>([])
 const activeGroup = ref('*')
 const query = ref('')
-const nowPlaying = ref('')
+const liveNowPlaying = ref('')
+const vodNowPlaying = ref('')
 const importSummary = ref('')
 const errMsg = ref('')
 const importProgress = ref<Progress | null>(null)
@@ -31,13 +34,24 @@ const activeSource = ref('')
 const detailSite = ref('')
 const vodCategories = ref<Section[]>([])
 const vodActiveCat = ref('')
-const vodItems = ref<VodItem[]>([])
+const vodListItems = ref<VodItem[]>([])
+const vodSearchItems = ref<VodItem[]>([])
 const vodDetail = ref<VodMedia | null>(null)
+const vodView = ref<VodView>('list')
+const vodDetailOrigin = ref<VodDetailOrigin>('list')
+const vodSearchCache = ref<VodSearchCache<VodItem> | null>(null)
 const episodePage = ref(0)
 const currentEpisodeID = ref('')
+const episodePagination = ref<HTMLElement | null>(null)
 const vodQuery = ref('')
 const vodPage = ref(0)
-const playbackPlan = ref<PlaybackPlan | null>(null)
+const livePlaybackPlan = ref<PlaybackPlan | null>(null)
+const vodPlaybackPlan = ref<PlaybackPlan | null>(null)
+const playbackOwner = ref<'live' | 'vod' | null>(null)
+const activePlayback = ref<ActivePlaybackSession | null>(null)
+const livePlaybackToken = ref(0)
+const vodPlaybackToken = ref(0)
+let nextPlaybackToken = 0
 const mpvReady = ref(false)
 const mpvInstallMode = ref('')
 const installMessage = ref('')
@@ -57,6 +71,10 @@ const searchProgress = ref<Progress | null>(null)
 const searchThreads = ref(1)
 const showThreads = ref(false)
 const searching = ref(false)
+const searchRequest = ref(0)
+const activeSearchQuery = ref('')
+const activeSearchID = ref(0)
+const searchFloorID = ref(0)
 const updateInfo = ref<UpdateInfo | null>(null)
 const updateMsg = ref('')
 const currentVersion = ref('')
@@ -72,6 +90,13 @@ const activeEpisodes = computed(() => (vodDetail.value?.Episodes ?? []).filter(e
 const episodePages = computed(() => paginateEpisodes(activeEpisodes.value))
 const episodeRanges = computed(() => episodePageRanges(activeEpisodes.value.length))
 const visibleEpisodes = computed(() => episodePages.value[episodePage.value] ?? [])
+const visibleVodItems = computed(() => vodView.value === 'search' ? vodSearchItems.value : vodListItems.value)
+const activePlaybackPlan = computed(() => playbackPlanForMode(mode.value, {
+  live: livePlaybackPlan.value,
+  vod: vodPlaybackPlan.value,
+}, playbackOwner.value ?? undefined))
+const livePagePlaybackPlan = computed(() => mode.value === 'live' && playbackOwner.value === 'live' ? livePlaybackPlan.value : null)
+const vodPagePlaybackPlan = computed(() => mode.value === 'vod' && vodView.value === 'detail' && playbackOwner.value === 'vod' ? vodPlaybackPlan.value : null)
 
 function resetEpisodePage() {
   episodePage.value = 0
@@ -85,6 +110,12 @@ function selectEpisodePage(page: number) {
 function selectEpisodeSource(source: string) {
   activeSource.value = source
   resetEpisodePage()
+}
+
+function scrollEpisodePages(direction: number) {
+  const element = episodePagination.value
+  if (!element) return
+  element.scrollBy({ left: direction * Math.max(element.clientWidth * 0.75, 160), behavior: 'smooth' })
 }
 
 const vodSites = computed(() => sources.value.filter(s => s.Kind === 'vod'))
@@ -116,7 +147,9 @@ async function refresh() {
     internalVersion.value = await ShellService.InternalVersion()
     await refreshMpvStatus()
     await refreshHome()
-  } catch (e) { handleError(e) }
+  } catch (e) {
+    handleError(e)
+  }
 }
 
 // handleError 统一处理前端错误：回显 + 写入后端日志（使 RuntimeError 进入「查看日志」）。
@@ -160,8 +193,16 @@ async function recheckMpv() {
 }
 
 async function switchMode(m: 'home' | 'vod' | 'live' | 'settings') {
+  if (m !== 'vod' && searching.value) await invalidateSearch()
+  if (m !== 'live' && activePlayback.value?.scope === 'live') await stopPlayback('live')
+  if (m !== 'vod' && activePlayback.value?.scope === 'vod') await stopPlayback('vod')
+  if (vodView.value === 'detail') currentVod.value = null
   mode.value = m
-  if (m === 'vod') await refreshVod()
+  if (m === 'vod') {
+    vodView.value = 'list'
+    vodDetail.value = null
+    await refreshVod()
+  }
   else if (m === 'live') await reloadGroups()
   else if (m === 'home') await refreshHome()
   else if (m === 'settings') { await reloadSourceHistory(); await refreshLogs(); await loadSearchThreads() }
@@ -183,10 +224,13 @@ function fmtProgress(sec: number) {
 async function resumeVod(h: VodHistoryInfo) {
   errMsg.value = ''
   try {
+    await stopPlayback('live')
     mode.value = 'vod'
     await loadSources()
     activeSite.value = h.Site
     detailSite.value = h.Site
+    vodDetailOrigin.value = 'home'
+    vodView.value = 'detail'
     vodDetail.value = await ShellService.VodDetail(h.Site, h.VodID)
     const resumeSource = h.Source && vodDetail.value.Sources?.includes(h.Source)
       ? h.Source
@@ -197,7 +241,7 @@ async function resumeVod(h: VodHistoryInfo) {
       pendingSeek.value = h.Progress
       await doPlayEpisode(h.Site, h.EpID, h.EpName, resumeSource)
       episodePage.value = episodePageIndex(activeEpisodes.value, h.EpID)
-      if (h.Progress > 0 && playbackPlan.value?.Backend === 'mpv') {
+      if (h.Progress > 0 && vodPlaybackPlan.value?.Backend === 'mpv') {
         await ShellService.Seek(h.Progress)
       }
     }
@@ -277,10 +321,19 @@ async function loadLive() {
 async function play(c: ChannelInfo) {
   errMsg.value = ''
   currentVod.value = null
+  const token = beginPlayback('live')
+  livePlaybackPlan.value = null
+  livePlaybackToken.value = 0
+  liveNowPlaying.value = ''
   try {
-    playbackPlan.value = await ShellService.PrepareChannel(c.ID) as unknown as PlaybackPlan
-    nowPlaying.value = c.Name
-  } catch (e) { handleError(e) }
+    const plan = await ShellService.PrepareChannelWithToken(c.ID, token) as unknown as PlaybackPlan
+    if (!isCurrentPlayback('live', token)) { await pauseStalePlayback(token); return }
+    livePlaybackPlan.value = plan
+    livePlaybackToken.value = token
+    liveNowPlaying.value = c.Name
+  } catch (e) {
+    if (isCurrentPlayback('live', token)) handleError(e)
+  }
 }
 
 async function toggleFav(c: ChannelInfo) {
@@ -321,6 +374,7 @@ async function selectLine(line: string) {
   if (first) {
     activeSite.value = first.ID
     vodDetail.value = null
+    vodView.value = 'list'
     vodPage.value = 0
     await reloadVodCategories()
     await ShellService.SetLastVodSite(first.ID)
@@ -330,6 +384,7 @@ async function selectLine(line: string) {
 async function selectSite(id: string) {
   activeSite.value = id
   vodDetail.value = null
+  vodView.value = 'list'
   vodPage.value = 0
   await reloadVodCategories()
   await ShellService.SetLastVodSite(id)
@@ -342,20 +397,51 @@ async function reloadVodCategories() {
 }
 
 async function reloadVodList() {
-  vodItems.value = (await ShellService.VodList(activeSite.value, vodActiveCat.value, vodPage.value)) ?? []
+  vodListItems.value = (await ShellService.VodList(activeSite.value, vodActiveCat.value, vodPage.value)) ?? []
 }
 
 async function vodSearch() {
-  if (!vodQuery.value) { await reloadVodList(); return }
+  const searchQuery = vodQuery.value.trim()
+  const request = nextVodSearchRequest(searchRequest.value)
+  searchRequest.value = request
+  activeSearchQuery.value = searchQuery
+  searchFloorID.value = activeSearchID.value
+  activeSearchID.value = 0
+  if (vodView.value === 'detail') await stopPlayback('vod')
+  if (!searchQuery) {
+    searching.value = false
+    try { await ShellService.CancelSearch() } catch { /* 忽略 */ }
+    vodView.value = 'list'
+    vodDetail.value = null
+    await reloadVodList()
+    return
+  }
   searching.value = true
-  vodItems.value = []
+  currentVod.value = null
+  vodView.value = 'search'
+  vodDetail.value = null
+  vodSearchItems.value = []
   try {
-    vodItems.value = (await ShellService.VodSearchAll(vodQuery.value)) ?? []
-  } catch (e) { handleError(e) }
-  finally { searching.value = false }
+    const items = (await ShellService.VodSearchAllWithToken(searchQuery, request)) ?? []
+    if (searchRequest.value !== request || activeSearchQuery.value !== searchQuery) return
+    vodSearchItems.value = items
+    vodSearchCache.value = createVodSearchCache(searchQuery, items)
+  } catch (e) {
+    if (searchRequest.value === request) handleError(e)
+  }
+  finally {
+    if (searchRequest.value === request) searching.value = false
+  }
 }
 
 async function cancelSearch() {
+  await invalidateSearch()
+  vodSearchCache.value = createVodSearchCache(activeSearchQuery.value, vodSearchItems.value)
+}
+
+async function invalidateSearch() {
+  searchRequest.value = nextVodSearchRequest(searchRequest.value)
+  activeSearchID.value = 0
   searching.value = false
   try { await ShellService.CancelSearch() } catch { /* 忽略 */ }
 }
@@ -363,24 +449,74 @@ async function cancelSearch() {
 async function openVodDetail(item: VodItem) {
   errMsg.value = ''
   try {
+    if (searching.value) await cancelSearch()
     const site = item.Site || activeSite.value
+    vodDetailOrigin.value = vodView.value === 'search' ? 'search' : 'list'
     detailSite.value = site
     const d = await ShellService.VodDetail(site, item.ID)
     d.Description = DOMPurify.sanitize(d.Description)
     vodDetail.value = d
+    vodView.value = 'detail'
     activeSource.value = d.Sources?.[0] ?? ''
     resetEpisodePage()
   } catch (e) { handleError(e) }
 }
 
+async function backFromVodDetail() {
+  const target = vodBackTarget(vodDetailOrigin.value)
+  await stopPlayback('vod')
+  currentVod.value = null
+  vodDetail.value = null
+  if (target === 'home') {
+    mode.value = 'home'
+    await refreshHome()
+    return
+  }
+  if (target === 'search') {
+    if (isVodSearchCacheValid(vodSearchCache.value)) {
+      vodQuery.value = vodSearchCache.value!.query
+      vodSearchItems.value = [...vodSearchCache.value!.items]
+      vodView.value = 'search'
+      return
+    }
+    vodQuery.value = vodSearchQueryForReturn(vodSearchCache.value, vodQuery.value.trim())
+    await vodSearch()
+    return
+  }
+  vodView.value = 'list'
+}
+
+async function backFromVodSearch() {
+  if (searching.value) {
+    await invalidateSearch()
+  }
+  vodView.value = 'list'
+  vodDetail.value = null
+}
+
 async function doPlayEpisode(site: string, epID: string, epName: string, source: string) {
-  playbackPlan.value = await ShellService.PrepareVod(site, epID) as unknown as PlaybackPlan
-  nowPlaying.value = epName
+  await stopPlayback('live')
+  const token = beginPlayback('vod')
+  vodPlaybackPlan.value = null
+  vodPlaybackToken.value = 0
+  vodNowPlaying.value = ''
+  let plan: PlaybackPlan
+  try {
+    plan = await ShellService.PrepareVodWithToken(site, epID, token) as unknown as PlaybackPlan
+  } catch (e) {
+    if (isCurrentPlayback('vod', token)) throw e
+    return false
+  }
+  if (!isCurrentPlayback('vod', token)) { await pauseStalePlayback(token); return false }
+  vodPlaybackPlan.value = plan
+  vodPlaybackToken.value = token
+  vodNowPlaying.value = epName
   currentEpisodeID.value = epID
   if (vodDetail.value) {
     currentVod.value = { site, vodID: vodDetail.value.ID }
     await ShellService.RecordVodHistory(site, vodDetail.value.ID, vodDetail.value.Title, vodDetail.value.Logo, epID, epName, source)
   }
+  return true
 }
 
 async function playEpisode(ep: EpisodeInfo) {
@@ -388,16 +524,69 @@ async function playEpisode(ep: EpisodeInfo) {
   pendingSeek.value = 0
   try {
     await doPlayEpisode(detailSite.value || activeSite.value, ep.ID, ep.Name, ep.Source)
-  } catch (e) { handleError(e) }
+  } catch (e) {
+    if (isCurrentPlayback('vod', vodPlaybackToken.value)) handleError(e)
+  }
 }
 
-async function fallbackToMpv(id: string) {
-  try { playbackPlan.value = await ShellService.FallbackToMPV(id) as unknown as PlaybackPlan }
-  catch (e) { handleError(e) }
+async function fallbackToMpv(scope: PlaybackScope, id: string, token: number) {
+  try {
+    const applied = await resolvePlaybackFallback(
+      scope,
+      async () => await ShellService.FallbackToMPVWithToken(id, token) as unknown as PlaybackPlan,
+      () => isCurrentPlayback(scope, token) &&
+        (scope === 'live' ? mode.value === 'live' : mode.value === 'vod' && vodView.value === 'detail'),
+      (target, plan) => {
+        if (target === 'live') livePlaybackPlan.value = plan
+        else vodPlaybackPlan.value = plan
+      },
+    )
+    if (!applied) await pauseStalePlayback(token)
+  }
+  catch (e) {
+    if (isCurrentPlayback(scope, token)) handleError(e)
+  }
 }
 
-async function onProgress(time: number, duration: number) {
-  if (!currentVod.value) return
+async function stopPlayback(scope: PlaybackScope) {
+  const ownsPlayer = activePlayback.value?.scope === scope
+  const token = ownsPlayer ? activePlayback.value!.token : 0
+  if (scope === 'live') {
+    livePlaybackPlan.value = null
+    livePlaybackToken.value = 0
+    liveNowPlaying.value = ''
+  } else {
+    vodPlaybackPlan.value = null
+    vodPlaybackToken.value = 0
+    vodNowPlaying.value = ''
+    currentVod.value = null
+  }
+  if (ownsPlayer) {
+    activePlayback.value = null
+    playbackOwner.value = null
+    try { await ShellService.StopPlayback(token) } catch { /* 播放器未就绪时无需处理 */ }
+  }
+}
+
+async function pauseStalePlayback(token: number) {
+  if (!shouldPauseStalePlayback(activePlayback.value)) return
+  try { await ShellService.StopPlayback(token) } catch { /* 过期播放尚未建立时无需处理 */ }
+}
+
+function beginPlayback(scope: PlaybackScope): number {
+  const token = ++nextPlaybackToken
+  activePlayback.value = { scope, token }
+  playbackOwner.value = scope
+  return token
+}
+
+function isCurrentPlayback(scope: PlaybackScope, token: number): boolean {
+  const active = activePlayback.value
+  return !!active && active.scope === scope && active.token === token
+}
+
+async function onVodProgress(token: number, time: number, duration: number) {
+  if (!isCurrentPlayback('vod', token) || !shouldRecordVodProgress(mode.value, vodView.value) || !currentVod.value) return
   const now = Date.now()
   if (now - lastProgressSave < 10000) return
   lastProgressSave = now
@@ -438,7 +627,8 @@ async function copyLogs() {
 }
 
 async function pollMpvProgress() {
-  if (!currentVod.value || playbackPlan.value?.Backend !== 'mpv') return
+  const token = vodPlaybackToken.value
+  if (!isCurrentPlayback('vod', token) || !shouldRecordVodProgress(mode.value, vodView.value) || !currentVod.value || activePlaybackPlan.value?.Backend !== 'mpv') return
   try {
     const pos = await ShellService.Position()
     await ShellService.UpdateVodProgress(currentVod.value.site, currentVod.value.vodID, pos, 0)
@@ -478,10 +668,24 @@ function imgError(e: Event) {
 onMounted(() => {
   refresh()
   Events.On('import:progress', (ev: any) => { importProgress.value = ev.data as Progress })
-  Events.On('search:progress', (ev: any) => { searchProgress.value = ev.data as Progress })
+  Events.On('search:start', (ev: any) => {
+    const data = ev.data as { ID: number; Token: number; Query: string }
+    if (searching.value && data.Token === searchRequest.value && data.Query === activeSearchQuery.value && data.ID > searchFloorID.value) activeSearchID.value = data.ID
+  })
+  Events.On('search:progress', (ev: any) => {
+    const data = ev.data as Progress & { ID?: number; Token?: number; Query?: string }
+    if (searching.value && data.Token === searchRequest.value && data.ID !== undefined && data.ID > searchFloorID.value && data.Query === activeSearchQuery.value) {
+      if (activeSearchID.value === 0) activeSearchID.value = data.ID
+      if (data.ID === activeSearchID.value) searchProgress.value = data
+    }
+  })
   Events.On('search:result', (ev: any) => {
-    if (searching.value) {
-      vodItems.value = [...vodItems.value, ...(ev.data as VodItem[])]
+    const data = ev.data as { ID: number; Token: number; Query: string; Items: VodItem[] }
+    if (searching.value && data.Token === searchRequest.value && data.ID > searchFloorID.value && data.Query === activeSearchQuery.value) {
+      if (activeSearchID.value === 0) activeSearchID.value = data.ID
+      if (data.ID !== activeSearchID.value) return
+      vodSearchItems.value = [...vodSearchItems.value, ...(data.Items ?? [])]
+      vodSearchCache.value = createVodSearchCache(activeSearchQuery.value, vodSearchItems.value)
     }
   })
   setInterval(pollMpvProgress, 10000)
@@ -536,9 +740,9 @@ onMounted(() => {
       </aside>
 
       <aside class="player">
-        <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
-        <PlaybackView :plan="playbackPlan" :seek-to="pendingSeek" @fallback="fallbackToMpv" @progress="onProgress" />
-        <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
+        <p v-if="liveNowPlaying" class="now">正在播放：{{ liveNowPlaying }}</p>
+        <PlaybackView :plan="livePagePlaybackPlan" @fallback="id => fallbackToMpv('live', id, livePlaybackToken)" />
+        <div class="controls" v-if="liveNowPlaying && livePagePlaybackPlan?.Backend === 'mpv'">
           <button @click="pause">暂停</button>
           <button @click="resume">继续</button>
           <input type="range" min="0" max="100" @input="setVolume" />
@@ -569,7 +773,7 @@ onMounted(() => {
 
     <!-- 点播 -->
     <section v-if="mode === 'vod'" class="vod">
-      <div class="vod-toolbar">
+      <div v-if="vodView === 'list'" class="vod-toolbar">
         <select v-if="vodLines.length > 1" v-model="activeLine" @change="selectLine(activeLine)">
           <option v-for="l in vodLines" :key="l" :value="l">{{ l || '默认线路' }}</option>
         </select>
@@ -578,8 +782,14 @@ onMounted(() => {
         </select>
       </div>
 
-      <div class="vod-layout" :class="{ 'cats-collapsed': catsCollapsed }">
-        <aside class="vod-cats" :class="{ collapsed: catsCollapsed }">
+      <div class="vod-search-row">
+        <button v-if="vodView === 'detail'" class="vod-back" type="button" @click="backFromVodDetail">← 返回</button>
+        <button v-else-if="vodView === 'search'" class="vod-back" type="button" @click="backFromVodSearch">← 点播列表</button>
+        <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button><button v-if="searching" type="button" @click="cancelSearch">取消</button><span v-if="searchProgress" class="progress">{{ searchProgress.Message }}</span></form>
+      </div>
+
+      <div class="vod-layout" :class="{ 'cats-collapsed': catsCollapsed, 'without-cats': vodView !== 'list' }">
+        <aside v-if="vodView === 'list'" class="vod-cats" :class="{ collapsed: catsCollapsed }">
           <div class="cats-head">
             <span class="cats-title">类目</span>
             <button class="cats-toggle" :title="catsCollapsed ? '展开类目' : '收起类目'" @click="catsCollapsed = !catsCollapsed">{{ catsCollapsed ? '»' : '«' }}</button>
@@ -591,22 +801,18 @@ onMounted(() => {
         </aside>
 
         <section class="vod-main">
-          <div class="vod-search-row">
-            <button v-if="vodDetail" class="vod-back" type="button" @click="vodDetail = null">← 返回</button>
-            <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button><button v-if="searching" type="button" @click="cancelSearch">取消</button><span v-if="searchProgress" class="progress">{{ searchProgress.Message }}</span></form>
-          </div>
-          <ul v-if="!vodDetail">
-            <li v-for="it in vodItems" :key="it.ID" class="channel" @click="openVodDetail(it)">
+          <ul v-if="vodView !== 'detail'">
+            <li v-for="it in visibleVodItems" :key="it.ID + (it.Site || '')" class="channel" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
               <span class="name">{{ it.Title }}</span><span class="group">{{ vodItemSub(it) }}</span>
             </li>
           </ul>
-          <div v-else class="vod-detail">
+          <div v-else-if="vodView === 'detail' && vodDetail" class="vod-detail">
             <div class="vod-detail-top" :class="{ 'info-collapsed': infoCollapsed }">
               <div class="vod-player">
-                <p v-if="nowPlaying" class="now">正在播放：{{ nowPlaying }}</p>
-                <PlaybackView :plan="playbackPlan" :seek-to="pendingSeek" @fallback="fallbackToMpv" @progress="onProgress" />
-                <div class="controls" v-if="nowPlaying && playbackPlan?.Backend === 'mpv'">
+                <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>
+                <PlaybackView :plan="vodPagePlaybackPlan" :seek-to="pendingSeek" @fallback="id => fallbackToMpv('vod', id, vodPlaybackToken)" @progress="(time, duration) => onVodProgress(vodPlaybackToken, time, duration)" />
+                <div class="controls" v-if="vodNowPlaying && vodPagePlaybackPlan?.Backend === 'mpv'">
                   <button @click="pause">暂停</button>
                   <button @click="resume">继续</button>
                   <input type="range" min="0" max="100" @input="setVolume" />
@@ -614,10 +820,14 @@ onMounted(() => {
                 <div v-if="(vodDetail.Sources ?? []).length" class="ep-src-tabs">
                   <button v-for="src in vodDetail.Sources" :key="src" :class="{ active: src === activeSource }" @click="selectEpisodeSource(src)">{{ src }}</button>
                 </div>
-                <div v-if="episodeRanges.length > 1" class="ep-pagination" role="navigation" aria-label="剧集分页">
-                  <button v-for="(range, index) in episodeRanges" :key="range.start" type="button"
-                          :class="{ active: index === episodePage }" :aria-current="index === episodePage ? 'page' : undefined"
-                          @click="selectEpisodePage(index)">{{ range.start }}~{{ range.end }}集</button>
+                <div v-if="episodeRanges.length > 1" class="ep-pagination-wrap" role="navigation" aria-label="剧集分页">
+                  <button class="ep-pagination-arrow" type="button" aria-label="向左滚动剧集分页" title="向左滚动" @click="scrollEpisodePages(-1)">‹</button>
+                  <div ref="episodePagination" class="ep-pagination">
+                    <button v-for="(range, index) in episodeRanges" :key="range.start" type="button"
+                            :class="{ active: index === episodePage }" :aria-current="index === episodePage ? 'page' : undefined"
+                            @click="selectEpisodePage(index)">{{ range.start }}~{{ range.end }}集</button>
+                  </div>
+                  <button class="ep-pagination-arrow" type="button" aria-label="向右滚动剧集分页" title="向右滚动" @click="scrollEpisodePages(1)">›</button>
                 </div>
                 <div class="ep-list">
                   <button v-for="ep in visibleEpisodes" :key="ep.ID" :class="{ active: ep.ID === currentEpisodeID }"

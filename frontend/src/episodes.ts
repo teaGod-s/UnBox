@@ -1,4 +1,4 @@
-export const EPISODES_PER_PAGE = 30
+export const EPISODES_PER_PAGE = 36
 
 export interface EpisodePageRange {
   start: number

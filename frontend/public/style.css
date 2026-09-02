@@ -249,7 +249,12 @@ body {
 .vod-search-row {
   display: flex;
   align-items: stretch;
-  border-bottom: 1px solid #23283a;
+  flex: 0 0 auto;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+  background: #0a0d1a;
+  border: 1px solid #23283a;
+  border-radius: 0.5rem;
 }
 
 .vod-search-row .search {
@@ -312,7 +317,7 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
   flex: 1;
   min-height: 0;
   margin-bottom: 0.75rem;
@@ -328,17 +333,18 @@ body {
   min-width: 0;
   min-height: 0;
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   margin: 0;
 }
 
 .vod-detail-top .vod-player .playback-view {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   width: 100%;
   height: auto;
-  min-height: 0;
+  min-height: 180px;
   max-height: min(50vh, 480px);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .vod-info {
@@ -781,11 +787,16 @@ body {
   grid-template-columns: 34px minmax(0, 1fr);
 }
 
+.vod-layout.without-cats {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .vod-cats {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
   padding: 0.6rem;
+  min-height: 0;
   overflow-y: auto;
   background: #0a0d1a;
   border: 1px solid #23283a;
@@ -909,15 +920,40 @@ body {
   margin: 0.75rem 0 0.5rem;
 }
 
-.ep-pagination {
+.ep-pagination-wrap {
   display: flex;
+  align-items: center;
   flex: 0 0 auto;
-  flex-wrap: nowrap;
   gap: 0.35rem;
   max-width: 100%;
   margin: 0 0 0.5rem;
+}
+
+.ep-pagination {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  min-width: 0;
   padding-bottom: 0.15rem;
   overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.ep-pagination-arrow {
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  color: #c6cbd9;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+
+.ep-pagination-arrow:hover {
+  background: #232a45;
 }
 
 .ep-pagination button {
@@ -963,8 +999,8 @@ body {
 }
 
 .ep-list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.35rem;
   align-content: flex-start;
   flex: 1 1 auto;
@@ -974,6 +1010,8 @@ body {
 }
 
 .ep-list button {
+  width: 100%;
+  min-width: 0;
   padding: 0.3rem 0.6rem;
   font-size: 0.85rem;
   color: #e8eaf0;
@@ -981,6 +1019,9 @@ body {
   border: 1px solid #2c3350;
   border-radius: 0.35rem;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ep-list button:hover {
@@ -991,6 +1032,12 @@ body {
   color: #ffffff;
   background: #2c3350;
   border-color: #7ee787;
+}
+
+@media (max-width: 900px) {
+  .ep-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 /* ---- 关于：关于我们 / 免责条款 / 开源库 ---- */

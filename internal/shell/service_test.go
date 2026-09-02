@@ -305,3 +305,41 @@ func TestCollectVodSitesSpider(t *testing.T) {
 		t.Fatalf("js 站点应使用 tvbox.Spider，实际类型 %T", vods["js"])
 	}
 }
+
+func TestPlaybackTokenRejectsStaleRequests(t *testing.T) {
+	svc := &ShellService{}
+	firstID, ok := svc.claimPlayback(1)
+	if !ok || !svc.playbackCurrent(1, firstID) {
+		t.Fatalf("first playback token should be current: id=%d ok=%v", firstID, ok)
+	}
+	stopID, ok := svc.claimPlayback(0)
+	if !ok || !svc.playbackCurrent(0, stopID) {
+		t.Fatalf("stop token should invalidate active playback: id=%d ok=%v", stopID, ok)
+	}
+	if _, ok := svc.claimPlayback(1); ok {
+		t.Fatal("stale token should not reclaim playback after stop")
+	}
+	secondID, ok := svc.claimPlayback(2)
+	if !ok || !svc.playbackCurrent(2, secondID) {
+		t.Fatalf("newer playback token should be accepted: id=%d ok=%v", secondID, ok)
+	}
+	if _, ok := svc.claimPlayback(1); ok {
+		t.Fatal("older token should not reclaim newer playback")
+	}
+}
+
+func TestStopPlaybackDoesNotInvalidateNewerToken(t *testing.T) {
+	svc := &ShellService{}
+	if _, ok := svc.claimPlayback(1); !ok {
+		t.Fatal("first playback token should be accepted")
+	}
+	if _, ok := svc.claimPlayback(2); !ok {
+		t.Fatal("newer playback token should be accepted")
+	}
+	if _, invalidated := svc.invalidatePlayback(1); invalidated {
+		t.Fatal("stale stop must not invalidate a newer playback token")
+	}
+	if svc.playbackToken != 2 {
+		t.Fatalf("newer playback token was cleared: got %d", svc.playbackToken)
+	}
+}

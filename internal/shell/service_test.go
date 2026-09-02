@@ -5,6 +5,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/unbox/unbox/internal/config"
 	"github.com/unbox/unbox/internal/player"
@@ -133,6 +134,73 @@ func (s *stubProvider) Detail(context.Context, string) (provider.Media, error) {
 }
 func (s *stubProvider) Resolve(context.Context, string) (player.Stream, error) {
 	return player.Stream{URL: "https://x/a.m3u8", Kind: player.StreamHLS}, nil
+}
+
+type countingVodProvider struct {
+	stubProvider
+	homeCalls int
+}
+
+func (p *countingVodProvider) Home(context.Context) ([]provider.Section, error) {
+	p.homeCalls++
+	return []provider.Section{{ID: "10", Title: "电影"}}, nil
+}
+
+func TestVodPersistenceAPIs(t *testing.T) {
+	svc := newTestService(t)
+	if err := svc.RecordVodSearch("斗罗"); err != nil {
+		t.Fatalf("RecordVodSearch: %v", err)
+	}
+	history, err := svc.ListVodSearchHistory()
+	if err != nil || len(history) != 1 || history[0] != "斗罗" {
+		t.Fatalf("ListVodSearchHistory = %#v, %v", history, err)
+	}
+	if err := svc.DeleteVodSearchHistory("斗罗"); err != nil {
+		t.Fatalf("DeleteVodSearchHistory: %v", err)
+	}
+	if err := svc.AddVodFavorite("site-a", "vod-1", "影片一", "logo", "电影"); err != nil {
+		t.Fatalf("AddVodFavorite: %v", err)
+	}
+	ok, err := svc.IsVodFavorite("site-a", "vod-1")
+	if err != nil || !ok {
+		t.Fatalf("IsVodFavorite = %v, %v", ok, err)
+	}
+	favs, err := svc.ListVodFavorites()
+	if err != nil || len(favs) != 1 || favs[0].Title != "影片一" {
+		t.Fatalf("ListVodFavorites = %#v, %v", favs, err)
+	}
+	if err := svc.RemoveVodFavorite("site-a", "vod-1"); err != nil {
+		t.Fatalf("RemoveVodFavorite: %v", err)
+	}
+	if err := svc.RecordVodHistory("site-a", "vod-1", "影片一", "", "ep-1", "第1集", "线路"); err != nil {
+		t.Fatalf("RecordVodHistory: %v", err)
+	}
+	if err := svc.DeleteVodHistory("site-a", "vod-1"); err != nil {
+		t.Fatalf("DeleteVodHistory: %v", err)
+	}
+}
+
+func TestVodCategoriesUsesShortTTLCache(t *testing.T) {
+	svc := NewShellService(nil, nil, nil)
+	provider := &countingVodProvider{stubProvider: stubProvider{key: "s1"}}
+	svc.vods["s1"] = provider
+	svc.vodCategoryNow = func() time.Time { return time.Unix(100, 0) }
+	if _, err := svc.VodCategories("s1"); err != nil {
+		t.Fatalf("first VodCategories: %v", err)
+	}
+	if _, err := svc.VodCategories("s1"); err != nil {
+		t.Fatalf("cached VodCategories: %v", err)
+	}
+	if provider.homeCalls != 1 {
+		t.Fatalf("cache hit calls Home %d times", provider.homeCalls)
+	}
+	svc.vodCategoryNow = func() time.Time { return time.Unix(106, 0) }
+	if _, err := svc.VodCategories("s1"); err != nil {
+		t.Fatalf("expired VodCategories: %v", err)
+	}
+	if provider.homeCalls != 2 {
+		t.Fatalf("expired cache calls Home %d times", provider.homeCalls)
+	}
 }
 
 func TestVodSourcesAndRoutes(t *testing.T) {

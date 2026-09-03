@@ -38,8 +38,10 @@ var appLogs = newLogBuffer(64 << 10)
 
 // internalVersion 返回内部构建版本（debug.ReadBuildInfo 的 Main.Version）。
 // 构建时开启 -buildvcs（默认 auto）且处于 git 仓库内，会原生产出伪版本：
-//   无 tag → v0.0.0-<时间>-<commit>
-//   有 tag → vX.Y.(Z+1)-0.<时间>-<commit>
+//
+//	无 tag → v0.0.0-<时间>-<commit>
+//	有 tag → vX.Y.(Z+1)-0.<时间>-<commit>
+//
 // 未开 -buildvcs 或不在 git 仓库内构建时为 "(devel)"。
 func internalVersion() string {
 	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" {

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { Events, Browser } from '@wailsio/runtime'
-import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
+import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type VodFavoriteInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
-import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, type ActivePlaybackSession, type PlaybackScope } from './playbackScope'
-import { createVodSearchCache, isVodSearchCacheValid, nextVodSearchRequest, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
+import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
+import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
 
 // 爱发电赞助主页
@@ -26,7 +26,7 @@ const vodNowPlaying = ref('')
 const importSummary = ref('')
 const errMsg = ref('')
 const importProgress = ref<Progress | null>(null)
-const mode = ref<'home' | 'vod' | 'live' | 'settings'>('home')
+const mode = ref<'home' | 'vod' | 'live' | 'search' | 'favorites' | 'settings'>('home')
 const sources = ref<SourceInfo[]>([])
 const activeSite = ref('')
 const activeLine = ref('')
@@ -44,15 +44,26 @@ const episodePage = ref(0)
 const currentEpisodeID = ref('')
 const episodePagination = ref<HTMLElement | null>(null)
 const vodQuery = ref('')
+const vodSearchHistory = ref<string[]>([])
+const vodFavorites = ref<VodFavoriteInfo[]>([])
+const vodFavorited = ref(false)
 const vodPage = ref(0)
+let vodCategoryRequest = 0
+const vodCategoryLoading = ref(false)
+const vodCategoryError = ref('')
 const livePlaybackPlan = ref<PlaybackPlan | null>(null)
 const vodPlaybackPlan = ref<PlaybackPlan | null>(null)
 const playbackOwner = ref<'live' | 'vod' | null>(null)
 const activePlayback = ref<ActivePlaybackSession | null>(null)
 const livePlaybackToken = ref(0)
 const vodPlaybackToken = ref(0)
+const livePlaybackStatus = ref<PlaybackStatus>('idle')
+const vodPlaybackStatus = ref<PlaybackStatus>('idle')
+const livePlaybackError = ref('')
+const vodPlaybackError = ref('')
 let nextPlaybackToken = 0
 const mpvReady = ref(false)
+const mpvFallbackRequested = ref(false)
 const mpvInstallMode = ref('')
 const installMessage = ref('')
 const vodSources = ref<SourceRecord[]>([])
@@ -85,6 +96,8 @@ const showOpenSource = ref(false)
 const catsCollapsed = ref(false)
 const infoCollapsed = ref(false)
 let lastProgressSave = 0
+
+const showMpvInstallPrompt = computed(() => shouldShowMpvInstallPrompt(platform.value, mpvReady.value, mpvFallbackRequested.value))
 
 const activeEpisodes = computed(() => (vodDetail.value?.Episodes ?? []).filter(ep => ep.Source === activeSource.value))
 const episodePages = computed(() => paginateEpisodes(activeEpisodes.value))
@@ -173,6 +186,7 @@ async function refreshMpvStatus() {
   const s = await ShellService.MPVStatus()
   mpvReady.value = s.Available
   mpvInstallMode.value = s.InstallMode
+  if (s.Available) mpvFallbackRequested.value = false
 }
 
 async function installMpv() {
@@ -192,8 +206,8 @@ async function recheckMpv() {
   } catch (e) { handleError(e) }
 }
 
-async function switchMode(m: 'home' | 'vod' | 'live' | 'settings') {
-  if (m !== 'vod' && searching.value) await invalidateSearch()
+async function switchMode(m: 'home' | 'vod' | 'live' | 'search' | 'favorites' | 'settings') {
+  if (m !== 'search' && searching.value) await invalidateSearch()
   if (m !== 'live' && activePlayback.value?.scope === 'live') await stopPlayback('live')
   if (m !== 'vod' && activePlayback.value?.scope === 'vod') await stopPlayback('vod')
   if (vodView.value === 'detail') currentVod.value = null
@@ -204,6 +218,16 @@ async function switchMode(m: 'home' | 'vod' | 'live' | 'settings') {
     await refreshVod()
   }
   else if (m === 'live') await reloadGroups()
+  else if (m === 'search') {
+    vodView.value = 'search'
+    vodDetail.value = null
+    await loadVodSearchHistory()
+  }
+  else if (m === 'favorites') {
+    vodView.value = 'list'
+    vodDetail.value = null
+    await loadVodFavorites()
+  }
   else if (m === 'home') await refreshHome()
   else if (m === 'settings') { await reloadSourceHistory(); await refreshLogs(); await loadSearchThreads() }
 }
@@ -211,6 +235,58 @@ async function switchMode(m: 'home' | 'vod' | 'live' | 'settings') {
 async function refreshHome() {
   try {
     homeHistory.value = (await ShellService.ListVodHistory()) ?? []
+  } catch (e) { handleError(e) }
+}
+
+async function loadVodSearchHistory() {
+  try { vodSearchHistory.value = (await ShellService.ListVodSearchHistory()) ?? [] } catch (e) { handleError(e) }
+}
+
+async function loadVodFavorites() {
+  try { vodFavorites.value = (await ShellService.ListVodFavorites()) ?? [] } catch (e) { handleError(e) }
+}
+
+async function deleteHomeHistory(h: VodHistoryInfo) {
+  try {
+    await ShellService.DeleteVodHistory(h.Site, h.VodID)
+    homeHistory.value = removeVodHistory(homeHistory.value, h.Site, h.VodID)
+  } catch (e) { handleError(e) }
+}
+
+async function deleteVodSearchHistory(query: string) {
+  try {
+    await ShellService.DeleteVodSearchHistory(query)
+    vodSearchHistory.value = removeVodSearchHistory(vodSearchHistory.value, query)
+  } catch (e) { handleError(e) }
+}
+
+async function useVodSearchHistory(query: string) {
+  vodQuery.value = query
+  await vodSearch()
+}
+
+async function deleteVodFavorite(favorite: VodFavoriteInfo) {
+  try {
+    await ShellService.RemoveVodFavorite(favorite.Site, favorite.VodID)
+    vodFavorites.value = removeVodFavorite(vodFavorites.value, favorite.Site, favorite.VodID)
+    if (currentVod.value?.site === favorite.Site && currentVod.value.vodID === favorite.VodID) vodFavorited.value = false
+  } catch (e) { handleError(e) }
+}
+
+async function toggleVodFavorite() {
+  const detail = vodDetail.value
+  const site = detailSite.value || activeSite.value
+  if (!detail || !site) return
+  try {
+    if (vodFavorited.value) {
+      await ShellService.RemoveVodFavorite(site, detail.ID)
+      vodFavorited.value = false
+      vodFavorites.value = removeVodFavorite(vodFavorites.value, site, detail.ID)
+    } else {
+      await ShellService.AddVodFavorite(site, detail.ID, detail.Title, detail.Logo, detail.Group)
+      vodFavorited.value = true
+      await loadVodFavorites()
+    }
   } catch (e) { handleError(e) }
 }
 
@@ -324,15 +400,23 @@ async function play(c: ChannelInfo) {
   const token = beginPlayback('live')
   livePlaybackPlan.value = null
   livePlaybackToken.value = 0
-  liveNowPlaying.value = ''
+  livePlaybackStatus.value = 'preparing'
+  livePlaybackError.value = ''
+  liveNowPlaying.value = c.Name
   try {
     const plan = await ShellService.PrepareChannelWithToken(c.ID, token) as unknown as PlaybackPlan
     if (!isCurrentPlayback('live', token)) { await pauseStalePlayback(token); return }
     livePlaybackPlan.value = plan
     livePlaybackToken.value = token
-    liveNowPlaying.value = c.Name
+    livePlaybackStatus.value = 'playing'
   } catch (e) {
-    if (isCurrentPlayback('live', token)) handleError(e)
+    if (isCurrentPlayback('live', token)) {
+      livePlaybackPlan.value = null
+      livePlaybackToken.value = 0
+      livePlaybackStatus.value = 'error'
+      livePlaybackError.value = String(e)
+      handleError(e)
+    }
   }
 }
 
@@ -391,9 +475,27 @@ async function selectSite(id: string) {
 }
 
 async function reloadVodCategories() {
-  vodCategories.value = (await ShellService.VodCategories(activeSite.value)) ?? []
-  vodActiveCat.value = vodCategories.value[0]?.ID ?? ''
-  await reloadVodList()
+  const request = nextVodCategoryRequest(vodCategoryRequest)
+  vodCategoryRequest = request
+  vodCategoryLoading.value = true
+  vodCategoryError.value = ''
+  vodCategories.value = []
+  vodActiveCat.value = ''
+  vodListItems.value = []
+  try {
+    const categories = (await ShellService.VodCategories(activeSite.value)) ?? []
+    if (!isCurrentVodCategoryRequest(request, vodCategoryRequest)) return
+    vodCategories.value = categories
+    vodActiveCat.value = categories[0]?.ID ?? ''
+    if (vodActiveCat.value) await reloadVodList()
+  } catch (e) {
+    if (isCurrentVodCategoryRequest(request, vodCategoryRequest)) {
+      vodCategoryError.value = String(e)
+      handleError(e)
+    }
+  } finally {
+    if (isCurrentVodCategoryRequest(request, vodCategoryRequest)) vodCategoryLoading.value = false
+  }
 }
 
 async function reloadVodList() {
@@ -408,19 +510,23 @@ async function vodSearch() {
   searchFloorID.value = activeSearchID.value
   activeSearchID.value = 0
   if (vodView.value === 'detail') await stopPlayback('vod')
+  searchProgress.value = null
   if (!searchQuery) {
     searching.value = false
     try { await ShellService.CancelSearch() } catch { /* 忽略 */ }
-    vodView.value = 'list'
-    vodDetail.value = null
-    await reloadVodList()
+    vodSearchItems.value = []
+    vodSearchCache.value = null
     return
   }
   searching.value = true
   currentVod.value = null
+  mode.value = 'search'
   vodView.value = 'search'
   vodDetail.value = null
   vodSearchItems.value = []
+  void ShellService.RecordVodSearch(searchQuery).then(() => {
+    vodSearchHistory.value = upsertVodSearchHistory(vodSearchHistory.value, searchQuery)
+  }).catch(() => {})
   try {
     const items = (await ShellService.VodSearchAllWithToken(searchQuery, request)) ?? []
     if (searchRequest.value !== request || activeSearchQuery.value !== searchQuery) return
@@ -451,15 +557,29 @@ async function openVodDetail(item: VodItem) {
   try {
     if (searching.value) await cancelSearch()
     const site = item.Site || activeSite.value
-    vodDetailOrigin.value = vodView.value === 'search' ? 'search' : 'list'
+    vodDetailOrigin.value = mode.value === 'favorites'
+      ? 'favorites'
+      : mode.value === 'search' || vodView.value === 'search' ? 'search' : 'list'
     detailSite.value = site
     const d = await ShellService.VodDetail(site, item.ID)
     d.Description = DOMPurify.sanitize(d.Description)
     vodDetail.value = d
+    mode.value = 'vod'
     vodView.value = 'detail'
     activeSource.value = d.Sources?.[0] ?? ''
     resetEpisodePage()
+    vodFavorited.value = await ShellService.IsVodFavorite(site, d.ID)
   } catch (e) { handleError(e) }
+}
+
+async function openVodFavorite(favorite: VodFavoriteInfo) {
+  await openVodDetail({
+    ID: favorite.VodID,
+    Title: favorite.Title,
+    Logo: favorite.Logo,
+    Group: favorite.Group,
+    Site: favorite.Site,
+  })
 }
 
 async function backFromVodDetail() {
@@ -476,11 +596,17 @@ async function backFromVodDetail() {
     if (isVodSearchCacheValid(vodSearchCache.value)) {
       vodQuery.value = vodSearchCache.value!.query
       vodSearchItems.value = [...vodSearchCache.value!.items]
+      mode.value = 'search'
       vodView.value = 'search'
       return
     }
     vodQuery.value = vodSearchQueryForReturn(vodSearchCache.value, vodQuery.value.trim())
     await vodSearch()
+    return
+  }
+  if (target === 'favorites') {
+    mode.value = 'favorites'
+    await loadVodFavorites()
     return
   }
   vodView.value = 'list'
@@ -490,8 +616,8 @@ async function backFromVodSearch() {
   if (searching.value) {
     await invalidateSearch()
   }
-  vodView.value = 'list'
   vodDetail.value = null
+  await switchMode('vod')
 }
 
 async function doPlayEpisode(site: string, epID: string, epName: string, source: string) {
@@ -499,18 +625,26 @@ async function doPlayEpisode(site: string, epID: string, epName: string, source:
   const token = beginPlayback('vod')
   vodPlaybackPlan.value = null
   vodPlaybackToken.value = 0
-  vodNowPlaying.value = ''
+  vodPlaybackStatus.value = 'preparing'
+  vodPlaybackError.value = ''
+  vodNowPlaying.value = epName
   let plan: PlaybackPlan
   try {
     plan = await ShellService.PrepareVodWithToken(site, epID, token) as unknown as PlaybackPlan
   } catch (e) {
-    if (isCurrentPlayback('vod', token)) throw e
+    if (isCurrentPlayback('vod', token)) {
+      vodPlaybackPlan.value = null
+      vodPlaybackToken.value = 0
+      vodPlaybackStatus.value = 'error'
+      vodPlaybackError.value = String(e)
+      throw e
+    }
     return false
   }
   if (!isCurrentPlayback('vod', token)) { await pauseStalePlayback(token); return false }
   vodPlaybackPlan.value = plan
   vodPlaybackToken.value = token
-  vodNowPlaying.value = epName
+  vodPlaybackStatus.value = 'playing'
   currentEpisodeID.value = epID
   if (vodDetail.value) {
     currentVod.value = { site, vodID: vodDetail.value.ID }
@@ -530,6 +664,14 @@ async function playEpisode(ep: EpisodeInfo) {
 }
 
 async function fallbackToMpv(scope: PlaybackScope, id: string, token: number) {
+  mpvFallbackRequested.value = true
+  if (scope === 'live') {
+    livePlaybackStatus.value = 'preparing'
+    livePlaybackError.value = ''
+  } else {
+    vodPlaybackStatus.value = 'preparing'
+    vodPlaybackError.value = ''
+  }
   try {
     const applied = await resolvePlaybackFallback(
       scope,
@@ -537,14 +679,35 @@ async function fallbackToMpv(scope: PlaybackScope, id: string, token: number) {
       () => isCurrentPlayback(scope, token) &&
         (scope === 'live' ? mode.value === 'live' : mode.value === 'vod' && vodView.value === 'detail'),
       (target, plan) => {
-        if (target === 'live') livePlaybackPlan.value = plan
-        else vodPlaybackPlan.value = plan
+        if (target === 'live') {
+          livePlaybackPlan.value = plan
+          livePlaybackStatus.value = 'playing'
+        } else {
+          vodPlaybackPlan.value = plan
+          vodPlaybackStatus.value = 'playing'
+        }
       },
     )
     if (!applied) await pauseStalePlayback(token)
+    else {
+      try { await refreshMpvStatus() } catch { /* 播放已回退，状态检测失败不影响播放 */ }
+    }
   }
   catch (e) {
-    if (isCurrentPlayback(scope, token)) handleError(e)
+    if (isCurrentPlayback(scope, token)) {
+      if (scope === 'live') {
+        livePlaybackPlan.value = null
+        livePlaybackToken.value = 0
+        livePlaybackStatus.value = 'error'
+        livePlaybackError.value = String(e)
+      } else {
+        vodPlaybackPlan.value = null
+        vodPlaybackToken.value = 0
+        vodPlaybackStatus.value = 'error'
+        vodPlaybackError.value = String(e)
+      }
+      handleError(e)
+    }
   }
 }
 
@@ -555,11 +718,15 @@ async function stopPlayback(scope: PlaybackScope) {
     livePlaybackPlan.value = null
     livePlaybackToken.value = 0
     liveNowPlaying.value = ''
+    livePlaybackStatus.value = 'idle'
+    livePlaybackError.value = ''
   } else {
     vodPlaybackPlan.value = null
     vodPlaybackToken.value = 0
     vodNowPlaying.value = ''
     currentVod.value = null
+    vodPlaybackStatus.value = 'idle'
+    vodPlaybackError.value = ''
   }
   if (ownsPlayer) {
     activePlayback.value = null
@@ -700,7 +867,7 @@ onMounted(() => {
       <p class="subtitle">{{ platform }} · 播放器{{ playerReady ? '就绪' : '未就绪' }}</p>
     </header>
 
-    <div v-if="!mpvReady" class="mpv-install">
+    <div v-if="showMpvInstallPrompt" class="mpv-install" aria-live="polite">
       <span>mpv 插件未安装（HEVC / RTMP / 本地文件需要它）</span>
       <button @click="installMpv">{{ mpvInstallMode === 'download' ? '下载并安装 mpv' : '显示安装命令' }}</button>
       <button v-if="mpvInstallMode && mpvInstallMode !== 'download'" @click="recheckMpv">我已安装，重新检测</button>
@@ -711,6 +878,8 @@ onMounted(() => {
       <button :class="{ active: mode === 'home' }" @click="switchMode('home')">首页</button>
       <button :class="{ active: mode === 'vod' }" @click="switchMode('vod')">点播</button>
       <button :class="{ active: mode === 'live' }" @click="switchMode('live')">直播</button>
+      <button :class="{ active: mode === 'search' }" @click="switchMode('search')">搜索</button>
+      <button :class="{ active: mode === 'favorites' }" @click="switchMode('favorites')">收藏</button>
       <button class="settings-btn" :class="{ active: mode === 'settings' }" @click="switchMode('settings')">设置</button>
     </nav>
 
@@ -725,6 +894,52 @@ onMounted(() => {
             <span class="name">{{ h.VodTitle }}</span>
             <span class="sub">{{ h.SiteName || h.Site }} · {{ h.EpName }}{{ fmtProgress(h.Progress) ? ' · 看到 ' + fmtProgress(h.Progress) : '' }}</span>
           </span>
+          <button class="row-delete" type="button" title="删除观看记录" @click.stop="deleteHomeHistory(h)">删除</button>
+        </li>
+      </ul>
+    </section>
+
+    <!-- 点播搜索 -->
+    <section v-if="mode === 'search'" class="search-page">
+      <div class="search-page-head">
+        <button class="vod-back" type="button" @click="backFromVodSearch">← 点播</button>
+        <form class="search" @submit.prevent="vodSearch">
+          <input v-model="vodQuery" placeholder="搜索影片" />
+          <button type="submit">搜索</button>
+          <button v-if="searching" type="button" @click="cancelSearch">取消</button>
+          <span v-if="searchProgress" class="progress">{{ searchProgress.Message }}</span>
+        </form>
+      </div>
+      <div v-if="vodSearchHistory.length" class="search-history">
+        <span class="search-history-title">历史搜索</span>
+        <span v-for="term in vodSearchHistory" :key="term" class="search-history-item">
+          <button type="button" @click="useVodSearchHistory(term)">{{ term }}</button>
+          <button type="button" class="row-delete" title="删除搜索词" @click="deleteVodSearchHistory(term)">×</button>
+        </span>
+      </div>
+      <p v-if="!searching && vodQuery && !vodSearchItems.length" class="home-empty">暂无搜索结果</p>
+      <section class="vod-main search-results">
+        <ul>
+          <li v-for="it in vodSearchItems" :key="it.ID + (it.Site || '')" class="channel" @click="openVodDetail(it)">
+            <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
+            <span class="name">{{ it.Title }}</span><span class="group">{{ vodItemSub(it) }}</span>
+          </li>
+        </ul>
+      </section>
+    </section>
+
+    <!-- 点播收藏 -->
+    <section v-if="mode === 'favorites'" class="favorites-page">
+      <h2>点播收藏</h2>
+      <p v-if="!vodFavorites.length" class="home-empty">暂无点播收藏</p>
+      <ul v-else class="favorites-list">
+        <li v-for="favorite in vodFavorites" :key="favorite.Site + favorite.VodID" @click="openVodFavorite(favorite)">
+          <img v-if="favorite.Logo" :src="favorite.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
+          <span class="home-info">
+            <span class="name">{{ favorite.Title }}</span>
+            <span class="sub">{{ siteName(favorite.Site) || favorite.Site }}{{ favorite.Group ? ' · ' + favorite.Group : '' }}</span>
+          </span>
+          <button class="row-delete" type="button" title="删除收藏" @click.stop="deleteVodFavorite(favorite)">删除</button>
         </li>
       </ul>
     </section>
@@ -741,6 +956,8 @@ onMounted(() => {
 
       <aside class="player">
         <p v-if="liveNowPlaying" class="now">正在播放：{{ liveNowPlaying }}</p>
+        <p v-if="livePlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在切换频道…</p>
+        <p v-if="livePlaybackStatus === 'error'" class="playback-error" aria-live="assertive">频道播放失败：{{ livePlaybackError }}</p>
         <PlaybackView :plan="livePagePlaybackPlan" @fallback="id => fallbackToMpv('live', id, livePlaybackToken)" />
         <div class="controls" v-if="liveNowPlaying && livePagePlaybackPlan?.Backend === 'mpv'">
           <button @click="pause">暂停</button>
@@ -762,7 +979,7 @@ onMounted(() => {
         <form class="search" @submit.prevent="doSearch"><input v-model="query" placeholder="搜索频道" /><button type="submit">搜索</button></form>
         <ul>
           <li v-for="c in channels" :key="c.ID" class="channel">
-            <span class="name">{{ c.Name }}</span>
+            <span class="name" :title="c.Name"><span class="name-text">{{ c.Name }}</span></span>
             <span class="group">{{ c.Group }}</span>
             <button @click="play(c)">▶ 播放</button>
             <button @click="toggleFav(c)">{{ c.Favorited ? '★' : '☆' }}</button>
@@ -782,11 +999,8 @@ onMounted(() => {
         </select>
       </div>
 
-      <div class="vod-search-row">
-        <button v-if="vodView === 'detail'" class="vod-back" type="button" @click="backFromVodDetail">← 返回</button>
-        <button v-else-if="vodView === 'search'" class="vod-back" type="button" @click="backFromVodSearch">← 点播列表</button>
-        <form class="search" @submit.prevent="vodSearch"><input v-model="vodQuery" placeholder="搜索影片" /><button type="submit">搜索</button><button v-if="searching" type="button" @click="cancelSearch">取消</button><span v-if="searchProgress" class="progress">{{ searchProgress.Message }}</span></form>
-      </div>
+      <p v-if="vodCategoryLoading" class="vod-state" aria-live="polite">正在加载分类…</p>
+      <p v-else-if="vodCategoryError" class="vod-state vod-state-error" aria-live="assertive">分类加载失败：{{ vodCategoryError }}</p>
 
       <div class="vod-layout" :class="{ 'cats-collapsed': catsCollapsed, 'without-cats': vodView !== 'list' }">
         <aside v-if="vodView === 'list'" class="vod-cats" :class="{ collapsed: catsCollapsed }">
@@ -801,6 +1015,7 @@ onMounted(() => {
         </aside>
 
         <section class="vod-main">
+          <button v-if="vodView === 'detail'" class="vod-back" type="button" @click="backFromVodDetail">← 返回</button>
           <ul v-if="vodView !== 'detail'">
             <li v-for="it in visibleVodItems" :key="it.ID + (it.Site || '')" class="channel" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
@@ -811,6 +1026,8 @@ onMounted(() => {
             <div class="vod-detail-top" :class="{ 'info-collapsed': infoCollapsed }">
               <div class="vod-player">
                 <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>
+                <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载剧集…</p>
+                <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">剧集播放失败：{{ vodPlaybackError }}</p>
                 <PlaybackView :plan="vodPagePlaybackPlan" :seek-to="pendingSeek" @fallback="id => fallbackToMpv('vod', id, vodPlaybackToken)" @progress="(time, duration) => onVodProgress(vodPlaybackToken, time, duration)" />
                 <div class="controls" v-if="vodNowPlaying && vodPagePlaybackPlan?.Backend === 'mpv'">
                   <button @click="pause">暂停</button>
@@ -840,6 +1057,7 @@ onMounted(() => {
                   <img v-if="vodDetail.Logo" :src="vodDetail.Logo" class="poster" referrerpolicy="no-referrer" @error="imgError" />
                   <h2>{{ vodDetail.Title }}</h2>
                   <p class="meta">{{ vodDetail.Type }} · {{ vodDetail.Year }} · {{ vodDetail.Area }}</p>
+                  <button class="favorite-toggle" type="button" :aria-pressed="vodFavorited" @click="toggleVodFavorite">{{ vodFavorited ? '取消收藏' : '收藏' }}</button>
                   <div class="desc" v-html="vodDetail.Description"></div>
                 </div>
               </div>
@@ -981,14 +1199,23 @@ onMounted(() => {
           <button @click="showOpenSource = false">✕</button>
         </div>
         <ul class="oss-list">
-          <li><a href="https://github.com/wailsapp/wails" target="_blank" rel="noopener">Wails v3</a><span class="oss-lic">MIT</span> — 桌面应用框架</li>
-          <li><a href="https://gitlab.com/cznic/sqlite" target="_blank" rel="noopener">modernc.org/sqlite</a><span class="oss-lic">BSD-3</span> — 纯 Go SQLite</li>
-          <li><a href="https://github.com/vuejs/core" target="_blank" rel="noopener">Vue 3</a><span class="oss-lic">MIT</span> — 前端框架</li>
-          <li><a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a><span class="oss-lic">Apache-2.0</span> — HLS 播放</li>
-          <li><a href="https://github.com/xqq/mpegts.js" target="_blank" rel="noopener">mpegts.js</a><span class="oss-lic">MIT</span> — MPEG-TS / FLV 播放</li>
-          <li><a href="https://github.com/cure53/DOMPurify" target="_blank" rel="noopener">DOMPurify</a><span class="oss-lic">Apache-2.0</span> — HTML 清洗</li>
-          <li><a href="https://github.com/vitejs/vite" target="_blank" rel="noopener">Vite</a><span class="oss-lic">MIT</span> — 构建工具</li>
-          <li><a href="https://github.com/microsoft/TypeScript" target="_blank" rel="noopener">TypeScript</a><span class="oss-lic">Apache-2.0</span> — 类型系统</li>
+          <li><a href="https://github.com/wailsapp/wails" target="_blank" rel="noopener">Wails</a><span class="oss-ver">v3.0.0-beta.9</span><span class="oss-lic">MIT</span> — 桌面应用框架</li>
+          <li><a href="https://gitlab.com/cznic/sqlite" target="_blank" rel="noopener">modernc.org/sqlite</a><span class="oss-ver">v1.56.0</span><span class="oss-lic">BSD-3</span> — 纯 Go SQLite</li>
+          <li><a href="https://github.com/PuerkitoBio/goquery" target="_blank" rel="noopener">goquery</a><span class="oss-ver">v1.13.0</span><span class="oss-lic">BSD-3</span> — HTML 文档解析</li>
+          <li><a href="https://github.com/dop251/goja" target="_blank" rel="noopener">goja</a><span class="oss-ver">2026-08-26</span><span class="oss-lic">MIT</span> — Go JavaScript 引擎</li>
+          <li><a href="https://pkg.go.dev/golang.org/x/text" target="_blank" rel="noopener">golang.org/x/text</a><span class="oss-ver">v0.41.0</span><span class="oss-lic">BSD-3</span> — 文本编码与语言支持</li>
+          <li><a href="https://github.com/vuejs/core" target="_blank" rel="noopener">Vue</a><span class="oss-ver">v3.5.41</span><span class="oss-lic">MIT</span> — 前端框架</li>
+          <li><a href="https://github.com/wailsapp/wails/tree/master/v3/pkg/runtime" target="_blank" rel="noopener">@wailsio/runtime</a><span class="oss-ver">v3.0.0-beta.9</span><span class="oss-lic">MIT</span> — Wails 前端运行时</li>
+          <li><a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a><span class="oss-ver">v1.7.1</span><span class="oss-lic">Apache-2.0</span> — HLS 播放</li>
+          <li><a href="https://github.com/xqq/mpegts.js" target="_blank" rel="noopener">mpegts.js</a><span class="oss-ver">v1.8.2</span><span class="oss-lic">MIT</span> — MPEG-TS / FLV 播放</li>
+          <li><a href="https://github.com/cure53/DOMPurify" target="_blank" rel="noopener">DOMPurify</a><span class="oss-ver">v3.4.14</span><span class="oss-lic">Apache-2.0</span> — HTML 清洗</li>
+          <li><a href="https://github.com/vitejs/vite" target="_blank" rel="noopener">Vite</a><span class="oss-ver">v8.2.1</span><span class="oss-lic">MIT</span> — 构建工具</li>
+          <li><a href="https://github.com/vitejs/vite-plugin-vue" target="_blank" rel="noopener">@vitejs/plugin-vue</a><span class="oss-ver">v6.0.8</span><span class="oss-lic">MIT</span> — Vue Vite 插件</li>
+          <li><a href="https://github.com/microsoft/TypeScript" target="_blank" rel="noopener">TypeScript</a><span class="oss-ver">v4.9.5</span><span class="oss-lic">Apache-2.0</span> — 类型系统</li>
+          <li><a href="https://github.com/vuejs/test-utils" target="_blank" rel="noopener">@vue/test-utils</a><span class="oss-ver">v2.5.0</span><span class="oss-lic">MIT</span> — Vue 测试工具</li>
+          <li><a href="https://github.com/jsdom/jsdom" target="_blank" rel="noopener">jsdom</a><span class="oss-ver">v30.0.1</span><span class="oss-lic">MIT</span> — DOM 测试环境</li>
+          <li><a href="https://github.com/vitest-dev/vitest" target="_blank" rel="noopener">Vitest</a><span class="oss-ver">v4.1.11</span><span class="oss-lic">MIT</span> — 单元测试框架</li>
+          <li><a href="https://github.com/vuejs/language-tools" target="_blank" rel="noopener">vue-tsc</a><span class="oss-ver">v1.8.27</span><span class="oss-lic">MIT</span> — Vue 类型检查</li>
         </ul>
       </div>
     </div>

@@ -5,6 +5,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -57,6 +58,16 @@ type VodHistory struct {
 	UpdatedAt int64
 }
 
+// VodFavorite 是一条点播收藏。
+type VodFavorite struct {
+	Site    string
+	VodID   string
+	Title   string
+	Logo    string
+	Group   string
+	AddedAt int64
+}
+
 // Store 封装 SQLite 连接。
 type Store struct{ db *sql.DB }
 
@@ -103,6 +114,8 @@ func (s *Store) migrate() error {
 		`CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS sources (ref TEXT NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (ref, kind))`,
 		`CREATE TABLE IF NOT EXISTS vod_history (site TEXT NOT NULL, vod_id TEXT NOT NULL, vod_title TEXT NOT NULL, vod_logo TEXT, ep_id TEXT, ep_name TEXT, source TEXT, progress INTEGER NOT NULL DEFAULT 0, duration INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (site, vod_id))`,
+		`CREATE TABLE IF NOT EXISTS vod_search_history (query TEXT PRIMARY KEY, searched_at INTEGER NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS vod_favorites (site TEXT NOT NULL, vod_id TEXT NOT NULL, title TEXT NOT NULL, logo TEXT, grp TEXT, added_at INTEGER NOT NULL, PRIMARY KEY (site, vod_id))`,
 	}
 	for _, q := range stmts {
 		if _, err := s.db.Exec(q); err != nil {
@@ -282,6 +295,89 @@ func (s *Store) ListVodHistory(limit int) ([]VodHistory, error) {
 			return nil, err
 		}
 		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+// DeleteVodHistory 删除指定点播的观看记录。
+func (s *Store) DeleteVodHistory(site, vodID string) error {
+	_, err := s.db.Exec(`DELETE FROM vod_history WHERE site=? AND vod_id=?`, site, vodID)
+	return err
+}
+
+// RecordVodSearch 记录一条点播搜索词，重复搜索会更新时间而不新增记录。
+func (s *Store) RecordVodSearch(query string) error {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil
+	}
+	_, err := s.db.Exec(`INSERT INTO vod_search_history(query, searched_at) VALUES(?,?)
+		ON CONFLICT(query) DO UPDATE SET searched_at=excluded.searched_at`, query, time.Now().UnixNano())
+	return err
+}
+
+// ListVodSearchHistory 返回最近搜索词（最近在前）。
+func (s *Store) ListVodSearchHistory(limit int) ([]string, error) {
+	rows, err := s.db.Query(`SELECT query FROM vod_search_history ORDER BY searched_at DESC, rowid DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var query string
+		if err := rows.Scan(&query); err != nil {
+			return nil, err
+		}
+		out = append(out, query)
+	}
+	return out, rows.Err()
+}
+
+// DeleteVodSearch 删除一条点播搜索词。
+func (s *Store) DeleteVodSearch(query string) error {
+	_, err := s.db.Exec(`DELETE FROM vod_search_history WHERE query=?`, strings.TrimSpace(query))
+	return err
+}
+
+// AddVodFavorite 新增或更新一条点播收藏。
+func (s *Store) AddVodFavorite(site, vodID, title, logo, group string) error {
+	_, err := s.db.Exec(`INSERT INTO vod_favorites(site, vod_id, title, logo, grp, added_at) VALUES(?,?,?,?,?,?)
+		ON CONFLICT(site, vod_id) DO UPDATE SET title=excluded.title, logo=excluded.logo, grp=excluded.grp, added_at=excluded.added_at`,
+		site, vodID, title, logo, group, time.Now().UnixNano())
+	return err
+}
+
+// RemoveVodFavorite 删除一条点播收藏。
+func (s *Store) RemoveVodFavorite(site, vodID string) error {
+	_, err := s.db.Exec(`DELETE FROM vod_favorites WHERE site=? AND vod_id=?`, site, vodID)
+	return err
+}
+
+// IsVodFavorite 判断指定点播是否已收藏。
+func (s *Store) IsVodFavorite(site, vodID string) (bool, error) {
+	var one int
+	err := s.db.QueryRow(`SELECT 1 FROM vod_favorites WHERE site=? AND vod_id=?`, site, vodID).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// ListVodFavorites 返回点播收藏（最近添加在前）。
+func (s *Store) ListVodFavorites() ([]VodFavorite, error) {
+	rows, err := s.db.Query(`SELECT site, vod_id, title, logo, grp, added_at FROM vod_favorites ORDER BY added_at DESC, rowid DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []VodFavorite
+	for rows.Next() {
+		var f VodFavorite
+		if err := rows.Scan(&f.Site, &f.VodID, &f.Title, &f.Logo, &f.Group, &f.AddedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
 	}
 	return out, rows.Err()
 }

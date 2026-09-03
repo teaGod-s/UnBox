@@ -158,7 +158,7 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(130px, 15vw) minmax(0, 1fr) minmax(220px, 28vw);
   gap: 0.75rem;
 }
 
@@ -212,6 +212,7 @@ body {
 
 .search {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   padding: 0.5rem;
   border-bottom: 1px solid #23283a;
@@ -280,6 +281,87 @@ body {
   background: #232a45;
 }
 
+.search-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.search-page-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  min-width: 0;
+  background: #0a0d1a;
+  border: 1px solid #23283a;
+  border-radius: 0.5rem;
+}
+
+.search-page-head .search {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.search-history {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  min-height: 2rem;
+}
+
+.search-history-title {
+  color: #8b91a3;
+  font-size: 0.85rem;
+}
+
+.search-history-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.1rem 0.2rem 0.1rem 0.45rem;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.35rem;
+}
+
+.search-history-item > button:first-child {
+  padding: 0.2rem 0.15rem;
+  color: #c6cbd9;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.search-history-item > button:first-child:hover {
+  color: #ffffff;
+}
+
+.row-delete {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.45rem;
+  color: #ff7b72;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+
+.row-delete:hover {
+  background: rgba(255, 123, 114, 0.12);
+  border-color: rgba(255, 123, 114, 0.3);
+}
+
+.search-results {
+  flex: 1;
+  min-height: 0;
+}
+
 .channels ul {
   flex: 1;
   margin: 0;
@@ -300,8 +382,27 @@ body {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.channel .name-text {
+  display: inline-block;
+  min-width: 100%;
+  width: max-content;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.channel .name:hover .name-text {
+  overflow: visible;
+  text-overflow: clip;
+  animation: channel-name-marquee 5s ease-in-out infinite alternate;
+}
+
+@keyframes channel-name-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-40%); }
 }
 
 .channel .thumb {
@@ -344,7 +445,8 @@ body {
   height: auto;
   min-height: 180px;
   max-height: min(50vh, 480px);
-  overflow: visible;
+  overflow: hidden;
+  contain: layout paint;
 }
 
 .vod-info {
@@ -382,6 +484,9 @@ body {
 }
 
 .channel .group {
+  max-width: 26%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: #8b91a3;
   font-size: 0.85rem;
   white-space: nowrap;
@@ -423,9 +528,20 @@ body {
   border-radius: 0.5rem;
 }
 
-.playback-view { background: #05060b; min-height: 180px; aspect-ratio: 16 / 9; display: grid; place-items: center; }
-.playback-view video { width: 100%; height: 100%; object-fit: contain; }
+.playback-view { position: relative; width: 100%; background: #05060b; min-height: 180px; aspect-ratio: 16 / 9; display: grid; place-items: center; overflow: hidden; }
+.playback-view video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .mpv-status, .playback-empty { color: #8b91a3; font-size: 0.9rem; }
+
+.playback-status,
+.playback-error {
+  flex: 0 0 auto;
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.playback-status { color: #8b91a3; }
+.playback-error { color: #ff7b72; overflow-wrap: anywhere; }
 
 .mpv-install {
   display: flex;
@@ -535,6 +651,33 @@ body {
 .home h2 { margin: 0.25rem 0 0.75rem; }
 .home-empty { color: #8b91a3; }
 
+.favorites-page { flex: 1; min-height: 0; overflow-y: auto; }
+.favorites-page h2 { margin: 0.25rem 0 0.75rem; }
+.favorites-list { margin: 0; padding: 0; list-style: none; }
+.favorites-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid #161a2b;
+  cursor: pointer;
+}
+.favorites-list li:hover { background: #1b2137; }
+.favorites-list .thumb { width: 44px; height: 60px; object-fit: cover; border-radius: 0.3rem; background: #161a2b; flex-shrink: 0; }
+.favorites-list .row-delete { margin-left: auto; }
+
+.favorite-toggle {
+  align-self: flex-start;
+  margin: 0 0 0.65rem;
+  padding: 0.35rem 0.7rem;
+  color: #e8eaf0;
+  background: #1b2137;
+  border: 1px solid #2c3350;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+.favorite-toggle:hover { background: #232a45; }
+
 .home-list { margin: 0; padding: 0; list-style: none; }
 
 .home-list li {
@@ -553,6 +696,8 @@ body {
 .home-info { display: flex; flex-direction: column; min-width: 0; }
 .home-info .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-info .sub { color: #8b91a3; font-size: 0.85rem; }
+
+.home-list .row-delete { margin-left: auto; }
 
 .tabs .settings-btn { margin-left: auto; }
 
@@ -775,6 +920,15 @@ body {
   border-radius: 0.4rem;
 }
 
+.vod-state {
+  flex: 0 0 auto;
+  margin: 0 0 0.6rem;
+  color: #8b91a3;
+  font-size: 0.85rem;
+}
+
+.vod-state-error { color: #ff7b72; }
+
 .vod-layout {
   flex: 1;
   min-height: 0;
@@ -915,6 +1069,7 @@ body {
 .ep-src-tabs {
   flex: 0 0 auto;
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 0.35rem;
   margin: 0.75rem 0 0.5rem;
@@ -931,6 +1086,7 @@ body {
 
 .ep-pagination {
   display: flex;
+  align-items: center;
   flex: 1 1 auto;
   flex-wrap: nowrap;
   gap: 0.35rem;
@@ -945,6 +1101,8 @@ body {
   width: 1.5rem;
   height: 1.5rem;
   padding: 0;
+  display: grid;
+  place-items: center;
   color: #c6cbd9;
   background: #1b2137;
   border: 1px solid #2c3350;
@@ -1100,4 +1258,10 @@ body {
 .oss-lic {
   color: #8b91a3;
   font-size: 0.8rem;
+}
+
+.oss-ver {
+  color: #c6cbd9;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
 }

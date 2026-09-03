@@ -118,6 +118,23 @@ type Section struct {
 	Title string
 }
 
+type vodCategoryCacheEntry struct {
+	sections  []Section
+	expiresAt time.Time
+}
+
+const vodCategoryCacheTTL = 5 * time.Second
+
+// VodFavoriteInfo 是前端展示用的点播收藏。
+type VodFavoriteInfo struct {
+	Site  string
+	VodID string
+	Title string
+	Logo  string
+	Group string
+	At    int64
+}
+
 // VodItem 是点播影片列表项。
 type VodItem struct {
 	ID    string
@@ -193,13 +210,15 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 		controller.SetWebMSE(false)
 	}
 	return &ShellService{
-		live:      pv,
-		player:    p,
-		store:     st,
-		vods:      map[string]provider.Provider{},
-		vodNames:  map[string]string{},
-		playback:  controller,
-		mpvPlugin: manager,
+		live:             pv,
+		player:           p,
+		store:            st,
+		vods:             map[string]provider.Provider{},
+		vodNames:         map[string]string{},
+		playback:         controller,
+		mpvPlugin:        manager,
+		vodCategoryCache: make(map[string]vodCategoryCacheEntry),
+		vodCategoryNow:   time.Now,
 	}
 }
 
@@ -261,6 +280,7 @@ func (s *ShellService) ImportSubscription(ref string) (ImportResult, error) {
 	s.vodCFGs = cfgs
 	s.liveCFGs = cfgs
 	s.liveChannels = nil
+	s.vodCategoryCache = make(map[string]vodCategoryCacheEntry)
 	s.vodRef = ref
 	s.liveRef = ref
 	s.mu.Unlock()
@@ -295,6 +315,7 @@ func (s *ShellService) ImportVodSource(ref string) (ImportResult, error) {
 	s.vodSiteLines = siteLines
 	s.vodCFGs = cfgs
 	s.vodRef = ref
+	s.vodCategoryCache = make(map[string]vodCategoryCacheEntry)
 	s.mu.Unlock()
 	s.addSource("vod", ref)
 	s.saveSubscription()
@@ -360,7 +381,11 @@ func (s *ShellService) DeleteSource(kind, ref string) error {
 	if s.store == nil {
 		return nil
 	}
-	return s.store.DeleteSource(kind, ref)
+	if err := s.store.DeleteSource(kind, ref); err != nil {
+		return err
+	}
+	s.clearVodCategoryCache()
+	return nil
 }
 
 // RecordVodHistory 记录一条点播观看记录（开始播放某集时）。
@@ -404,6 +429,78 @@ func (s *ShellService) ListVodHistory() ([]VodHistoryInfo, error) {
 			EpID: r.EpID, EpName: r.EpName, Source: r.Source,
 			Progress: r.Progress, Duration: r.Duration, At: r.UpdatedAt,
 		}
+	}
+	return out, nil
+}
+
+// DeleteVodHistory 删除首页的一条点播观看记录。
+func (s *ShellService) DeleteVodHistory(site, vodID string) error {
+	if s.store == nil {
+		return nil
+	}
+	return s.store.DeleteVodHistory(site, vodID)
+}
+
+// RecordVodSearch 保存一条点播搜索词。
+func (s *ShellService) RecordVodSearch(query string) error {
+	if s.store == nil {
+		return nil
+	}
+	return s.store.RecordVodSearch(query)
+}
+
+// ListVodSearchHistory 返回最近点播搜索词。
+func (s *ShellService) ListVodSearchHistory() ([]string, error) {
+	if s.store == nil {
+		return nil, nil
+	}
+	return s.store.ListVodSearchHistory(30)
+}
+
+// DeleteVodSearchHistory 删除一条点播搜索词。
+func (s *ShellService) DeleteVodSearchHistory(query string) error {
+	if s.store == nil {
+		return nil
+	}
+	return s.store.DeleteVodSearch(query)
+}
+
+// AddVodFavorite 新增或更新一条点播收藏。
+func (s *ShellService) AddVodFavorite(site, vodID, title, logo, group string) error {
+	if s.store == nil {
+		return nil
+	}
+	return s.store.AddVodFavorite(site, vodID, title, logo, group)
+}
+
+// RemoveVodFavorite 删除一条点播收藏。
+func (s *ShellService) RemoveVodFavorite(site, vodID string) error {
+	if s.store == nil {
+		return nil
+	}
+	return s.store.RemoveVodFavorite(site, vodID)
+}
+
+// IsVodFavorite 判断一条点播是否已收藏。
+func (s *ShellService) IsVodFavorite(site, vodID string) (bool, error) {
+	if s.store == nil {
+		return false, nil
+	}
+	return s.store.IsVodFavorite(site, vodID)
+}
+
+// ListVodFavorites 返回全部点播收藏。
+func (s *ShellService) ListVodFavorites() ([]VodFavoriteInfo, error) {
+	if s.store == nil {
+		return nil, nil
+	}
+	favs, err := s.store.ListVodFavorites()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]VodFavoriteInfo, len(favs))
+	for i, f := range favs {
+		out[i] = VodFavoriteInfo{Site: f.Site, VodID: f.VodID, Title: f.Title, Logo: f.Logo, Group: f.Group, At: f.AddedAt}
 	}
 	return out, nil
 }
@@ -490,6 +587,7 @@ func (s *ShellService) RestoreSubscription() (ImportResult, error) {
 		s.liveCount = 0
 	}
 	s.vods, s.vodNames, s.vodSiteLines = collectVodSites(vodCFGs)
+	s.vodCategoryCache = make(map[string]vodCategoryCacheEntry)
 	return ImportResult{Sites: len(s.vods), LiveSources: len(s.liveSources), Channels: channels}, nil
 }
 
@@ -599,6 +697,7 @@ func (s *ShellService) importPlaylist(ref string, raw []byte, clearVod bool) (Im
 		s.vodNames = map[string]string{}
 		s.vodCFGs = nil
 		s.vodRef = ""
+		s.vodCategoryCache = make(map[string]vodCategoryCacheEntry)
 	}
 	s.mu.Unlock()
 	s.addSource("live", ref)
@@ -937,6 +1036,19 @@ func (s *ShellService) vodOf(site string) (provider.Provider, error) {
 }
 
 func (s *ShellService) VodCategories(site string) ([]Section, error) {
+	now := time.Now
+	s.mu.RLock()
+	if s.vodCategoryNow != nil {
+		now = s.vodCategoryNow
+	}
+	entry, cached := s.vodCategoryCache[site]
+	if cached && now().Before(entry.expiresAt) {
+		out := append([]Section(nil), entry.sections...)
+		s.mu.RUnlock()
+		return out, nil
+	}
+	s.mu.RUnlock()
+
 	pv, err := s.vodOf(site)
 	if err != nil {
 		return nil, err
@@ -949,7 +1061,19 @@ func (s *ShellService) VodCategories(site string) ([]Section, error) {
 	for i, sc := range secs {
 		out[i] = Section{ID: sc.ID, Title: sc.Title}
 	}
+	s.mu.Lock()
+	if s.vodCategoryCache == nil {
+		s.vodCategoryCache = make(map[string]vodCategoryCacheEntry)
+	}
+	s.vodCategoryCache[site] = vodCategoryCacheEntry{sections: append([]Section(nil), out...), expiresAt: now().Add(vodCategoryCacheTTL)}
+	s.mu.Unlock()
 	return out, nil
+}
+
+func (s *ShellService) clearVodCategoryCache() {
+	s.mu.Lock()
+	s.vodCategoryCache = make(map[string]vodCategoryCacheEntry)
+	s.mu.Unlock()
 }
 
 func (s *ShellService) VodList(site, cat string, page int) ([]VodItem, error) {

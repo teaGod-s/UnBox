@@ -124,6 +124,7 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
 
     SetRegView 64
     !if "${WAILS_INSTALL_SCOPE}" == "user"
+        WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
         WriteRegStr HKCU "${UNINST_KEY}" "Publisher" "${INFO_COMPANYNAME}"
         WriteRegStr HKCU "${UNINST_KEY}" "DisplayName" "${INFO_PRODUCTNAME}"
         WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "${INFO_PRODUCTVERSION}"
@@ -135,6 +136,7 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
         IntFmt $0 "0x%08X" $0
         WriteRegDWORD HKCU "${UNINST_KEY}" "EstimatedSize" "$0"
     !else
+        WriteRegStr HKLM "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
         WriteRegStr HKLM "${UNINST_KEY}" "Publisher" "${INFO_COMPANYNAME}"
         WriteRegStr HKLM "${UNINST_KEY}" "DisplayName" "${INFO_PRODUCTNAME}"
         WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "${INFO_PRODUCTVERSION}"

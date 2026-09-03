@@ -1,5 +1,12 @@
-export type PlaybackMode = 'home' | 'vod' | 'live' | 'settings'
+export type PlaybackMode = 'home' | 'vod' | 'live' | 'search' | 'favorites' | 'settings'
 export type PlaybackScope = 'live' | 'vod'
+export type PlaybackStatus = 'idle' | 'preparing' | 'playing' | 'error'
+
+export function shouldShowMpvInstallPrompt(platform: string, mpvReady: boolean, fallbackRequested: boolean): boolean {
+  if (mpvReady) return false
+  if (platform === 'windows' || platform === 'darwin') return fallbackRequested
+  return platform === 'linux' || fallbackRequested
+}
 
 export interface ActivePlaybackSession {
   scope: PlaybackScope

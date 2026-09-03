@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress } from './playbackScope'
+import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt } from './playbackScope'
 
 describe('playback scope', () => {
   it('only exposes the plan belonging to the active page', () => {
@@ -33,5 +33,13 @@ describe('playback scope', () => {
     expect(shouldRecordVodProgress('vod', 'detail')).toBe(true)
     expect(shouldRecordVodProgress('live', 'detail')).toBe(false)
     expect(shouldRecordVodProgress('vod', 'list')).toBe(false)
+  })
+
+  it('defers mpv prompts on web-capable platforms until fallback', () => {
+    expect(shouldShowMpvInstallPrompt('windows', false, false)).toBe(false)
+    expect(shouldShowMpvInstallPrompt('darwin', false, false)).toBe(false)
+    expect(shouldShowMpvInstallPrompt('windows', false, true)).toBe(true)
+    expect(shouldShowMpvInstallPrompt('linux', false, false)).toBe(true)
+    expect(shouldShowMpvInstallPrompt('windows', true, true)).toBe(false)
   })
 })

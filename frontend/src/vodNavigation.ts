@@ -6,6 +6,14 @@ export function nextVodSearchRequest(previous: number): number {
   return previous + 1
 }
 
+export function nextVodCategoryRequest(previous: number): number {
+  return previous + 1
+}
+
+export function isCurrentVodCategoryRequest(request: number, current: number): boolean {
+  return request === current
+}
+
 export interface VodSearchCache<T> {
   query: string
   items: T[]

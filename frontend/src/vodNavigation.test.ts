@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createVodSearchCache, isVodSearchCacheValid, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn } from './vodNavigation'
+import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn } from './vodNavigation'
 
 describe('vod navigation', () => {
   it('returns to the page that opened the detail view', () => {
@@ -41,5 +41,12 @@ describe('vod navigation', () => {
   it('removes only one site-scoped vod favorite', () => {
     const items = [{ Site: 'a', VodID: '1' }, { Site: 'b', VodID: '1' }, { Site: 'a', VodID: '2' }]
     expect(removeVodFavorite(items, 'a', '1')).toEqual([{ Site: 'b', VodID: '1' }, { Site: 'a', VodID: '2' }])
+  })
+
+  it('accepts only the latest category request', () => {
+    const request = nextVodCategoryRequest(3)
+    expect(request).toBe(4)
+    expect(isCurrentVodCategoryRequest(4, request)).toBe(true)
+    expect(isCurrentVodCategoryRequest(3, request)).toBe(false)
   })
 })

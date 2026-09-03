@@ -920,6 +920,15 @@ body {
   border-radius: 0.4rem;
 }
 
+.vod-state {
+  flex: 0 0 auto;
+  margin: 0 0 0.6rem;
+  color: #8b91a3;
+  font-size: 0.85rem;
+}
+
+.vod-state-error { color: #ff7b72; }
+
 .vod-layout {
   flex: 1;
   min-height: 0;

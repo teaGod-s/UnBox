@@ -5,7 +5,7 @@ import { ShellService, type SourceInfo, type Section, type VodItem, type Episode
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
-import { createVodSearchCache, isVodSearchCacheValid, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
+import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
 
 // 爱发电赞助主页
@@ -48,6 +48,9 @@ const vodSearchHistory = ref<string[]>([])
 const vodFavorites = ref<VodFavoriteInfo[]>([])
 const vodFavorited = ref(false)
 const vodPage = ref(0)
+let vodCategoryRequest = 0
+const vodCategoryLoading = ref(false)
+const vodCategoryError = ref('')
 const livePlaybackPlan = ref<PlaybackPlan | null>(null)
 const vodPlaybackPlan = ref<PlaybackPlan | null>(null)
 const playbackOwner = ref<'live' | 'vod' | null>(null)
@@ -472,9 +475,27 @@ async function selectSite(id: string) {
 }
 
 async function reloadVodCategories() {
-  vodCategories.value = (await ShellService.VodCategories(activeSite.value)) ?? []
-  vodActiveCat.value = vodCategories.value[0]?.ID ?? ''
-  await reloadVodList()
+  const request = nextVodCategoryRequest(vodCategoryRequest)
+  vodCategoryRequest = request
+  vodCategoryLoading.value = true
+  vodCategoryError.value = ''
+  vodCategories.value = []
+  vodActiveCat.value = ''
+  vodListItems.value = []
+  try {
+    const categories = (await ShellService.VodCategories(activeSite.value)) ?? []
+    if (!isCurrentVodCategoryRequest(request, vodCategoryRequest)) return
+    vodCategories.value = categories
+    vodActiveCat.value = categories[0]?.ID ?? ''
+    if (vodActiveCat.value) await reloadVodList()
+  } catch (e) {
+    if (isCurrentVodCategoryRequest(request, vodCategoryRequest)) {
+      vodCategoryError.value = String(e)
+      handleError(e)
+    }
+  } finally {
+    if (isCurrentVodCategoryRequest(request, vodCategoryRequest)) vodCategoryLoading.value = false
+  }
 }
 
 async function reloadVodList() {
@@ -977,6 +998,9 @@ onMounted(() => {
           <option v-for="s in sitesOfLine(activeLine)" :key="s.ID" :value="s.ID">{{ s.Name }}</option>
         </select>
       </div>
+
+      <p v-if="vodCategoryLoading" class="vod-state" aria-live="polite">正在加载分类…</p>
+      <p v-else-if="vodCategoryError" class="vod-state vod-state-error" aria-live="assertive">分类加载失败：{{ vodCategoryError }}</p>
 
       <div class="vod-layout" :class="{ 'cats-collapsed': catsCollapsed, 'without-cats': vodView !== 'list' }">
         <aside v-if="vodView === 'list'" class="vod-cats" :class="{ collapsed: catsCollapsed }">

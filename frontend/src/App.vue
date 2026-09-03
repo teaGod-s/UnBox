@@ -1199,14 +1199,23 @@ onMounted(() => {
           <button @click="showOpenSource = false">✕</button>
         </div>
         <ul class="oss-list">
-          <li><a href="https://github.com/wailsapp/wails" target="_blank" rel="noopener">Wails v3</a><span class="oss-lic">MIT</span> — 桌面应用框架</li>
-          <li><a href="https://gitlab.com/cznic/sqlite" target="_blank" rel="noopener">modernc.org/sqlite</a><span class="oss-lic">BSD-3</span> — 纯 Go SQLite</li>
-          <li><a href="https://github.com/vuejs/core" target="_blank" rel="noopener">Vue 3</a><span class="oss-lic">MIT</span> — 前端框架</li>
-          <li><a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a><span class="oss-lic">Apache-2.0</span> — HLS 播放</li>
-          <li><a href="https://github.com/xqq/mpegts.js" target="_blank" rel="noopener">mpegts.js</a><span class="oss-lic">MIT</span> — MPEG-TS / FLV 播放</li>
-          <li><a href="https://github.com/cure53/DOMPurify" target="_blank" rel="noopener">DOMPurify</a><span class="oss-lic">Apache-2.0</span> — HTML 清洗</li>
-          <li><a href="https://github.com/vitejs/vite" target="_blank" rel="noopener">Vite</a><span class="oss-lic">MIT</span> — 构建工具</li>
-          <li><a href="https://github.com/microsoft/TypeScript" target="_blank" rel="noopener">TypeScript</a><span class="oss-lic">Apache-2.0</span> — 类型系统</li>
+          <li><a href="https://github.com/wailsapp/wails" target="_blank" rel="noopener">Wails</a><span class="oss-ver">v3.0.0-beta.9</span><span class="oss-lic">MIT</span> — 桌面应用框架</li>
+          <li><a href="https://gitlab.com/cznic/sqlite" target="_blank" rel="noopener">modernc.org/sqlite</a><span class="oss-ver">v1.56.0</span><span class="oss-lic">BSD-3</span> — 纯 Go SQLite</li>
+          <li><a href="https://github.com/PuerkitoBio/goquery" target="_blank" rel="noopener">goquery</a><span class="oss-ver">v1.13.0</span><span class="oss-lic">BSD-3</span> — HTML 文档解析</li>
+          <li><a href="https://github.com/dop251/goja" target="_blank" rel="noopener">goja</a><span class="oss-ver">2026-08-26</span><span class="oss-lic">MIT</span> — Go JavaScript 引擎</li>
+          <li><a href="https://pkg.go.dev/golang.org/x/text" target="_blank" rel="noopener">golang.org/x/text</a><span class="oss-ver">v0.41.0</span><span class="oss-lic">BSD-3</span> — 文本编码与语言支持</li>
+          <li><a href="https://github.com/vuejs/core" target="_blank" rel="noopener">Vue</a><span class="oss-ver">v3.5.41</span><span class="oss-lic">MIT</span> — 前端框架</li>
+          <li><a href="https://github.com/wailsapp/wails/tree/master/v3/pkg/runtime" target="_blank" rel="noopener">@wailsio/runtime</a><span class="oss-ver">v3.0.0-beta.9</span><span class="oss-lic">MIT</span> — Wails 前端运行时</li>
+          <li><a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a><span class="oss-ver">v1.7.1</span><span class="oss-lic">Apache-2.0</span> — HLS 播放</li>
+          <li><a href="https://github.com/xqq/mpegts.js" target="_blank" rel="noopener">mpegts.js</a><span class="oss-ver">v1.8.2</span><span class="oss-lic">MIT</span> — MPEG-TS / FLV 播放</li>
+          <li><a href="https://github.com/cure53/DOMPurify" target="_blank" rel="noopener">DOMPurify</a><span class="oss-ver">v3.4.14</span><span class="oss-lic">Apache-2.0</span> — HTML 清洗</li>
+          <li><a href="https://github.com/vitejs/vite" target="_blank" rel="noopener">Vite</a><span class="oss-ver">v8.2.1</span><span class="oss-lic">MIT</span> — 构建工具</li>
+          <li><a href="https://github.com/vitejs/vite-plugin-vue" target="_blank" rel="noopener">@vitejs/plugin-vue</a><span class="oss-ver">v6.0.8</span><span class="oss-lic">MIT</span> — Vue Vite 插件</li>
+          <li><a href="https://github.com/microsoft/TypeScript" target="_blank" rel="noopener">TypeScript</a><span class="oss-ver">v4.9.5</span><span class="oss-lic">Apache-2.0</span> — 类型系统</li>
+          <li><a href="https://github.com/vuejs/test-utils" target="_blank" rel="noopener">@vue/test-utils</a><span class="oss-ver">v2.5.0</span><span class="oss-lic">MIT</span> — Vue 测试工具</li>
+          <li><a href="https://github.com/jsdom/jsdom" target="_blank" rel="noopener">jsdom</a><span class="oss-ver">v30.0.1</span><span class="oss-lic">MIT</span> — DOM 测试环境</li>
+          <li><a href="https://github.com/vitest-dev/vitest" target="_blank" rel="noopener">Vitest</a><span class="oss-ver">v4.1.11</span><span class="oss-lic">MIT</span> — 单元测试框架</li>
+          <li><a href="https://github.com/vuejs/language-tools" target="_blank" rel="noopener">vue-tsc</a><span class="oss-ver">v1.8.27</span><span class="oss-lic">MIT</span> — Vue 类型检查</li>
         </ul>
       </div>
     </div>

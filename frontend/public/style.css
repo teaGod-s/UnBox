@@ -1259,3 +1259,9 @@ body {
   color: #8b91a3;
   font-size: 0.8rem;
 }
+
+.oss-ver {
+  color: #c6cbd9;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}

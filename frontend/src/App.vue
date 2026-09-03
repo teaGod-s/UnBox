@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { Events, Browser } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type VodFavoriteInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
+import VodDetailHeader from './components/VodDetailHeader.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
 import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
@@ -1019,7 +1020,7 @@ onMounted(() => {
         </aside>
 
         <section class="vod-main">
-          <button v-if="vodView === 'detail'" class="vod-back" type="button" @click="backFromVodDetail">← 返回</button>
+          <VodDetailHeader v-if="vodView === 'detail'" :now-playing="vodNowPlaying" @back="backFromVodDetail" />
           <ul v-if="vodView !== 'detail'">
             <li v-for="it in visibleVodItems" :key="it.ID + (it.Site || '')" class="channel" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
@@ -1029,7 +1030,6 @@ onMounted(() => {
           <div v-else-if="vodView === 'detail' && vodDetail" class="vod-detail">
             <div class="vod-detail-top" :class="{ 'info-collapsed': infoCollapsed }">
               <div class="vod-player">
-                <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>
                 <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载剧集…</p>
                 <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">剧集播放失败：{{ vodPlaybackError }}</p>
                 <PlaybackView :plan="vodPagePlaybackPlan" :seek-to="pendingSeek" @fallback="id => fallbackToMpv('vod', id, vodPlaybackToken)" @progress="(time, duration) => onVodProgress(vodPlaybackToken, time, duration)" />

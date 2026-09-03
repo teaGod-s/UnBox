@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn } from './vodNavigation'
+import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn } from './vodNavigation'
 
 describe('vod navigation', () => {
   it('returns to the page that opened the detail view', () => {
@@ -48,5 +48,12 @@ describe('vod navigation', () => {
     expect(request).toBe(4)
     expect(isCurrentVodCategoryRequest(4, request)).toBe(true)
     expect(isCurrentVodCategoryRequest(3, request)).toBe(false)
+  })
+
+  it('does not show no-results before a search is submitted and completed', () => {
+    expect(shouldShowVodNoResults('斗罗', '', false, 0)).toBe(false)
+    expect(shouldShowVodNoResults('斗罗', '斗罗', true, 0)).toBe(false)
+    expect(shouldShowVodNoResults('斗罗', '斗罗', false, 0)).toBe(true)
+    expect(shouldShowVodNoResults('斗罗2', '斗罗', false, 0)).toBe(false)
   })
 })

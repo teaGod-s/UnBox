@@ -5,7 +5,7 @@ import { ShellService, type SourceInfo, type Section, type VodItem, type Episode
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
-import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
+import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
 
 // 爱发电赞助主页
@@ -84,6 +84,7 @@ const showThreads = ref(false)
 const searching = ref(false)
 const searchRequest = ref(0)
 const activeSearchQuery = ref('')
+const completedSearchQuery = ref('')
 const activeSearchID = ref(0)
 const searchFloorID = ref(0)
 const updateInfo = ref<UpdateInfo | null>(null)
@@ -110,6 +111,7 @@ const activePlaybackPlan = computed(() => playbackPlanForMode(mode.value, {
 }, playbackOwner.value ?? undefined))
 const livePagePlaybackPlan = computed(() => mode.value === 'live' && playbackOwner.value === 'live' ? livePlaybackPlan.value : null)
 const vodPagePlaybackPlan = computed(() => mode.value === 'vod' && vodView.value === 'detail' && playbackOwner.value === 'vod' ? vodPlaybackPlan.value : null)
+const showVodNoResults = computed(() => shouldShowVodNoResults(vodQuery.value, completedSearchQuery.value, searching.value, vodSearchItems.value.length))
 
 function resetEpisodePage() {
   episodePage.value = 0
@@ -507,6 +509,7 @@ async function vodSearch() {
   const request = nextVodSearchRequest(searchRequest.value)
   searchRequest.value = request
   activeSearchQuery.value = searchQuery
+  completedSearchQuery.value = ''
   searchFloorID.value = activeSearchID.value
   activeSearchID.value = 0
   if (vodView.value === 'detail') await stopPlayback('vod')
@@ -532,6 +535,7 @@ async function vodSearch() {
     if (searchRequest.value !== request || activeSearchQuery.value !== searchQuery) return
     vodSearchItems.value = items
     vodSearchCache.value = createVodSearchCache(searchQuery, items)
+    completedSearchQuery.value = searchQuery
   } catch (e) {
     if (searchRequest.value === request) handleError(e)
   }
@@ -917,7 +921,7 @@ onMounted(() => {
           <button type="button" class="row-delete" title="删除搜索词" @click="deleteVodSearchHistory(term)">×</button>
         </span>
       </div>
-      <p v-if="!searching && vodQuery && !vodSearchItems.length" class="home-empty">暂无搜索结果</p>
+      <p v-if="showVodNoResults" class="home-empty">暂无搜索结果</p>
       <section class="vod-main search-results">
         <ul>
           <li v-for="it in vodSearchItems" :key="it.ID + (it.Site || '')" class="channel" @click="openVodDetail(it)">

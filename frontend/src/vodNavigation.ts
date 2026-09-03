@@ -53,3 +53,8 @@ export function removeVodHistory<T extends { Site: string; VodID: string }>(item
 export function removeVodFavorite<T extends { Site: string; VodID: string }>(items: T[], site: string, vodID: string): T[] {
   return items.filter(item => item.Site !== site || item.VodID !== vodID)
 }
+
+export function shouldShowVodNoResults(inputQuery: string, completedQuery: string, searching: boolean, resultCount: number): boolean {
+  const query = inputQuery.trim()
+  return query !== '' && query === completedQuery && !searching && resultCount === 0
+}

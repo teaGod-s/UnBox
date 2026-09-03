@@ -50,6 +50,7 @@ VIAddVersionKey "ProductName"     "${INFO_PRODUCTNAME}"
 ManifestDPIAware true
 
 !include "MUI.nsh"
+!include "WinMessages.nsh"
 
 !define MUI_ICON "..\icon.ico"
 !define MUI_UNICON "..\icon.ico"
@@ -75,13 +76,26 @@ Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
 !if "${WAILS_INSTALL_SCOPE}" == "user"
     InstallDir "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
+    InstallDirRegKey HKCU "${UNINST_KEY}" "InstallLocation"
 !else
     InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}"
+    InstallDirRegKey HKLM "${UNINST_KEY}" "InstallLocation"
 !endif
 ShowInstDetails show # This will always show the installation details.
 
+Function ensureAppClosed
+retry:
+    FindWindow $0 "" "${INFO_PRODUCTNAME}"
+    ${If} $0 != 0
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "检测到 UnBox 正在运行，请先关闭应用后点击重试。" IDRETRY retry IDCANCEL abort
+        abort:
+            Abort
+    ${EndIf}
+FunctionEnd
+
 Function .onInit
    !insertmacro wails.checkArchitecture
+   Call ensureAppClosed
 FunctionEnd
 
 Section

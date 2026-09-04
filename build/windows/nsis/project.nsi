@@ -85,7 +85,11 @@ ShowInstDetails show # This will always show the installation details.
 
 Function ensureAppClosed
 retry:
-    nsExec::ExecToStack 'cmd /C tasklist /FI "IMAGENAME eq ${PRODUCT_EXECUTABLE}" /NH | findstr /I /X /C:"${PRODUCT_EXECUTABLE}"'
+    # findstr /X requires an EXACT whole-line match, but a tasklist line is
+    # "unbox.exe  <pid> Console  <sess>  <mem>" — never just the image name —
+    # so /X would never match and the "still running" dialog below would never
+    # appear. Use a substring (literal) match instead.
+    nsExec::ExecToStack 'cmd /C tasklist /FI "IMAGENAME eq ${PRODUCT_EXECUTABLE}" /NH | findstr /I /C:"${PRODUCT_EXECUTABLE}"'
     Pop $0
     Pop $1
     ${If} $0 == 0
@@ -97,6 +101,24 @@ FunctionEnd
 
 Function .onInit
    !insertmacro wails.checkArchitecture
+
+   # Remember the install directory chosen last time. wails.writeUninstaller
+   # stores InstallLocation under SetRegView 64 (the native 64-bit view), but
+   # NSIS's InstallDirRegKey is NOT affected by SetRegView, so it reads the
+   # 32-bit (WOW6432Node) view by default and never finds the stored path —
+   # the directory page resets to the default on every update. Read it here,
+   # in the matching view, and feed it to $INSTDIR.
+   SetRegView 64
+   !if "${WAILS_INSTALL_SCOPE}" == "user"
+       ReadRegStr $0 HKCU "${UNINST_KEY}" "InstallLocation"
+   !else
+       ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation"
+   !endif
+   SetRegView 32
+   ${If} $0 != ""
+       StrCpy $INSTDIR $0
+   ${EndIf}
+
    Call ensureAppClosed
 FunctionEnd
 

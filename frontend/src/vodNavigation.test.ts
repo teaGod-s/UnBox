@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn } from './vodNavigation'
+import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, pickResumeSeek, pickResumeSource, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodResumeView, vodSearchQueryForReturn } from './vodNavigation'
 
 describe('vod navigation', () => {
   it('returns to the page that opened the detail view', () => {
@@ -55,6 +55,63 @@ describe('vod navigation', () => {
     expect(shouldShowVodNoResults('斗罗', '斗罗', true, 0)).toBe(false)
     expect(shouldShowVodNoResults('斗罗', '斗罗', false, 0)).toBe(true)
     expect(shouldShowVodNoResults('斗罗2', '斗罗', false, 0)).toBe(false)
+  })
+
+  it('prefers the line recorded in history and falls back to the first available line', () => {
+    const available = ['线路一', '线路二', '线路三']
+    expect(pickResumeSource('线路二', available)).toBe('线路二')
+    expect(pickResumeSource('已下线', available)).toBe('线路一')
+    expect(pickResumeSource('', available)).toBe('线路一')
+    expect(pickResumeSource('线路二', [])).toBe('')
+    expect(pickResumeSource('', null)).toBe('')
+  })
+
+  it('seeks only into the episode the deferred resume was recorded for', () => {
+    const target = { EpID: 'ep-5', Progress: 1234 }
+    expect(pickResumeSeek(target, 'ep-5')).toBe(1234)
+    expect(pickResumeSeek(target, 'ep-1')).toBe(0)
+    expect(pickResumeSeek(null, 'ep-5')).toBe(0)
+    expect(pickResumeSeek({ EpID: 'ep-5', Progress: 0 }, 'ep-5')).toBe(0)
+  })
+
+  it('resolves the line, highlighted episode and page for the recorded resume target', () => {
+    const detail = {
+      Sources: ['线路一', '线路二'],
+      Episodes: [
+        { ID: 'ep-1', Source: '线路一' },
+        { ID: 'ep-2', Source: '线路一' },
+        { ID: 'ep-7', Source: '线路二' },
+      ],
+    }
+    expect(vodResumeView(detail, { EpID: 'ep-7', Source: '线路二' })).toEqual({
+      source: '线路二',
+      episodeID: 'ep-7',
+      page: 0,
+    })
+  })
+
+  it('pages over only the episodes of the resumed line', () => {
+    const episodes = Array.from({ length: 50 }, (_, i) => ({ ID: `ep-${i + 1}`, Source: '线路一' }))
+    expect(vodResumeView({ Sources: ['线路一'], Episodes: episodes }, { EpID: 'ep-40', Source: '线路一' })).toEqual({
+      source: '线路一',
+      episodeID: 'ep-40',
+      page: 1,
+    })
+  })
+
+  it('falls back to the first line when the recorded line is gone', () => {
+    const detail = { Sources: ['线路一'], Episodes: [{ ID: 'ep-1', Source: '线路一' }] }
+    expect(vodResumeView(detail, { EpID: 'ep-9', Source: '线路三' })).toEqual({
+      source: '线路一',
+      episodeID: 'ep-9',
+      page: 0,
+    })
+  })
+
+  it('shows no highlighted episode when there is no history record', () => {
+    const detail = { Sources: ['线路一', '线路二'], Episodes: [{ ID: 'ep-1', Source: '线路一' }] }
+    expect(vodResumeView(detail, null)).toEqual({ source: '线路一', episodeID: '', page: 0 })
+    expect(vodResumeView(null, null)).toEqual({ source: '', episodeID: '', page: 0 })
   })
 
   it('restores the remembered site and its line for the site selector', () => {

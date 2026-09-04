@@ -4,9 +4,9 @@ import { Events, Browser } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type VodFavoriteInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import VodDetailHeader from './components/VodDetailHeader.vue'
-import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
+import { clampEpisodePage, episodePageRanges, paginateEpisodes } from './episodes'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
-import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
+import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, pickResumeSeek, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodResumeView, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
 
 // 爱发电赞助主页
@@ -77,6 +77,8 @@ const showLiveHistory = ref(false)
 const homeHistory = ref<VodHistoryInfo[]>([])
 const currentVod = ref<{ site: string; vodID: string } | null>(null)
 const pendingSeek = ref(0)
+// 延迟续播目标：进详情时记下上次看的集数与进度，等用户点播放才套用。
+const vodResume = ref<{ EpID: string; Progress: number } | null>(null)
 const logs = ref('')
 const showLogs = ref(false)
 const copyMsg = ref('')
@@ -101,7 +103,7 @@ const infoCollapsed = ref(false)
 
 const themeOptions = [
   { id: 'default', label: '默认' },
-  { id: 'aurora', label: '多彩渐变毛玻璃' },
+  { id: 'aurora', label: '多彩渐变' },
   { id: 'wood', label: '木纹' },
   { id: 'ocean', label: '海洋' },
   { id: '8bit', label: '8bit' },
@@ -320,20 +322,46 @@ async function resumeVod(h: VodHistoryInfo) {
     detailSite.value = h.Site
     vodDetailOrigin.value = 'home'
     vodView.value = 'detail'
+    vodResume.value = null
     vodDetail.value = await ShellService.VodDetail(h.Site, h.VodID)
-    const resumeSource = h.Source && vodDetail.value.Sources?.includes(h.Source)
-      ? h.Source
-      : vodDetail.value.Sources?.[0] ?? ''
-    activeSource.value = resumeSource
+    await applyVodResume(h)
+  } catch (e) { handleError(e) }
+}
+
+// applyPendingSeek 给 mpv 后端补一次定位（网页播放器由 PlaybackView 的 seek-to 自行消费）。
+async function applyPendingSeek() {
+  if (pendingSeek.value > 0 && vodPlaybackPlan.value?.Backend === 'mpv') {
+    await ShellService.Seek(pendingSeek.value)
+  }
+}
+
+// applyVodResume 按一条点播观看记录立即续播（首页「继续观看」用）：优先历史线路，否则首条可用线路。
+// 需在详情已加载后调用；无集数记录时仅切换线路、不自动播放。
+async function applyVodResume(h: VodHistoryInfo) {
+  const view = vodResumeView(vodDetail.value, h)
+  activeSource.value = view.source
+  resetEpisodePage()
+  currentEpisodeID.value = view.episodeID
+  episodePage.value = view.page
+  if (h.EpID) {
+    pendingSeek.value = h.Progress
+    const played = await doPlayEpisode(h.Site, h.EpID, h.EpName, view.source)
+    if (played) await applyPendingSeek()
+  }
+}
+
+// prepareVodResume 收藏页进详情用：切到上次线路、翻到那集所在页并记下续播目标，但不自动开播。
+// 用户点某一集时才由 playEpisode 套用这里的进度。
+async function prepareVodResume(site: string, vodID: string) {
+  try {
+    const h = await ShellService.GetVodHistory(site, vodID)
+    if (!h || !h.VodID || !h.EpID) return
+    const view = vodResumeView(vodDetail.value, h)
+    activeSource.value = view.source || activeSource.value
     resetEpisodePage()
-    if (h.EpID) {
-      pendingSeek.value = h.Progress
-      await doPlayEpisode(h.Site, h.EpID, h.EpName, resumeSource)
-      episodePage.value = episodePageIndex(activeEpisodes.value, h.EpID)
-      if (h.Progress > 0 && vodPlaybackPlan.value?.Backend === 'mpv') {
-        await ShellService.Seek(h.Progress)
-      }
-    }
+    currentEpisodeID.value = view.episodeID
+    episodePage.value = view.page
+    vodResume.value = { EpID: h.EpID, Progress: h.Progress }
   } catch (e) { handleError(e) }
 }
 
@@ -569,6 +597,7 @@ async function invalidateSearch() {
 
 async function openVodDetail(item: VodItem) {
   errMsg.value = ''
+  vodResume.value = null
   try {
     if (searching.value) await cancelSearch()
     const site = item.Site || activeSite.value
@@ -595,6 +624,8 @@ async function openVodFavorite(favorite: VodFavoriteInfo) {
     Group: favorite.Group,
     Site: favorite.Site,
   })
+  if (!vodDetail.value) return // openVodDetail 内部已 handleError 且不重抛，守卫失败加载
+  await prepareVodResume(favorite.Site, favorite.VodID)
 }
 
 async function backFromVodDetail() {
@@ -602,6 +633,7 @@ async function backFromVodDetail() {
   await stopPlayback('vod')
   currentVod.value = null
   vodDetail.value = null
+  vodResume.value = null
   if (target === 'home') {
     mode.value = 'home'
     await refreshHome()
@@ -670,9 +702,12 @@ async function doPlayEpisode(site: string, epID: string, epName: string, source:
 
 async function playEpisode(ep: EpisodeInfo) {
   errMsg.value = ''
-  pendingSeek.value = 0
+  const seekTo = pickResumeSeek(vodResume.value, ep.ID) // 命中上次那集→从原进度续播
+  if (seekTo > 0) vodResume.value = null
+  pendingSeek.value = seekTo
   try {
-    await doPlayEpisode(detailSite.value || activeSite.value, ep.ID, ep.Name, ep.Source)
+    const played = await doPlayEpisode(detailSite.value || activeSite.value, ep.ID, ep.Name, ep.Source)
+    if (played) await applyPendingSeek()
   } catch (e) {
     if (isCurrentPlayback('vod', vodPlaybackToken.value)) handleError(e)
   }
@@ -1249,19 +1284,10 @@ onMounted(() => {
           <li><a href="https://gitlab.com/cznic/sqlite" target="_blank" rel="noopener">modernc.org/sqlite</a><span class="oss-ver">v1.56.0</span><span class="oss-lic">BSD-3</span> — 纯 Go SQLite</li>
           <li><a href="https://github.com/PuerkitoBio/goquery" target="_blank" rel="noopener">goquery</a><span class="oss-ver">v1.13.0</span><span class="oss-lic">BSD-3</span> — HTML 文档解析</li>
           <li><a href="https://github.com/dop251/goja" target="_blank" rel="noopener">goja</a><span class="oss-ver">2026-08-26</span><span class="oss-lic">MIT</span> — Go JavaScript 引擎</li>
-          <li><a href="https://pkg.go.dev/golang.org/x/text" target="_blank" rel="noopener">golang.org/x/text</a><span class="oss-ver">v0.41.0</span><span class="oss-lic">BSD-3</span> — 文本编码与语言支持</li>
           <li><a href="https://github.com/vuejs/core" target="_blank" rel="noopener">Vue</a><span class="oss-ver">v3.5.41</span><span class="oss-lic">MIT</span> — 前端框架</li>
-          <li><a href="https://github.com/wailsapp/wails/tree/master/v3/pkg/runtime" target="_blank" rel="noopener">@wailsio/runtime</a><span class="oss-ver">v3.0.0-beta.9</span><span class="oss-lic">MIT</span> — Wails 前端运行时</li>
           <li><a href="https://github.com/video-dev/hls.js" target="_blank" rel="noopener">hls.js</a><span class="oss-ver">v1.7.1</span><span class="oss-lic">Apache-2.0</span> — HLS 播放</li>
           <li><a href="https://github.com/xqq/mpegts.js" target="_blank" rel="noopener">mpegts.js</a><span class="oss-ver">v1.8.2</span><span class="oss-lic">MIT</span> — MPEG-TS / FLV 播放</li>
           <li><a href="https://github.com/cure53/DOMPurify" target="_blank" rel="noopener">DOMPurify</a><span class="oss-ver">v3.4.14</span><span class="oss-lic">Apache-2.0</span> — HTML 清洗</li>
-          <li><a href="https://github.com/vitejs/vite" target="_blank" rel="noopener">Vite</a><span class="oss-ver">v8.2.1</span><span class="oss-lic">MIT</span> — 构建工具</li>
-          <li><a href="https://github.com/vitejs/vite-plugin-vue" target="_blank" rel="noopener">@vitejs/plugin-vue</a><span class="oss-ver">v6.0.8</span><span class="oss-lic">MIT</span> — Vue Vite 插件</li>
-          <li><a href="https://github.com/microsoft/TypeScript" target="_blank" rel="noopener">TypeScript</a><span class="oss-ver">v4.9.5</span><span class="oss-lic">Apache-2.0</span> — 类型系统</li>
-          <li><a href="https://github.com/vuejs/test-utils" target="_blank" rel="noopener">@vue/test-utils</a><span class="oss-ver">v2.5.0</span><span class="oss-lic">MIT</span> — Vue 测试工具</li>
-          <li><a href="https://github.com/jsdom/jsdom" target="_blank" rel="noopener">jsdom</a><span class="oss-ver">v30.0.1</span><span class="oss-lic">MIT</span> — DOM 测试环境</li>
-          <li><a href="https://github.com/vitest-dev/vitest" target="_blank" rel="noopener">Vitest</a><span class="oss-ver">v4.1.11</span><span class="oss-lic">MIT</span> — 单元测试框架</li>
-          <li><a href="https://github.com/vuejs/language-tools" target="_blank" rel="noopener">vue-tsc</a><span class="oss-ver">v1.8.27</span><span class="oss-lic">MIT</span> — Vue 类型检查</li>
         </ul>
       </div>
     </div>

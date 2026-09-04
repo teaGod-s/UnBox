@@ -1,3 +1,5 @@
+import { episodePageIndex } from './episodes'
+
 export type VodView = 'list' | 'search' | 'detail'
 export type VodDetailOrigin = 'home' | 'search' | 'list' | 'favorites'
 export const VOD_SEARCH_CACHE_TTL = 5 * 60 * 1000
@@ -57,6 +59,33 @@ export function removeVodFavorite<T extends { Site: string; VodID: string }>(ite
 export function shouldShowVodNoResults(inputQuery: string, completedQuery: string, searching: boolean, resultCount: number): boolean {
   const query = inputQuery.trim()
   return query !== '' && query === completedQuery && !searching && resultCount === 0
+}
+
+export function pickResumeSource(historySource: string, available: readonly string[] | null | undefined): string {
+  return historySource && available?.includes(historySource) ? historySource : available?.[0] ?? ''
+}
+
+// pickResumeSeek 把延迟续播目标的进度套用到用户点击的那一集；未命中返回 0（从头播）。
+export function pickResumeSeek(target: { EpID: string; Progress: number } | null, epID: string): number {
+  return target && target.EpID === epID ? target.Progress : 0
+}
+
+export interface VodResumeView {
+  source: string
+  episodeID: string
+  page: number
+}
+
+// vodResumeView 解析「接着上次看」应呈现的视图：线路、高亮的集数、该集所在分页。
+// 线路失效时回落到首条可用线路；无记录时不高亮任何集。
+export function vodResumeView(
+  detail: { Sources?: readonly string[] | null; Episodes?: readonly { ID: string; Source: string }[] | null } | null,
+  history: { EpID: string; Source: string } | null,
+): VodResumeView {
+  const source = pickResumeSource(history?.Source ?? '', detail?.Sources)
+  const episodeID = history?.EpID ?? ''
+  const episodes = (detail?.Episodes ?? []).filter(ep => ep.Source === source)
+  return { source, episodeID, page: episodePageIndex(episodes, episodeID) }
 }
 
 export function resolveVodSelection<T extends { ID: string; Line?: string }>(sites: readonly T[], preferredSite: string): { site: string; line: string } {

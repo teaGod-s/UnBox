@@ -1036,10 +1036,17 @@ body[data-theme="wood"] {
 
 /* 点播页下拉框：<select> 是原生控件不响应 backdrop-filter，需单独给半透明浅底 */
 [data-theme="wood"] .vod-toolbar select {
-  background: rgba(255, 250, 240, 0.75);
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: #FFF8F0;
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%233a2818' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 12px 8px;
   border: 1px solid rgba(139, 106, 63, 0.4);
-  color: var(--text);
+  color: #3a2818;
   box-shadow: 0 2px 8px rgba(80, 60, 30, 0.2), inset 0 1px 0 rgba(255, 240, 210, 0.6);
+  padding-right: 2rem;
 }
 
 /* 海洋：SVG 波浪叠加 + 玻璃面板 + 沙金强调色。
@@ -1070,13 +1077,15 @@ body[data-theme="wood"] {
 
 body[data-theme="ocean"] {
   background-color: #4a8aaa;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='800' viewBox='0 0 1200 800' preserveAspectRatio='none'><defs><linearGradient id='ovl' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%230a3050' stop-opacity='0'/><stop offset='1' stop-color='%230a3050' stop-opacity='0.4'/></linearGradient></defs><rect width='1200' height='800' fill='%234a8aaa'/><path d='M0,80 C100,40 200,120 300,80 C400,40 500,120 600,80 C700,40 800,120 900,80 C1000,40 1100,120 1200,80 L1200,800 L0,800 Z' fill='%238ecbe0'/><path d='M0,220 C100,170 200,270 300,220 C400,170 500,270 600,220 C700,170 800,270 900,220 C1000,170 1100,270 1200,220 L1200,800 L0,800 Z' fill='%235a9ab8'/><path d='M0,360 C100,305 200,415 300,360 C400,305 500,415 600,360 C700,305 800,415 900,360 C1000,305 1100,415 1200,360 L1200,800 L0,800 Z' fill='%233a7a9a'/><path d='M0,500 C100,450 200,550 300,500 C400,450 500,550 600,500 C700,450 800,550 900,500 C1000,450 1100,550 1200,500 L1200,800 L0,800 Z' fill='%232a6a8a'/><path d='M0,640 C100,595 200,685 300,640 C400,595 500,685 600,640 C700,595 800,685 900,640 C1000,595 1100,685 1200,640 L1200,800 L0,800 Z' fill='%231a5a7a'/><path d='M0,80 C100,40 200,120 300,80 C400,40 500,120 600,80 C700,40 800,120 900,80 C1000,40 1100,120 1200,80' fill='none' stroke='rgba(255,255,255,0.08)' stroke-width='1.5'/><path d='M0,220 C100,170 200,270 300,220 C400,170 500,270 600,220 C700,170 800,270 900,220 C1000,170 1100,270 1200,220' fill='none' stroke='rgba(255,255,255,0.06)' stroke-width='1.2'/><path d='M0,360 C100,305 200,415 300,360 C400,305 500,415 600,360 C700,305 800,415 900,360 C1000,305 1100,415 1200,360' fill='none' stroke='rgba(255,255,255,0.05)' stroke-width='1'/><path d='M0,500 C100,450 200,550 300,500 C400,450 500,550 600,500 C700,450 800,550 900,500 C1000,450 1100,550 1200,500' fill='none' stroke='rgba(255,255,255,0.04)' stroke-width='1'/><path d='M0,640 C100,595 200,685 300,640 C400,595 500,685 600,640 C700,595 800,685 900,640 C1000,595 1100,685 1200,640' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='1'/><circle cx='150' cy='50' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='450' cy='90' r='2' fill='rgba(255,255,255,0.08)'/><circle cx='750' cy='60' r='3' fill='rgba(255,255,255,0.08)'/><circle cx='1050' cy='85' r='2.5' fill='rgba(255,255,255,0.07)'/><circle cx='250' cy='190' r='2' fill='rgba(255,255,255,0.07)'/><circle cx='550' cy='240' r='2.5' fill='rgba(255,255,255,0.07)'/><circle cx='850' cy='210' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='1100' cy='230' r='2.5' fill='rgba(255,255,255,0.07)'/><circle cx='180' cy='330' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='480' cy='380' r='2.5' fill='rgba(255,255,255,0.06)'/><circle cx='780' cy='350' r='2' fill='rgba(255,255,255,0.05)'/><circle cx='1080' cy='370' r='2.5' fill='rgba(255,255,255,0.06)'/><circle cx='220' cy='470' r='2' fill='rgba(255,255,255,0.05)'/><circle cx='520' cy='520' r='2.5' fill='rgba(255,255,255,0.05)'/><circle cx='820' cy='490' r='2' fill='rgba(255,255,255,0.04)'/><circle cx='1120' cy='510' r='2.5' fill='rgba(255,255,255,0.05)'/><circle cx='300' cy='610' r='2' fill='rgba(255,255,255,0.04)'/><circle cx='600' cy='660' r='2.5' fill='rgba(255,255,255,0.04)'/><circle cx='900' cy='630' r='2' fill='rgba(255,255,255,0.03)'/><circle cx='1150' cy='650' r='2.5' fill='rgba(255,255,255,0.04)'/><rect x='0' y='704' width='1200' height='96' fill='url(%23ovl)'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='800' viewBox='0 0 1200 800' preserveAspectRatio='none'><defs><linearGradient id='ovl' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%230a3050' stop-opacity='0'/><stop offset='1' stop-color='%230a3050' stop-opacity='0.4'/></linearGradient></defs><rect width='1200' height='800' fill='%234a8aaa'/><path d='M0,80 C100,40 200,120 300,80 C400,40 500,120 600,80 C700,40 800,120 900,80 C1000,40 1100,120 1200,80 L1200,800 L0,800 Z' fill='%238ecbe0'/><path d='M0,220 C100,170 200,270 300,220 C400,170 500,270 600,220 C700,170 800,270 900,220 C1000,170 1100,270 1200,220 L1200,800 L0,800 Z' fill='%235a9ab8'/><path d='M0,360 C100,305 200,415 300,360 C400,305 500,415 600,360 C700,305 800,415 900,360 C1000,305 1100,415 1200,360 L1200,800 L0,800 Z' fill='%233a7a9a'/><path d='M0,500 C100,450 200,550 300,500 C400,450 500,550 600,500 C700,450 800,550 900,500 C1000,450 1100,550 1200,500 L1200,800 L0,800 Z' fill='%232a6a8a'/><path d='M0,640 C100,595 200,685 300,640 C400,595 500,685 600,640 C700,595 800,685 900,640 C1000,595 1100,685 1200,640 L1200,800 L0,800 Z' fill='%231a5a7a'/><path d='M0,80 C100,40 200,120 300,80 C400,40 500,120 600,80 C700,40 800,120 900,80 C1000,40 1100,120 1200,80' fill='none' stroke='rgba(255,255,255,0.08)' stroke-width='1.5'/><path d='M0,220 C100,170 200,270 300,220 C400,170 500,270 600,220 C700,170 800,270 900,220 C1000,170 1100,270 1200,220' fill='none' stroke='rgba(255,255,255,0.06)' stroke-width='1.2'/><path d='M0,360 C100,305 200,415 300,360 C400,305 500,415 600,360 C700,305 800,415 900,360 C1000,305 1100,415 1200,360' fill='none' stroke='rgba(255,255,255,0.05)' stroke-width='1'/><path d='M0,500 C100,450 200,550 300,500 C400,450 500,550 600,500 C700,450 800,550 900,500 C1000,450 1100,550 1200,500' fill='none' stroke='rgba(255,255,255,0.04)' stroke-width='1'/><path d='M0,640 C100,595 200,685 300,640 C400,595 500,685 600,640 C700,595 800,685 900,640 C1000,595 1100,685 1200,640' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='1'/><circle cx='150' cy='50' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='450' cy='90' r='2' fill='rgba(255,255,255,0.08)'/><circle cx='750' cy='60' r='3' fill='rgba(255,255,255,0.08)'/><circle cx='1050' cy='85' r='2.5' fill='rgba(255,255,255,0.07)'/><circle cx='250' cy='190' r='2' fill='rgba(255,255,255,0.07)'/><circle cx='550' cy='240' r='2.5' fill='rgba(255,255,255,0.07)'/><circle cx='850' cy='210' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='1100' cy='230' r='2.5' fill='rgba(255,255,255,0.07)'/><circle cx='180' cy='330' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='480' cy='380' r='2.5' fill='rgba(255,255,255,0.06)'/><circle cx='780' cy='350' r='2' fill='rgba(255,255,255,0.05)'/><circle cx='1080' cy='370' r='2.5' fill='rgba(255,255,255,0.06)'/><circle cx='220' cy='470' r='2' fill='rgba(255,255,255,0.05)'/><circle cx='520' cy='520' r='2.5' fill='rgba(255,255,255,0.05)'/><circle cx='820' cy='490' r='2' fill='rgba(255,255,255,0.04)'/><circle cx='1120' cy='510' r='2.5' fill='rgba(255,255,255,0.05)'/><circle cx='300' cy='610' r='2' fill='rgba(255,255,255,0.04)'/><circle cx='600' cy='660' r='2.5' fill='rgba(255,255,255,0.04)'/><circle cx='900' cy='630' r='2' fill='rgba(255,255,255,0.03)'/><circle cx='1150' cy='650' r='2.5' fill='rgba(255,255,255,0.04)'/><rect width='1200' height='800' fill='%230a3050' opacity='0.25'/><rect x='0' y='704' width='1200' height='96' fill='url(%23ovl)'/></svg>");
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
 }
 
+[data-theme="ocean"] .home,
+[data-theme="ocean"] .favorites-page,
 [data-theme="ocean"] .groups,
 [data-theme="ocean"] .channels,
 [data-theme="ocean"] .player,
@@ -1099,6 +1108,17 @@ body[data-theme="ocean"] {
   border: 1px solid rgba(255, 255, 255, 0.24);
   color: var(--text);
   box-shadow: 0 2px 10px rgba(6, 40, 66, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* 首页 / 收藏页：没有玻璃面板时文字直接落在 SVG 波浪上，
+   加半透明深底 + backdrop-filter 保证可读性 */
+[data-theme="ocean"] .home,
+[data-theme="ocean"] .favorites-page {
+  background: rgba(6, 44, 68, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 0.6rem;
+  margin: 0.3rem 0.5rem 0.5rem;
+  padding: 0.5rem 0.8rem;
 }
 
 /* 8bit：复古 CRT 绿，去掉刺眼的霓虹粉，保留像素与等宽 */

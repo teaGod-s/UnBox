@@ -6,7 +6,7 @@ import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import VodDetailHeader from './components/VodDetailHeader.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
-import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
+import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
 
 // 爱发电赞助主页
@@ -440,14 +440,10 @@ async function setVolume(e: Event) { await ShellService.SetVolume(Number((e.targ
 
 async function loadSources() {
   sources.value = (await ShellService.Sources()) ?? []
-  if (!activeSite.value) {
-    const last = await ShellService.LastVodSite()
-    const target = vodSites.value.find(s => s.ID === last) ?? vodSites.value[0]
-    if (target) {
-      activeSite.value = target.ID
-      activeLine.value = target.Line ?? ''
-    }
-  }
+  const last = activeSite.value || await ShellService.LastVodSite()
+  const selection = resolveVodSelection(vodSites.value, last)
+  activeSite.value = selection.site
+  activeLine.value = selection.line
 }
 
 async function refreshVod() {

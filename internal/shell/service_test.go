@@ -202,8 +202,26 @@ func TestVodPersistenceAPIs(t *testing.T) {
 	if err := svc.RecordVodHistory("site-a", "vod-1", "影片一", "", "ep-1", "第1集", "线路"); err != nil {
 		t.Fatalf("RecordVodHistory: %v", err)
 	}
+	// GetVodHistory：查到刚记录的条目，关键字段回显正确。
+	got, err := svc.GetVodHistory("site-a", "vod-1")
+	if err != nil {
+		t.Fatalf("GetVodHistory: %v", err)
+	}
+	if got.VodID != "vod-1" || got.EpID != "ep-1" || got.Source != "线路" {
+		t.Fatalf("GetVodHistory = %+v, want vod-1/ep-1/线路", got)
+	}
+	// 不存在的条目返回零值（VodID 为空），不报错。
+	missing, err := svc.GetVodHistory("site-a", "missing")
+	if err != nil || missing.VodID != "" {
+		t.Fatalf("GetVodHistory(missing) = %+v, %v, want zero VodHistoryInfo", missing, err)
+	}
 	if err := svc.DeleteVodHistory("site-a", "vod-1"); err != nil {
 		t.Fatalf("DeleteVodHistory: %v", err)
+	}
+	// 删除后再查同样返回零值。
+	after, err := svc.GetVodHistory("site-a", "vod-1")
+	if err != nil || after.VodID != "" {
+		t.Fatalf("GetVodHistory after delete = %+v, %v, want zero VodHistoryInfo", after, err)
 	}
 }
 

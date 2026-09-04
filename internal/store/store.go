@@ -299,6 +299,19 @@ func (s *Store) ListVodHistory(limit int) ([]VodHistory, error) {
 	return out, rows.Err()
 }
 
+// GetVodHistory 返回指定点播的单条观看记录；不存在时 ok=false。
+func (s *Store) GetVodHistory(site, vodID string) (h VodHistory, ok bool, err error) {
+	err = s.db.QueryRow(`SELECT site, vod_id, vod_title, vod_logo, ep_id, ep_name, source, progress, duration, updated_at FROM vod_history WHERE site=? AND vod_id=?`,
+		site, vodID).Scan(&h.Site, &h.VodID, &h.VodTitle, &h.VodLogo, &h.EpID, &h.EpName, &h.Source, &h.Progress, &h.Duration, &h.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return VodHistory{}, false, nil
+	}
+	if err != nil {
+		return VodHistory{}, false, err
+	}
+	return h, true, nil
+}
+
 // DeleteVodHistory 删除指定点播的观看记录。
 func (s *Store) DeleteVodHistory(site, vodID string) error {
 	_, err := s.db.Exec(`DELETE FROM vod_history WHERE site=? AND vod_id=?`, site, vodID)

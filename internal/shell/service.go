@@ -433,6 +433,28 @@ func (s *ShellService) ListVodHistory() ([]VodHistoryInfo, error) {
 	return out, nil
 }
 
+// GetVodHistory 返回指定点播的单条观看记录；无记录时返回零值。
+func (s *ShellService) GetVodHistory(site, vodID string) (VodHistoryInfo, error) {
+	if s.store == nil {
+		return VodHistoryInfo{}, nil
+	}
+	rec, ok, err := s.store.GetVodHistory(site, vodID)
+	if err != nil {
+		return VodHistoryInfo{}, err
+	}
+	if !ok {
+		return VodHistoryInfo{}, nil
+	}
+	s.mu.RLock()
+	siteName := s.vodNames[rec.Site]
+	s.mu.RUnlock()
+	return VodHistoryInfo{
+		Site: rec.Site, SiteName: siteName, VodID: rec.VodID, VodTitle: rec.VodTitle, VodLogo: rec.VodLogo,
+		EpID: rec.EpID, EpName: rec.EpName, Source: rec.Source,
+		Progress: rec.Progress, Duration: rec.Duration, At: rec.UpdatedAt,
+	}, nil
+}
+
 // DeleteVodHistory 删除首页的一条点播观看记录。
 func (s *ShellService) DeleteVodHistory(site, vodID string) error {
 	if s.store == nil {

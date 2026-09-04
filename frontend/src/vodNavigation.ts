@@ -53,3 +53,13 @@ export function removeVodHistory<T extends { Site: string; VodID: string }>(item
 export function removeVodFavorite<T extends { Site: string; VodID: string }>(items: T[], site: string, vodID: string): T[] {
   return items.filter(item => item.Site !== site || item.VodID !== vodID)
 }
+
+export function shouldShowVodNoResults(inputQuery: string, completedQuery: string, searching: boolean, resultCount: number): boolean {
+  const query = inputQuery.trim()
+  return query !== '' && query === completedQuery && !searching && resultCount === 0
+}
+
+export function resolveVodSelection<T extends { ID: string; Line?: string }>(sites: readonly T[], preferredSite: string): { site: string; line: string } {
+  const target = sites.find(site => site.ID === preferredSite) ?? sites[0]
+  return target ? { site: target.ID, line: target.Line ?? '' } : { site: '', line: '' }
+}

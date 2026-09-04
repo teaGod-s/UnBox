@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn } from './vodNavigation'
+import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodSearchQueryForReturn } from './vodNavigation'
 
 describe('vod navigation', () => {
   it('returns to the page that opened the detail view', () => {
@@ -48,5 +48,21 @@ describe('vod navigation', () => {
     expect(request).toBe(4)
     expect(isCurrentVodCategoryRequest(4, request)).toBe(true)
     expect(isCurrentVodCategoryRequest(3, request)).toBe(false)
+  })
+
+  it('does not show no-results before a search is submitted and completed', () => {
+    expect(shouldShowVodNoResults('斗罗', '', false, 0)).toBe(false)
+    expect(shouldShowVodNoResults('斗罗', '斗罗', true, 0)).toBe(false)
+    expect(shouldShowVodNoResults('斗罗', '斗罗', false, 0)).toBe(true)
+    expect(shouldShowVodNoResults('斗罗2', '斗罗', false, 0)).toBe(false)
+  })
+
+  it('restores the remembered site and its line for the site selector', () => {
+    const sites = [
+      { ID: 'site-a', Line: '线路一' },
+      { ID: 'site-b', Line: '线路二' },
+    ]
+    expect(resolveVodSelection(sites, 'site-b')).toEqual({ site: 'site-b', line: '线路二' })
+    expect(resolveVodSelection(sites, 'missing')).toEqual({ site: 'site-a', line: '线路一' })
   })
 })

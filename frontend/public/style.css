@@ -158,7 +158,7 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(130px, 15vw) minmax(0, 1fr) minmax(220px, 28vw);
+  grid-template-columns: minmax(130px, 15vw) minmax(280px, 1fr) minmax(220px, 28vw);
   gap: 0.75rem;
 }
 
@@ -551,6 +551,13 @@ body {
   border-radius: 0.5rem;
 }
 
+.player .playback-view {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 180px;
+  aspect-ratio: 16 / 9;
+}
+
 .playback-view { position: relative; width: 100%; background: #05060b; min-height: 180px; aspect-ratio: 16 / 9; display: grid; place-items: center; overflow: hidden; }
 .playback-view video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .mpv-status, .playback-empty { color: #8b91a3; font-size: 0.9rem; }
@@ -592,6 +599,21 @@ body {
 
 .vod-player { margin: 0.75rem 0; }
 .vod-player .now { margin: 0 0 0.4rem; color: #7ee787; }
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "player"
+      "groups"
+      "channels";
+    overflow-y: auto;
+  }
+
+  .layout > .groups { grid-area: groups; }
+  .layout > .player { grid-area: player; min-height: 260px; }
+  .layout > .channels { grid-area: channels; min-height: 18rem; }
+}
 .vod-detail .desc { color: #aab0c0; line-height: 1.6; max-height: 14rem; overflow-y: auto; }
 .vod-detail .desc p { margin: 0.3rem 0; }
 

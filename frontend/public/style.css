@@ -988,26 +988,26 @@ body[data-theme="aurora"] {
    面板走半透明深棕 + backdrop-filter，让枫木从面板后面透出。 */
 [data-theme="wood"] {
   --bg: #E2D5C0;
-  --panel: rgba(30, 18, 8, 0.68);
-  --panel-border: rgba(139, 106, 63, 0.55);
-  --border: rgba(139, 106, 63, 0.4);
+  --panel: rgba(255, 250, 240, 0.72);
+  --panel-border: rgba(139, 106, 63, 0.35);
+  --border: rgba(139, 106, 63, 0.35);
   --border-light: rgba(139, 106, 63, 0.55);
-  --text: #f2e6d2;
-  --text-soft: #e6d5b8;
-  --text-dim: #b39b78;
-  --text-white: #fff6e4;
-  --text-desc: #d8c4a2;
-  --text-mute: #8f7a5e;
+  --text: #3a2818;
+  --text-soft: #5a4228;
+  --text-dim: #7a5a32;
+  --text-white: #1a1208;
+  --text-desc: #6b4a2a;
+  --text-mute: #a88966;
   --accent: #8b6a3f;
   --accent-border: #8b6a3f;
-  --btn-bg: rgba(30, 18, 8, 0.55);
-  --btn-hover: rgba(50, 32, 16, 0.7);
-  --btn-active-bg: rgba(60, 40, 20, 0.78);
-  --input-bg: rgba(30, 18, 8, 0.5);
-  --row-alt: rgba(30, 18, 8, 0.42);
-  --deep: rgba(15, 10, 4, 0.75);
-  --field: rgba(30, 18, 8, 0.45);
-  --field-border: rgba(139, 106, 63, 0.45);
+  --btn-bg: rgba(255, 250, 240, 0.65);
+  --btn-hover: rgba(230, 210, 180, 0.75);
+  --btn-active-bg: rgba(210, 190, 160, 0.85);
+  --input-bg: rgba(255, 250, 240, 0.7);
+  --row-alt: rgba(139, 106, 63, 0.08);
+  --deep: rgba(30, 18, 8, 0.06);
+  --field: rgba(255, 250, 240, 0.65);
+  --field-border: rgba(139, 106, 63, 0.4);
 }
 
 body[data-theme="wood"] {
@@ -1029,17 +1029,17 @@ body[data-theme="wood"] {
 [data-theme="wood"] .vod-search-row,
 [data-theme="wood"] .settings-panel,
 [data-theme="wood"] .about-body {
-  backdrop-filter: blur(10px) saturate(110%);
-  -webkit-backdrop-filter: blur(10px) saturate(110%);
-  box-shadow: inset 0 1px 0 rgba(255, 240, 210, 0.14), 0 2px 10px rgba(30, 20, 10, 0.28);
+  backdrop-filter: blur(8px) saturate(105%);
+  -webkit-backdrop-filter: blur(8px) saturate(105%);
+  box-shadow: inset 0 1px 0 rgba(255, 240, 210, 0.5), 0 2px 10px rgba(80, 60, 30, 0.15);
 }
 
-/* 点播页下拉框：<select> 是原生控件不响应 backdrop-filter，需单独给半透明深底 */
+/* 点播页下拉框：<select> 是原生控件不响应 backdrop-filter，需单独给半透明浅底 */
 [data-theme="wood"] .vod-toolbar select {
-  background: rgba(30, 18, 8, 0.68);
-  border: 1px solid rgba(139, 106, 63, 0.5);
+  background: rgba(255, 250, 240, 0.75);
+  border: 1px solid rgba(139, 106, 63, 0.4);
   color: var(--text);
-  box-shadow: 0 2px 8px rgba(30, 20, 10, 0.3), inset 0 1px 0 rgba(255, 240, 210, 0.1);
+  box-shadow: 0 2px 8px rgba(80, 60, 30, 0.2), inset 0 1px 0 rgba(255, 240, 210, 0.6);
 }
 
 /* 海洋：SVG 波浪叠加 + 玻璃面板 + 沙金强调色。
@@ -1070,7 +1070,7 @@ body[data-theme="wood"] {
 
 body[data-theme="ocean"] {
   background-color: #4a8aaa;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='800' viewBox='0 0 1200 800' preserveAspectRatio='none'><defs><linearGradient id='ovl' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%230a3050' stop-opacity='0'/><stop offset='1' stop-color='%230a3050' stop-opacity='0.4'/></linearGradient></defs><rect width='1200' height='800' fill='%234a8aaa'/><path d='M0,180 C50,140 100,220 150,160 C200,100 250,200 300,140 C350,80 400,180 450,120 C500,60 550,160 600,100 C650,40 700,140 750,80 C800,20 850,120 900,60 C950,0 1000,100 1050,40 C1100,-20 1150,80 1200,60 L1200,800 L0,800 Z' fill='%236aaccc'/><path d='M0,230 C60,190 120,270 180,210 C240,150 300,250 360,190 C420,130 480,230 540,170 C600,110 660,210 720,150 C780,90 840,190 900,130 C960,70 1020,170 1080,110 C1140,50 1200,150 L1200,800 L0,800 Z' fill='%235a9ab8'/><path d='M0,280 C70,240 140,320 210,260 C280,200 350,300 420,240 C490,180 560,280 630,220 C700,160 770,260 840,200 C910,140 980,240 1050,180 C1120,120 1200,220 L1200,800 L0,800 Z' fill='%234a8aaa'/><path d='M0,330 C80,290 160,370 240,310 C320,250 400,350 480,290 C560,230 640,330 720,270 C800,210 880,310 960,250 C1040,190 1120,290 1200,250 L1200,800 L0,800 Z' fill='%233a7a9a'/><path d='M0,380 C90,340 180,420 270,360 C360,300 450,400 540,340 C630,280 720,380 810,320 C900,260 990,360 1080,300 C1170,240 1200,340 L1200,800 L0,800 Z' fill='%232a6a8a'/><path d='M0,430 C100,390 200,470 300,410 C400,350 500,450 600,390 C700,330 800,430 900,370 C1000,310 1100,410 1200,370 L1200,800 L0,800 Z' fill='%231a5a7a'/><path d='M0,480 C110,440 220,520 330,460 C440,400 550,500 660,440 C770,380 880,480 990,420 C1100,360 1200,460 L1200,800 L0,800 Z' fill='%230a4a6a'/><path d='M0,530 C120,490 240,570 360,510 C480,450 600,550 720,490 C840,430 960,530 1080,470 C1200,410 1200,510 L1200,800 L0,800 Z' fill='%230a3a5a'/><path d='M0,180 C50,140 100,220 150,160 C200,100 250,200 300,140 C350,80 400,180 450,120 C500,60 550,160 600,100 C650,40 700,140 750,80 C800,20 850,120 900,60 C950,0 1000,100 1050,40 C1100,-20 1150,80 1200,60' fill='none' stroke='rgba(255,255,255,0.06)' stroke-width='1.5'/><path d='M0,230 C60,190 120,270 180,210 C240,150 300,250 360,190 C420,130 480,230 540,170 C600,110 660,210 720,150 C780,90 840,190 900,130 C960,70 1020,170 1080,110 C1140,50 1200,150' fill='none' stroke='rgba(255,255,255,0.05)' stroke-width='1'/><path d='M0,280 C70,240 140,320 210,260 C280,200 350,300 420,240 C490,180 560,280 630,220 C700,160 770,260 840,200 C910,140 980,240 1050,180 C1120,120 1200,220' fill='none' stroke='rgba(255,255,255,0.04)' stroke-width='1'/><circle cx='100' cy='195' r='2' fill='rgba(255,255,255,0.08)'/><circle cx='280' cy='245' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='450' cy='175' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='620' cy='295' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='750' cy='155' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='920' cy='285' r='3' fill='rgba(255,255,255,0.08)'/><circle cx='1050' cy='225' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='1150' cy='335' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='180' cy='400' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='380' cy='450' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='550' cy='380' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='720' cy='460' r='3' fill='rgba(255,255,255,0.08)'/><circle cx='880' cy='390' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='1020' cy='470' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='200' cy='550' r='2' fill='rgba(255,255,255,0.05)'/><circle cx='450' cy='580' r='2.5' fill='rgba(255,255,255,0.05)'/><circle cx='680' cy='520' r='2' fill='rgba(255,255,255,0.04)'/><circle cx='900' cy='570' r='2' fill='rgba(255,255,255,0.05)'/><circle cx='1100' cy='500' r='2.5' fill='rgba(255,255,255,0.05)'/><rect x='0' y='704' width='1200' height='96' fill='url(%23ovl)'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='800' viewBox='0 0 1200 800' preserveAspectRatio='none'><defs><linearGradient id='ovl' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%230a3050' stop-opacity='0'/><stop offset='1' stop-color='%230a3050' stop-opacity='0.4'/></linearGradient></defs><rect width='1200' height='800' fill='%234a8aaa'/><path d='M0,80 C100,40 200,120 300,80 C400,40 500,120 600,80 C700,40 800,120 900,80 C1000,40 1100,120 1200,80 L1200,800 L0,800 Z' fill='%238ecbe0'/><path d='M0,220 C100,170 200,270 300,220 C400,170 500,270 600,220 C700,170 800,270 900,220 C1000,170 1100,270 1200,220 L1200,800 L0,800 Z' fill='%235a9ab8'/><path d='M0,360 C100,305 200,415 300,360 C400,305 500,415 600,360 C700,305 800,415 900,360 C1000,305 1100,415 1200,360 L1200,800 L0,800 Z' fill='%233a7a9a'/><path d='M0,500 C100,450 200,550 300,500 C400,450 500,550 600,500 C700,450 800,550 900,500 C1000,450 1100,550 1200,500 L1200,800 L0,800 Z' fill='%232a6a8a'/><path d='M0,640 C100,595 200,685 300,640 C400,595 500,685 600,640 C700,595 800,685 900,640 C1000,595 1100,685 1200,640 L1200,800 L0,800 Z' fill='%231a5a7a'/><path d='M0,80 C100,40 200,120 300,80 C400,40 500,120 600,80 C700,40 800,120 900,80 C1000,40 1100,120 1200,80' fill='none' stroke='rgba(255,255,255,0.08)' stroke-width='1.5'/><path d='M0,220 C100,170 200,270 300,220 C400,170 500,270 600,220 C700,170 800,270 900,220 C1000,170 1100,270 1200,220' fill='none' stroke='rgba(255,255,255,0.06)' stroke-width='1.2'/><path d='M0,360 C100,305 200,415 300,360 C400,305 500,415 600,360 C700,305 800,415 900,360 C1000,305 1100,415 1200,360' fill='none' stroke='rgba(255,255,255,0.05)' stroke-width='1'/><path d='M0,500 C100,450 200,550 300,500 C400,450 500,550 600,500 C700,450 800,550 900,500 C1000,450 1100,550 1200,500' fill='none' stroke='rgba(255,255,255,0.04)' stroke-width='1'/><path d='M0,640 C100,595 200,685 300,640 C400,595 500,685 600,640 C700,595 800,685 900,640 C1000,595 1100,685 1200,640' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='1'/><circle cx='150' cy='50' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='450' cy='90' r='2' fill='rgba(255,255,255,0.08)'/><circle cx='750' cy='60' r='3' fill='rgba(255,255,255,0.08)'/><circle cx='1050' cy='85' r='2.5' fill='rgba(255,255,255,0.07)'/><circle cx='250' cy='190' r='2' fill='rgba(255,255,255,0.07)'/><circle cx='550' cy='240' r='2.5' fill='rgba(255,255,255,0.07)'/><circle cx='850' cy='210' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='1100' cy='230' r='2.5' fill='rgba(255,255,255,0.07)'/><circle cx='180' cy='330' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='480' cy='380' r='2.5' fill='rgba(255,255,255,0.06)'/><circle cx='780' cy='350' r='2' fill='rgba(255,255,255,0.05)'/><circle cx='1080' cy='370' r='2.5' fill='rgba(255,255,255,0.06)'/><circle cx='220' cy='470' r='2' fill='rgba(255,255,255,0.05)'/><circle cx='520' cy='520' r='2.5' fill='rgba(255,255,255,0.05)'/><circle cx='820' cy='490' r='2' fill='rgba(255,255,255,0.04)'/><circle cx='1120' cy='510' r='2.5' fill='rgba(255,255,255,0.05)'/><circle cx='300' cy='610' r='2' fill='rgba(255,255,255,0.04)'/><circle cx='600' cy='660' r='2.5' fill='rgba(255,255,255,0.04)'/><circle cx='900' cy='630' r='2' fill='rgba(255,255,255,0.03)'/><circle cx='1150' cy='650' r='2.5' fill='rgba(255,255,255,0.04)'/><rect x='0' y='704' width='1200' height='96' fill='url(%23ovl)'/></svg>");
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;

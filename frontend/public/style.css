@@ -932,7 +932,7 @@ body {
 
 /* 多彩渐变毛玻璃：多色渐变背景固定附着 + 半透明面板 + backdrop-blur */
 [data-theme="aurora"] {
-  --bg: linear-gradient(135deg, #1a0533 0%, #4a0e63 15%, #a4127f 30%, #2563eb 50%, #0ea5b7 65%, #16a34a 82%, #f59e0b 100%);
+  --bg: linear-gradient(135deg, #120324 0%, #2f083c 15%, #3d104f 30%, #12386e 50%, #064a59 65%, #0c4a29 82%, #4a2a0e 100%);
   --panel: rgba(10, 14, 32, 0.42);
   --panel-border: rgba(255, 255, 255, 0.18);
   --border: rgba(255, 255, 255, 0.18);
@@ -975,9 +975,21 @@ body {
   box-shadow: 0 6px 24px rgba(8, 6, 24, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
+/* 点播页下拉框：<select> 是原生控件不响应 backdrop-filter，需单独给不透明白底 */
+[data-theme="aurora"] .vod-toolbar select {
+  background: rgba(10, 8, 30, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: var(--text);
+  box-shadow: 0 2px 10px rgba(8, 6, 24, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
 /* 木纹：堆叠重复线性渐变模拟木纹 + 横向木板渐变底 */
 [data-theme="wood"] {
-  --bg: #2a1d12;
+  --bg:
+    repeating-linear-gradient(92deg, rgba(0, 0, 0, 0.14) 0 2px, transparent 2px 7px),
+    repeating-linear-gradient(88deg, rgba(255, 220, 160, 0.05) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.2) 0 1px, transparent 1px 26px),
+    linear-gradient(90deg, #17100a 0%, #2b1d11 30%, #3a2818 52%, #2b1d11 72%, #17100a 100%);
   --panel: #382818;
   --panel-border: #6b4a2a;
   --border: #6b4a2a;
@@ -1001,11 +1013,6 @@ body {
 }
 
 [data-theme="wood"] body {
-  background-image:
-    repeating-linear-gradient(92deg, rgba(0, 0, 0, 0.14) 0 2px, transparent 2px 7px),
-    repeating-linear-gradient(88deg, rgba(255, 220, 160, 0.05) 0 1px, transparent 1px 5px),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.2) 0 1px, transparent 1px 26px),
-    linear-gradient(90deg, #17100a 0%, #2b1d11 30%, #3a2818 52%, #2b1d11 72%, #17100a 100%);
   background-attachment: fixed;
 }
 
@@ -1025,79 +1032,6 @@ body {
     repeating-linear-gradient(88deg, rgba(255, 220, 160, 0.05) 0 1px, transparent 1px 5px),
     linear-gradient(180deg, var(--panel) 0%, #2a1c10 100%);
   box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.08), 0 2px 8px rgba(0, 0, 0, 0.35);
-}
-
-/* 纪念碑谷·海洋：深蓝渐变 + 底部两层平移动画波浪 + 沙金强调色 */
-[data-theme="ocean"] {
-  --bg: #04314d;
-  --panel: rgba(6, 44, 64, 0.8);
-  --panel-border: rgba(126, 213, 239, 0.34);
-  --border: rgba(126, 213, 239, 0.28);
-  --border-light: rgba(126, 213, 239, 0.44);
-  --text: #eaf6ff;
-  --text-soft: #cfe9f7;
-  --text-dim: #86b6cf;
-  --text-white: #ffffff;
-  --text-desc: #b6d6e8;
-  --text-mute: #5c8ba6;
-  --accent: #ffd37a;
-  --accent-border: #ffd37a;
-  --btn-bg: rgba(12, 74, 100, 0.72);
-  --btn-hover: rgba(20, 92, 120, 0.82);
-  --btn-active-bg: rgba(30, 110, 140, 0.86);
-  --input-bg: rgba(6, 44, 64, 0.72);
-  --row-alt: rgba(6, 44, 64, 0.52);
-  --deep: #02202f;
-  --field: rgba(6, 44, 64, 0.62);
-  --field-border: rgba(126, 213, 239, 0.3);
-}
-
-[data-theme="ocean"] .container {
-  position: relative;
-  z-index: 1;
-}
-
-[data-theme="ocean"] body::before,
-[data-theme="ocean"] body::after {
-  content: "";
-  position: fixed;
-  left: 0; right: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-
-[data-theme="ocean"] body::before {
-  bottom: 0; height: 280px;
-  background-image: radial-gradient(ellipse 240px 130px at 240px 100%, rgba(6, 90, 130, 0.95), rgba(6, 90, 130, 0) 70%);
-  background-repeat: repeat-x;
-  background-size: 480px 300px;
-  background-position: 0 0;
-  animation: unbox-wave 18s linear infinite;
-}
-
-[data-theme="ocean"] body::after {
-  bottom: 46px; height: 300px;
-  background-image: radial-gradient(ellipse 320px 150px at 320px 100%, rgba(14, 122, 164, 0.78), rgba(14, 122, 164, 0) 70%);
-  background-repeat: repeat-x;
-  background-size: 640px 340px;
-  background-position: 0 0;
-  animation: unbox-wave-rev 26s linear infinite;
-}
-
-@keyframes unbox-wave {
-  from { background-position: 0 0; }
-  to   { background-position: 480px 0; }
-}
-@keyframes unbox-wave-rev {
-  from { background-position: 0 0; }
-  to   { background-position: -640px 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-theme="ocean"] body::before,
-  [data-theme="ocean"] body::after {
-    animation: none;
-  }
 }
 
 /* 8bit：复古 CRT 绿，去掉刺眼的霓虹粉，保留像素与等宽 */
@@ -1167,14 +1101,6 @@ body {
     linear-gradient(90deg, #17100a 0%, #2b1d11 30%, #3a2818 52%, #2b1d11 72%, #17100a 100%);
 }
 
-.theme-grid button[data-theme="ocean"] {
-  background-image:
-    radial-gradient(ellipse 90px 44px at 30% 100%, rgba(6,90,130,0.9), rgba(6,90,130,0) 70%),
-    radial-gradient(ellipse 110px 50px at 78% 90%, rgba(14,122,164,0.85), rgba(14,122,164,0) 70%),
-    linear-gradient(180deg, #04314d 0%, #075478 55%, #0e7ea4 100%);
-  background-repeat: repeat-x, repeat-x, no-repeat;
-  background-size: 180px 100%, 220px 100%, 100% 100%;
-}
 
 
 /* ---- 顶部切换 + 导入进度 + 加载直播 ---- */

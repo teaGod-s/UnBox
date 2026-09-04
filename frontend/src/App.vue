@@ -27,6 +27,7 @@ const vodNowPlaying = ref('')
 const importSummary = ref('')
 const errMsg = ref('')
 const importProgress = ref<Progress | null>(null)
+const importing = ref(false)
 const mode = ref<'home' | 'vod' | 'live' | 'search' | 'favorites' | 'settings'>('home')
 const sources = ref<SourceInfo[]>([])
 const activeSite = ref('')
@@ -349,8 +350,9 @@ async function reloadSourceHistory() {
 
 async function importVodSource() {
   const ref = vodSourceUrl.value.trim()
-  if (!ref) return
-  errMsg.value = ''; importSummary.value = ''
+  if (!ref || importing.value) return
+  errMsg.value = ''; importSummary.value = ''; importProgress.value = null
+  importing.value = true
   try {
     const r = await ShellService.ImportVodSource(ref)
     importSummary.value = `点播源导入成功：${r.Sites} 个站点`
@@ -358,17 +360,20 @@ async function importVodSource() {
     activeSite.value = ''
     await refreshVod()
   } catch (e) { handleError(e) }
+  finally { importing.value = false; importProgress.value = null }
 }
 
 async function importLiveSource() {
   const ref = liveSourceUrl.value.trim()
-  if (!ref) return
-  errMsg.value = ''; importSummary.value = ''
+  if (!ref || importing.value) return
+  errMsg.value = ''; importSummary.value = ''; importProgress.value = null
+  importing.value = true
   try {
     const r = await ShellService.ImportLiveSource(ref)
     importSummary.value = r.Channels > 0 ? `直播源导入成功：${r.Channels} 频道` : `直播源导入成功：${r.LiveSources} 个源`
     await reloadSourceHistory()
   } catch (e) { handleError(e) }
+  finally { importing.value = false; importProgress.value = null }
 }
 
 async function reimportSource(kind: string, ref: string) {
@@ -1095,12 +1100,16 @@ onMounted(() => {
     <section v-if="mode === 'settings'" class="settings-page">
       <p v-if="importProgress && importProgress.Stage !== 'live'" class="progress">{{ importProgress.Message }}</p>
       <p v-if="importSummary" class="ok">{{ importSummary }}</p>
+      <div v-if="errMsg" class="src-import-error">
+        <span>{{ errMsg }}</span>
+        <button title="关闭" @click="errMsg = ''">✕</button>
+      </div>
 
       <section class="src-section">
         <h3>点播源</h3>
         <form class="src-add" @submit.prevent="importVodSource">
-          <input v-model="vodSourceUrl" placeholder="粘贴点播源地址" />
-          <button type="submit">导入</button>
+          <input v-model="vodSourceUrl" placeholder="粘贴点播源地址" :disabled="importing" />
+          <button type="submit" :disabled="importing">{{ importing ? '导入中…' : '导入' }}</button>
           <button type="button" @click="showVodHistory = !showVodHistory">{{ showVodHistory ? '收起历史' : '历史配置' }}</button>
         </form>
         <ul v-if="showVodHistory && vodSources.length" class="src-history">
@@ -1114,8 +1123,8 @@ onMounted(() => {
       <section class="src-section">
         <h3>直播源</h3>
         <form class="src-add" @submit.prevent="importLiveSource">
-          <input v-model="liveSourceUrl" placeholder="粘贴直播源地址（M3U/TXT/订阅）" />
-          <button type="submit">导入</button>
+          <input v-model="liveSourceUrl" placeholder="粘贴直播源地址（M3U/TXT/订阅）" :disabled="importing" />
+          <button type="submit" :disabled="importing">{{ importing ? '导入中…' : '导入' }}</button>
           <button type="button" @click="showLiveHistory = !showLiveHistory">{{ showLiveHistory ? '收起历史' : '历史配置' }}</button>
         </form>
         <ul v-if="showLiveHistory && liveSources.length" class="src-history">

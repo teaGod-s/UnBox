@@ -681,6 +681,49 @@ body {
   border-radius: 0.4rem;
 }
 
+.src-import-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 123, 114, 0.08);
+  border: 1px solid rgba(255, 123, 114, 0.32);
+  border-radius: 0.4rem;
+}
+
+.src-import-error span {
+  flex: 1;
+  min-width: 0;
+  max-height: 6rem;
+  overflow-y: auto;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  color: #ff7b72;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.src-import-error button {
+  flex: none;
+  width: 1.4rem;
+  height: 1.4rem;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  padding: 0;
+}
+
+.src-import-error button:hover {
+  color: #ff7b72;
+  background: rgba(255, 123, 114, 0.1);
+}
+
 .src-history { margin: 0; padding: 0; list-style: none; }
 
 .src-history li {

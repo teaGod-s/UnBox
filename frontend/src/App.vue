@@ -102,6 +102,7 @@ const themeOptions = [
   { id: 'default', label: '默认' },
   { id: 'aurora', label: '多彩渐变毛玻璃' },
   { id: 'wood', label: '木纹' },
+  { id: 'ocean', label: '海洋' },
   { id: '8bit', label: '8bit' },
 ]
 const currentTheme = ref('default')

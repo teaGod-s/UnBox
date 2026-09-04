@@ -1034,6 +1034,65 @@ body {
   box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.08), 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
+/* 海洋：SVG 波浪叠加 + 玻璃面板 + 沙金强调色。
+   参考 bin/a.html 的 8 层波浪构图，整块嵌入为 body 的 background-image。 */
+[data-theme="ocean"] {
+  --bg: #4a8aaa;
+  --panel: rgba(6, 44, 68, 0.55);
+  --panel-border: rgba(255, 255, 255, 0.24);
+  --border: rgba(255, 255, 255, 0.22);
+  --border-light: rgba(255, 255, 255, 0.32);
+  --text: #eaf6ff;
+  --text-soft: #cfe9f7;
+  --text-dim: #86b6cf;
+  --text-white: #ffffff;
+  --text-desc: #b6d6e8;
+  --text-mute: #5c8ba6;
+  --accent: #ffd37a;
+  --accent-border: #ffd37a;
+  --btn-bg: rgba(10, 58, 90, 0.55);
+  --btn-hover: rgba(14, 74, 106, 0.7);
+  --btn-active-bg: rgba(20, 92, 124, 0.75);
+  --input-bg: rgba(10, 58, 90, 0.5);
+  --row-alt: rgba(10, 58, 90, 0.4);
+  --deep: #062a3d;
+  --field: rgba(10, 58, 90, 0.45);
+  --field-border: rgba(255, 255, 255, 0.24);
+}
+
+[data-theme="ocean"] body {
+  background-color: #4a8aaa;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='800' viewBox='0 0 1200 800' preserveAspectRatio='none'><defs><linearGradient id='ovl' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%230a3050' stop-opacity='0'/><stop offset='1' stop-color='%230a3050' stop-opacity='0.4'/></linearGradient></defs><rect width='1200' height='800' fill='%234a8aaa'/><path d='M0,180 C50,140 100,220 150,160 C200,100 250,200 300,140 C350,80 400,180 450,120 C500,60 550,160 600,100 C650,40 700,140 750,80 C800,20 850,120 900,60 C950,0 1000,100 1050,40 C1100,-20 1150,80 1200,60 L1200,800 L0,800 Z' fill='%236aaccc'/><path d='M0,230 C60,190 120,270 180,210 C240,150 300,250 360,190 C420,130 480,230 540,170 C600,110 660,210 720,150 C780,90 840,190 900,130 C960,70 1020,170 1080,110 C1140,50 1200,150 L1200,800 L0,800 Z' fill='%235a9ab8'/><path d='M0,280 C70,240 140,320 210,260 C280,200 350,300 420,240 C490,180 560,280 630,220 C700,160 770,260 840,200 C910,140 980,240 1050,180 C1120,120 1200,220 L1200,800 L0,800 Z' fill='%234a8aaa'/><path d='M0,330 C80,290 160,370 240,310 C320,250 400,350 480,290 C560,230 640,330 720,270 C800,210 880,310 960,250 C1040,190 1120,290 1200,250 L1200,800 L0,800 Z' fill='%233a7a9a'/><path d='M0,380 C90,340 180,420 270,360 C360,300 450,400 540,340 C630,280 720,380 810,320 C900,260 990,360 1080,300 C1170,240 1200,340 L1200,800 L0,800 Z' fill='%232a6a8a'/><path d='M0,430 C100,390 200,470 300,410 C400,350 500,450 600,390 C700,330 800,430 900,370 C1000,310 1100,410 1200,370 L1200,800 L0,800 Z' fill='%231a5a7a'/><path d='M0,480 C110,440 220,520 330,460 C440,400 550,500 660,440 C770,380 880,480 990,420 C1100,360 1200,460 L1200,800 L0,800 Z' fill='%230a4a6a'/><path d='M0,530 C120,490 240,570 360,510 C480,450 600,550 720,490 C840,430 960,530 1080,470 C1200,410 1200,510 L1200,800 L0,800 Z' fill='%230a3a5a'/><path d='M0,180 C50,140 100,220 150,160 C200,100 250,200 300,140 C350,80 400,180 450,120 C500,60 550,160 600,100 C650,40 700,140 750,80 C800,20 850,120 900,60 C950,0 1000,100 1050,40 C1100,-20 1150,80 1200,60' fill='none' stroke='rgba(255,255,255,0.06)' stroke-width='1.5'/><path d='M0,230 C60,190 120,270 180,210 C240,150 300,250 360,190 C420,130 480,230 540,170 C600,110 660,210 720,150 C780,90 840,190 900,130 C960,70 1020,170 1080,110 C1140,50 1200,150' fill='none' stroke='rgba(255,255,255,0.05)' stroke-width='1'/><path d='M0,280 C70,240 140,320 210,260 C280,200 350,300 420,240 C490,180 560,280 630,220 C700,160 770,260 840,200 C910,140 980,240 1050,180 C1120,120 1200,220' fill='none' stroke='rgba(255,255,255,0.04)' stroke-width='1'/><circle cx='100' cy='195' r='2' fill='rgba(255,255,255,0.08)'/><circle cx='280' cy='245' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='450' cy='175' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='620' cy='295' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='750' cy='155' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='920' cy='285' r='3' fill='rgba(255,255,255,0.08)'/><circle cx='1050' cy='225' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='1150' cy='335' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='180' cy='400' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='380' cy='450' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='550' cy='380' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='720' cy='460' r='3' fill='rgba(255,255,255,0.08)'/><circle cx='880' cy='390' r='2' fill='rgba(255,255,255,0.06)'/><circle cx='1020' cy='470' r='2.5' fill='rgba(255,255,255,0.08)'/><circle cx='200' cy='550' r='2' fill='rgba(255,255,255,0.05)'/><circle cx='450' cy='580' r='2.5' fill='rgba(255,255,255,0.05)'/><circle cx='680' cy='520' r='2' fill='rgba(255,255,255,0.04)'/><circle cx='900' cy='570' r='2' fill='rgba(255,255,255,0.05)'/><circle cx='1100' cy='500' r='2.5' fill='rgba(255,255,255,0.05)'/><rect x='0' y='704' width='1200' height='96' fill='url(%23ovl)'/></svg>");
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+[data-theme="ocean"] .groups,
+[data-theme="ocean"] .channels,
+[data-theme="ocean"] .player,
+[data-theme="ocean"] .vod-cats,
+[data-theme="ocean"] .vod-main,
+[data-theme="ocean"] .status,
+[data-theme="ocean"] .vod-detail,
+[data-theme="ocean"] .search-page-head,
+[data-theme="ocean"] .vod-search-row,
+[data-theme="ocean"] .settings-panel,
+[data-theme="ocean"] .about-body {
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  box-shadow: 0 6px 22px rgba(6, 40, 66, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+/* 点播页下拉框：<select> 是原生控件不响应 backdrop-filter，需单独给半透明深底 */
+[data-theme="ocean"] .vod-toolbar select {
+  background: rgba(6, 40, 66, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: var(--text);
+  box-shadow: 0 2px 10px rgba(6, 40, 66, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
 /* 8bit：复古 CRT 绿，去掉刺眼的霓虹粉，保留像素与等宽 */
 [data-theme="8bit"] {
   --bg: #0e0e14;
@@ -1099,6 +1158,10 @@ body {
     repeating-linear-gradient(92deg, rgba(0,0,0,0.14) 0 2px, transparent 2px 7px),
     repeating-linear-gradient(88deg, rgba(255,220,160,0.05) 0 1px, transparent 1px 5px),
     linear-gradient(90deg, #17100a 0%, #2b1d11 30%, #3a2818 52%, #2b1d11 72%, #17100a 100%);
+}
+
+.theme-grid button[data-theme="ocean"] {
+  background-image: linear-gradient(180deg, #7cb8d8 0%, #4a8aaa 35%, #3a7a9a 55%, #1a5a7a 80%, #0a3a5a 100%);
 }
 
 

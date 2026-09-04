@@ -902,6 +902,176 @@ body {
   background: #1b2137;
 }
 
+/* ---- 主题系统 ---- */
+/* 每个主题只覆盖 CSS 变量，不改布局。主题通过 <body data-theme="..."> 切换。 */
+
+/* 默认主题（现有深色）—— 基准变量 */
+:root {
+  --bg: #06070f;
+  --panel: #0a0d1a;
+  --panel-border: #23283a;
+  --text: #e8eaf0;
+  --text-dim: #8b91a3;
+  --accent: #7ee787;
+  --accent-border: #7ee787;
+  --btn-bg: #1b2137;
+  --btn-hover: #232a45;
+  --input-bg: #1b2137;
+}
+
+/* 多彩渐变毛玻璃：多色渐变背景 + 半透明毛玻璃面板 */
+[data-theme="aurora"] {
+  --bg: linear-gradient(135deg, #2d1b69 0%, #d63384 20%, #6f42c1 40%, #0d6efd 60%, #20c997 80%, #ffc107 100%);
+  --panel: rgba(15, 18, 35, 0.55);
+  --panel-border: rgba(255, 255, 255, 0.12);
+  --text: #e8eaf0;
+  --text-dim: #a8b0c5;
+  --accent: #7ee787;
+  --accent-border: #7ee787;
+  --btn-bg: rgba(30, 35, 60, 0.6);
+  --btn-hover: rgba(40, 45, 75, 0.75);
+  --input-bg: rgba(25, 30, 55, 0.65);
+}
+
+/* 木纹：暖棕底 + 细纹理感 */
+[data-theme="wood"] {
+  --bg: #2b1e12;
+  --panel: #3d2c1c;
+  --panel-border: #5a432a;
+  --text: #e8dcc8;
+  --text-dim: #b8a888;
+  --accent: #d4a04c;
+  --accent-border: #d4a04c;
+  --btn-bg: #4a3623;
+  --btn-hover: #5c452e;
+  --input-bg: #453322;
+}
+
+/* 纪念碑谷·海洋：青蓝渐变 + 极简扁平 */
+[data-theme="ocean"] {
+  --bg: linear-gradient(180deg, #0c4a6e 0%, #0369a1 50%, #0ea5e9 100%);
+  --panel: #082f4a;
+  --panel-border: #0ea5e9;
+  --text: #e0f2fe;
+  --text-dim: #7dd3fc;
+  --accent: #38bdf8;
+  --accent-border: #38bdf8;
+  --btn-bg: #075985;
+  --btn-hover: #0c6fa3;
+  --input-bg: #0c4a6e;
+}
+
+/* 8bit：像素风，纯黑底 + 霓虹色 + 等宽字体 */
+[data-theme="8bit"] {
+  --bg: #0a0a0f;
+  --panel: #14141f;
+  --panel-border: #ff00ff;
+  --text: #00ff41;
+  --text-dim: #00cc33;
+  --accent: #ff00ff;
+  --accent-border: #ff00ff;
+  --btn-bg: #1a1a2e;
+  --btn-hover: #252540;
+  --input-bg: #1a1a2e;
+}
+
+/* 应用主题变量到全局元素 */
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.container {
+  color: var(--text);
+}
+
+.subtitle, .home-empty, .progress, .favhead, .channel .group, .vod-state, .threads-hint {
+  color: var(--text-dim);
+}
+
+.status, .groups, .channels, .player, .vod-cats, .vod-main, .vod-detail,
+.search-page-head, .vod-search-row, .settings-panel, .about-body {
+  background: var(--panel);
+  border-color: var(--panel-border);
+}
+
+button, .tabs button, .groups button, .vod-cats button,
+.src-add button, .import button, .controls button,
+.log-toolbar button, .threads-options button,
+.ep-src-tabs button, .ep-pagination button, .channel button,
+.vod-back, .load-live button, .row-delete, .src-del,
+.favorite-toggle, .settings-head button, .ep-pagination-arrow {
+  background: var(--btn-bg);
+  color: var(--text);
+  border-color: var(--panel-border);
+}
+
+button:hover, .tabs button:hover, .groups button:hover, .vod-cats button:hover,
+.src-add button:hover, .import button:hover:not(:disabled), .controls button:hover,
+.log-toolbar button:hover, .threads-options button:hover,
+.ep-src-tabs button:hover, .ep-pagination button:hover, .channel button:hover,
+.vod-back:hover, .load-live button:hover, .favorite-toggle:hover,
+.settings-head button:hover, .ep-pagination-arrow:hover {
+  background: var(--btn-hover);
+}
+
+input, .search input, .src-add input {
+  background: var(--input-bg);
+  color: var(--text);
+  border-color: var(--panel-border);
+}
+
+.tabs button.active, .threads-options button.active,
+.groups button.active, .vod-cats button.active,
+.ep-pagination button.active, .ep-src-tabs button.active {
+  background: var(--btn-hover);
+  color: var(--text);
+  border-color: var(--accent-border);
+}
+
+.player .now, .vod-detail-head .now, .src-section h3, .about-body .about-ver,
+.vod-detail .meta, .vod-state-error, .playback-error {
+  color: var(--accent);
+}
+
+/* 8bit 像素风额外效果 */
+[data-theme="8bit"] body,
+[data-theme="8bit"] .container,
+[data-theme="8bit"] button,
+[data-theme="8bit"] input {
+  font-family: "Courier New", ui-monospace, monospace;
+  border-radius: 0;
+  image-rendering: pixelated;
+}
+
+[data-theme="8bit"] .tabs button.active,
+[data-theme="8bit"] .groups button.active,
+[data-theme="8bit"] .vod-cats button.active {
+  box-shadow: inset 0 0 0 2px var(--accent-border);
+}
+
+/* 木纹主题额外效果 */
+[data-theme="wood"] .groups,
+[data-theme="wood"] .channels,
+[data-theme="wood"] .player,
+[data-theme="wood"] .vod-cats,
+[data-theme="wood"] .vod-main {
+  background: linear-gradient(180deg, var(--panel) 0%, #352517 100%);
+}
+
+/* 多彩渐变毛玻璃额外效果 */
+[data-theme="aurora"] .groups,
+[data-theme="aurora"] .channels,
+[data-theme="aurora"] .player,
+[data-theme="aurora"] .vod-cats,
+[data-theme="aurora"] .vod-main,
+[data-theme="aurora"] .settings-panel,
+[data-theme="aurora"] .search-page-head,
+[data-theme="aurora"] .vod-search-row {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
 /* ---- 顶部切换 + 导入进度 + 加载直播 ---- */
 
 .tabs {
@@ -1259,6 +1429,32 @@ body {
   .ep-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+/* 主题选择器 */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.theme-grid button {
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.15s ease;
+}
+
+.theme-grid button:hover {
+  transform: translateY(-1px);
+}
+
+.theme-grid button.active {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 1px var(--accent-border);
 }
 
 /* ---- 关于：关于我们 / 免责条款 / 开源库 ---- */

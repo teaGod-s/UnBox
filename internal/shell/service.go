@@ -1502,6 +1502,26 @@ func (s *ShellService) MPVReady() bool { return s.playback.MPVReady() }
 
 func (s *ShellService) MPVStatus() mpvplugin.Status { return s.mpvPlugin.Status() }
 
+// SetTheme 持久化主题名；name 为空时清除主题（回到默认）。
+func (s *ShellService) SetTheme(name string) error {
+	if s.store == nil {
+		return nil
+	}
+	if name == "" {
+		return s.store.SetKV("theme", "")
+	}
+	return s.store.SetKV("theme", name)
+}
+
+// GetTheme 返回当前主题名；无设置时返回空串（默认主题）。
+func (s *ShellService) GetTheme() (string, error) {
+	if s.store == nil {
+		return "", nil
+	}
+	v, _, err := s.store.GetKV("theme")
+	return v, err
+}
+
 func (s *ShellService) InstallMPV() (mpvplugin.InstallResult, error) {
 	return s.mpvPlugin.Install(context.Background())
 }

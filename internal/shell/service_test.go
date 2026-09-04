@@ -29,6 +29,33 @@ func newTestService(t *testing.T) *ShellService {
 	return svc
 }
 
+func TestThemeRoundTrip(t *testing.T) {
+	svc := newTestService(t)
+	theme, err := svc.GetTheme()
+	if err != nil || theme != "" {
+		t.Fatalf("默认主题应为空串, got %q, %v", theme, err)
+	}
+	if err := svc.SetTheme("aurora"); err != nil {
+		t.Fatal(err)
+	}
+	theme, err = svc.GetTheme()
+	if err != nil || theme != "aurora" {
+		t.Fatalf("主题回读失败, got %q, %v", theme, err)
+	}
+}
+
+func TestThemeEmptyService(t *testing.T) {
+	svc := NewShellService(nil, nil, nil)
+	if err := svc.SetTheme("aurora"); err != nil {
+		t.Fatal(err)
+	}
+	theme, err := svc.GetTheme()
+	if err != nil || theme != "" {
+		t.Fatalf("无 store 应安全返回空串, got %q, %v", theme, err)
+	}
+}
+
+
 func TestImportSubscriptionPlaylist(t *testing.T) {
 	svc := newTestService(t)
 	path := t.TempDir() + "/ch.m3u"

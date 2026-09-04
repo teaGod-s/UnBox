@@ -97,6 +97,15 @@ const showDisclaimer = ref(false)
 const showOpenSource = ref(false)
 const catsCollapsed = ref(false)
 const infoCollapsed = ref(false)
+
+const themeOptions = [
+  { id: 'default', label: '默认' },
+  { id: 'aurora', label: '多彩渐变毛玻璃' },
+  { id: 'wood', label: '木纹' },
+  { id: 'ocean', label: '纪念碑谷·海洋' },
+  { id: '8bit', label: '8bit' },
+]
+const currentTheme = ref('default')
 let lastProgressSave = 0
 
 const showMpvInstallPrompt = computed(() => shouldShowMpvInstallPrompt(platform.value, mpvReady.value, mpvFallbackRequested.value))
@@ -817,6 +826,20 @@ async function chooseThreads(n: number) {
   showThreads.value = false
 }
 
+async function applyTheme(name: string) {
+  currentTheme.value = name
+  document.body.dataset.theme = name
+  try { await ShellService.SetTheme(name) } catch (e) { handleError(e) }
+}
+
+async function loadTheme() {
+  try {
+    const theme = await ShellService.GetTheme()
+    currentTheme.value = theme || 'default'
+    document.body.dataset.theme = currentTheme.value
+  } catch (e) { handleError(e) }
+}
+
 async function checkUpdate() {
   updateMsg.value = '检查中…'
   try {
@@ -835,6 +858,7 @@ function imgError(e: Event) {
 
 onMounted(() => {
   refresh()
+  loadTheme()
   Events.On('import:progress', (ev: any) => { importProgress.value = ev.data as Progress })
   Events.On('search:start', (ev: any) => {
     const data = ev.data as { ID: number; Token: number; Query: string }
@@ -1106,6 +1130,19 @@ onMounted(() => {
         <h3>搜索</h3>
         <div class="src-add">
           <button @click="openThreads">搜索线程：{{ searchThreads }} 个</button>
+        </div>
+      </section>
+
+      <section class="src-section">
+        <h3>主题</h3>
+        <div class="theme-grid">
+          <button
+            v-for="t in themeOptions"
+            :key="t.id"
+            :class="{ active: currentTheme === t.id }"
+            :data-theme="t.id"
+            @click="applyTheme(t.id)"
+          >{{ t.label }}</button>
         </div>
       </section>
 

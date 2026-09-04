@@ -162,6 +162,18 @@ body {
   gap: 0.75rem;
 }
 
+/* 直播页：播放器优先分配空间，分组/频道面板收窄为固定列 */
+.layout.live {
+  grid-template-columns: minmax(120px, 180px) minmax(320px, 1fr) minmax(220px, 320px);
+}
+
+/* 中等宽度：再压两侧面板，保住播放器 */
+@media (min-width: 901px) and (max-width: 1200px) {
+  .layout.live {
+    grid-template-columns: 140px minmax(280px, 1fr) 240px;
+  }
+}
+
 .groups {
   display: flex;
   flex-direction: column;
@@ -555,6 +567,12 @@ body {
   flex: 0 0 auto;
   width: 100%;
   min-height: 180px;
+  aspect-ratio: 16 / 9;
+}
+
+/* 直播页播放器：视口高度约束，避免面板挤压后塌陷 */
+.layout.live .player .playback-view {
+  min-height: min(50vh, 480px);
   aspect-ratio: 16 / 9;
 }
 

@@ -946,7 +946,7 @@ onMounted(() => {
     </section>
 
     <!-- 直播 -->
-    <section v-if="mode === 'live'" class="layout">
+    <section v-if="mode === 'live'" class="layout live">
       <aside class="groups">
         <button v-for="g in groups" :key="g" :class="{ active: g === activeGroup }" @click="activeGroup = g; reloadChannels()">
           {{ g === '*' ? '全部' : g }}

@@ -50,7 +50,7 @@ VIAddVersionKey "ProductName"     "${INFO_PRODUCTNAME}"
 ManifestDPIAware true
 
 !include "MUI.nsh"
-!include "WinMessages.nsh"
+!include "LogicLib.nsh"
 
 !define MUI_ICON "..\icon.ico"
 !define MUI_UNICON "..\icon.ico"
@@ -85,9 +85,11 @@ ShowInstDetails show # This will always show the installation details.
 
 Function ensureAppClosed
 retry:
-    FindWindow $0 "" "${INFO_PRODUCTNAME}"
-    ${If} $0 != 0
-        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "检测到 UnBox 正在运行，请先关闭应用后点击重试。" IDRETRY retry IDCANCEL abort
+    nsExec::ExecToStack 'cmd /C tasklist /FI "IMAGENAME eq ${PRODUCT_EXECUTABLE}" /NH | findstr /I /X /C:"${PRODUCT_EXECUTABLE}"'
+    Pop $0
+    Pop $1
+    ${If} $0 == 0
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "UnBox is still running. Close it, then click Retry." IDRETRY retry IDCANCEL abort
         abort:
             Abort
     ${EndIf}

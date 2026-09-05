@@ -29,6 +29,9 @@ func displayName(path string) string {
 
 // findPoster 在同目录找海报：<stem>-poster.jpg / poster.jpg / folder.jpg / 目录名.jpg。
 func findPoster(dir, stem string) string {
+	if absoluteDir, err := filepath.Abs(dir); err == nil {
+		dir = absoluteDir
+	}
 	candidates := []string{
 		filepath.Join(dir, stem+"-poster.jpg"),
 		filepath.Join(dir, stem+"-poster.png"),

@@ -33,3 +33,22 @@ func TestFindPoster(t *testing.T) {
 		t.Fatalf("findPoster=%q, want %q", got, poster)
 	}
 }
+
+func TestFindPosterReturnsAbsolutePathForRelativeDir(t *testing.T) {
+	dir := t.TempDir()
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	relativeDir, err := filepath.Rel(workingDir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	poster := filepath.Join(dir, "movie-poster.jpg")
+	if err := os.WriteFile(poster, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := findPoster(relativeDir, "movie"); got != poster {
+		t.Fatalf("findPoster(%q)=%q, want absolute path %q", relativeDir, got, poster)
+	}
+}

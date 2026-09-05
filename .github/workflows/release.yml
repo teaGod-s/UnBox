@@ -3,8 +3,9 @@
 # Wails v3 桌面应用依赖平台原生工具链（Linux 的 GTK/WebKit、macOS 的
 # WKWebView、Windows 的 WebView2 + syso），所以放弃 goreleaser，改用
 # 「每个平台各自的 runner 原生编译 amd64，arm64 在同 runner 上交叉编译」：
-# Windows 走纯 Go（CGO=0）交叉编译 GOARCH=arm64；Linux arm64 借 wails-cross
-# Docker 镜像（Zig cgo 交叉编译）；macOS 用 lipo 合成 arm64+amd64 通用二进制。
+# Windows 走纯 Go（CGO=0）交叉编译 GOARCH=arm64；Linux arm64 在 amd64 宿主上用
+# 按 --platform linux/arm64 构建的 wails-cross 镜像（binfmt 模拟 + 容器内 arm64
+# 原生 gcc 直接 go build）；macOS 用 lipo 合成 arm64+amd64 通用二进制。
 #
 # 触发方式：
 #   - 推送 v* 标签（如 v0.1.0）→ 构建并自动创建 GitHub Release 挂载产物
@@ -104,11 +105,16 @@ jobs:
             echo "VERSION=0.0.1" >> "$GITHUB_ENV"
           fi
 
-      # Linux arm64 在 amd64 runner 上交叉编译，需 wails-cross Docker 镜像
-      # （含 Zig 做 cgo 交叉编译）；amd64 原生编译，无需 Docker。
-      - name: Setup Docker cross-compile image
+      # Linux arm64 在 amd64 runner 上编译：先注册 QEMU binfmt，再用 --platform
+      # linux/arm64 构建 wails-cross——这样镜像里 apt 装的 gcc 本身就是 arm64，
+      # 容器内可 CGO_ENABLED=1 GOARCH=arm64 原生编译。stock setup:docker 不传
+      # --platform，装出 amd64 镜像，容器内 gcc 与目标架构不符。
+      - name: Setup Docker cross-compile image (arm64)
         if: matrix.name == 'linux-arm64'
-        run: wails3 task setup:docker
+        run: |
+          docker run --privileged --rm tonistiigi/binfmt --install arm64
+          docker build --platform linux/arm64 -t wails-cross \
+            -f build/docker/Dockerfile.cross build/docker/
 
       - name: Package Linux (deb + AppImage)
         if: runner.os == 'Linux' && matrix.arch == 'amd64'
@@ -121,13 +127,36 @@ jobs:
           mv bin/*.AppImage  "UnBox-${V}-linux-amd64.AppImage"
           ls -la
 
+      # 故意不用 linux:create:deb：其 deps: build 走 build:docker → build.sh，
+      # 而 build.sh 构建的是仓库根目录 `.` —— 根目录是库包 assets（cmd/unbox
+      # 才是 main），`go build -o X .` 退出码 0 却只写一个几十 KB 的 ar 归档，
+      # 上一版 deb 因此只有 355KB 且装的是废包；build.sh 的 LDFLAGS 也没带
+      # -X appVersion，版本号注入同样缺失。这里绕过 build.sh 直接编 ./cmd/unbox。
       - name: Package Linux arm64 (deb only)
         if: runner.os == 'Linux' && matrix.arch == 'arm64'
         run: |
           export GOARCH="${ARCH}"   # nfpm.yaml `arch: ${GOARCH}` 读宿主 env
-          wails3 task linux:create:deb
+          # build.sh 被绕过，前端得由宿主产出（容器内只做 go build）
+          wails3 task common:build:frontend
+          docker run --rm --entrypoint /bin/bash \
+            -v "${PWD}:/app" \
+            -v "$(go env GOMODCACHE):/go/pkg/mod" \
+            -w /app \
+            -e GOOS=linux -e GOARCH="${ARCH}" -e CGO_ENABLED=1 \
+            -e CC=gcc -e CGO_CFLAGS="-w" \
+            -e VERSION="${VERSION}" \
+            wails-cross -c 'go build -tags production -trimpath -buildvcs=true -ldflags="-s -w -X github.com/unbox/unbox/internal/shell.appVersion=${VERSION}" -o bin/unbox ./cmd/unbox'
+          # 守卫：bin/unbox 应是 20MB+ 的真二进制。万一又编成 ar 归档（几十 KB）
+          # 就提前炸掉，别静默装进 deb 发到 Release 上。
+          SZ=$(stat -c%s bin/unbox)
+          file bin/unbox
+          echo "bin/unbox: ${SZ} bytes"
+          test "${SZ}" -gt 5000000 || { echo "bin/unbox 过小（${SZ}B），疑似编成 ar 归档"; exit 1; }
+          wails3 task linux:generate:dotdesktop
+          wails3 task linux:generate:deb
           V="${GITHUB_REF_NAME#v}"
           mv bin/*.deb "UnBox-${V}-linux-arm64.deb"
+          dpkg-deb -f "UnBox-${V}-linux-arm64.deb" Package Version Architecture
           ls -la
 
       - name: Package Windows (NSIS installer)

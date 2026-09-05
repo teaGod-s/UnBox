@@ -84,13 +84,13 @@ func (c *Controller) Prepare(ctx context.Context, input player.Stream) (Plan, er
 
 	// RTMP / 本地文件：Web 永远播不了，只能 mpv。
 	if resolved.Kind == player.StreamRTMP || resolved.Kind == player.StreamLocal {
-		return c.loadMPV(ctx, resolved)
+		return c.loadMPV(ctx, resolved, 0)
 	}
 
 	// WebView 无 MSE 时，HLS/FLV/TS 依赖 hls.js/mpegts.js 均不可用，只有
 	// MP4 能走原生 <video>；其余一律 mpv。
 	if !c.webMSEEnabled() && resolved.Kind != player.StreamMP4 {
-		return c.loadMPV(ctx, resolved)
+		return c.loadMPV(ctx, resolved, 0)
 	}
 
 	// HLS 编码探测：HEVC 浏览器解不了，走 mpv。探测失败按非 HEVC 处理（fail-open 到 Web）。
@@ -101,7 +101,7 @@ func (c *Controller) Prepare(ctx context.Context, input player.Stream) (Plan, er
 		}
 		codec, err := probe(ctx, resolved)
 		if err == nil && isHEVC(codec) {
-			return c.loadMPV(ctx, resolved)
+			return c.loadMPV(ctx, resolved, 0)
 		}
 	}
 
@@ -121,7 +121,8 @@ func (c *Controller) Prepare(ctx context.Context, input player.Stream) (Plan, er
 
 // loadMPV 把 stream 真正加载进 mpv 并开始播放。直接路由到 mpv 的流（RTMP/
 // HEVC/本地）与 Web 失败的降级最终都收敛到这里，避免「只登记不加载」的死分支。
-func (c *Controller) loadMPV(ctx context.Context, stream player.Stream) (Plan, error) {
+// start 为 Web 播放器降级前已看到的位置（秒）；0 表示从头/直播边缘起播。
+func (c *Controller) loadMPV(ctx context.Context, stream player.Stream, start float64) (Plan, error) {
 	c.mu.Lock()
 	mpv := c.mpv
 	c.mu.Unlock()
@@ -134,10 +135,16 @@ func (c *Controller) loadMPV(ctx context.Context, stream player.Stream) (Plan, e
 	if err := mpv.Play(); err != nil {
 		return Plan{}, fmt.Errorf("mpv 播放失败: %w", err)
 	}
+	if start > 0 {
+		// 定位失败不阻断降级：能播上（哪怕从开头）也比 Web 播放失败强，
+		// 不能因为一次 seek 失败就把用户踢回选集页。
+		_ = mpv.Seek(start)
+	}
 	return Plan{ID: sessionID(), Backend: BackendMPV, Kind: stream.Kind.String()}, nil
 }
 
-func (c *Controller) Fallback(ctx context.Context, id string) (Plan, error) {
+// Fallback 用 mpv 重新播放 Web 失败的同一个流，并把 position 作为续播起点。
+func (c *Controller) Fallback(ctx context.Context, id string, position float64) (Plan, error) {
 	c.mu.Lock()
 	stream, ok := c.sessions[id]
 	if ok {
@@ -147,7 +154,7 @@ func (c *Controller) Fallback(ctx context.Context, id string) (Plan, error) {
 	if !ok {
 		return Plan{}, errors.New("播放会话不存在或已降级")
 	}
-	return c.loadMPV(ctx, stream)
+	return c.loadMPV(ctx, stream, position)
 }
 
 func (c *Controller) Close() error {

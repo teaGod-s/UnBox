@@ -713,7 +713,7 @@ async function playEpisode(ep: EpisodeInfo) {
   }
 }
 
-async function fallbackToMpv(scope: PlaybackScope, id: string, token: number) {
+async function fallbackToMpv(scope: PlaybackScope, id: string, token: number, position: number) {
   mpvFallbackRequested.value = true
   if (scope === 'live') {
     livePlaybackStatus.value = 'preparing'
@@ -723,9 +723,12 @@ async function fallbackToMpv(scope: PlaybackScope, id: string, token: number) {
     vodPlaybackError.value = ''
   }
   try {
+    // 直播从头接流（position 传给 mpv 会退化成一次无意义 seek）；点播从已看位置续播，
+    // 并取历史续播目标的较大值——网页播放器若在到达续播点前就失败，不能让进度回零。
+    const start = scope === 'live' ? 0 : Math.max(position, pendingSeek.value)
     const applied = await resolvePlaybackFallback(
       scope,
-      async () => await ShellService.FallbackToMPVWithToken(id, token) as unknown as PlaybackPlan,
+      async () => await ShellService.FallbackToMPVWithToken(id, token, start) as unknown as PlaybackPlan,
       () => isCurrentPlayback(scope, token) &&
         (scope === 'live' ? mode.value === 'live' : mode.value === 'vod' && vodView.value === 'detail'),
       (target, plan) => {
@@ -1023,7 +1026,7 @@ onMounted(() => {
         <p v-if="liveNowPlaying" class="now">正在播放：{{ liveNowPlaying }}</p>
         <p v-if="livePlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在切换频道…</p>
         <p v-if="livePlaybackStatus === 'error'" class="playback-error" aria-live="assertive">频道播放失败：{{ livePlaybackError }}</p>
-        <PlaybackView :plan="livePagePlaybackPlan" @fallback="id => fallbackToMpv('live', id, livePlaybackToken)" />
+        <PlaybackView :plan="livePagePlaybackPlan" @(fallback)="(id, position) => fallbackToMpv('live', id, livePlaybackToken, position)" />
         <div class="controls" v-if="liveNowPlaying && livePagePlaybackPlan?.Backend === 'mpv'">
           <button @click="pause">暂停</button>
           <button @click="resume">继续</button>
@@ -1092,7 +1095,7 @@ onMounted(() => {
               <div class="vod-player">
                 <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载剧集…</p>
                 <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">剧集播放失败：{{ vodPlaybackError }}</p>
-                <PlaybackView :plan="vodPagePlaybackPlan" :seek-to="pendingSeek" @fallback="id => fallbackToMpv('vod', id, vodPlaybackToken)" @progress="(time, duration) => onVodProgress(vodPlaybackToken, time, duration)" />
+                <PlaybackView :plan="vodPagePlaybackPlan" :seek-to="pendingSeek" @(fallback)="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @progress="(time, duration) => onVodProgress(vodPlaybackToken, time, duration)" />
                 <div class="controls" v-if="vodNowPlaying && vodPagePlaybackPlan?.Backend === 'mpv'">
                   <button @click="pause">暂停</button>
                   <button @click="resume">继续</button>

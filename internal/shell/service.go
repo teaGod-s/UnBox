@@ -1430,15 +1430,16 @@ func (s *ShellService) prepareVod(site, epID string, token uint64) (playback.Pla
 }
 
 func (s *ShellService) FallbackToMPV(id string) (playback.Plan, error) {
-	return s.fallbackToMPV(id, 0)
+	return s.fallbackToMPV(id, 0, 0)
 }
 
 // FallbackToMPVWithToken 执行网页播放失败后的 mpv 切换，并隔离过期请求。
-func (s *ShellService) FallbackToMPVWithToken(id string, token uint64) (playback.Plan, error) {
-	return s.fallbackToMPV(id, token)
+// start 是网页播放器已看到的位置（秒），mpv 从此续播；0 表示从头起播。
+func (s *ShellService) FallbackToMPVWithToken(id string, token uint64, start float64) (playback.Plan, error) {
+	return s.fallbackToMPV(id, token, start)
 }
 
-func (s *ShellService) fallbackToMPV(id string, token uint64) (playback.Plan, error) {
+func (s *ShellService) fallbackToMPV(id string, token uint64, start float64) (playback.Plan, error) {
 	requestID, accepted := s.claimPlayback(token)
 	if !accepted {
 		return playback.Plan{}, nil
@@ -1448,7 +1449,7 @@ func (s *ShellService) fallbackToMPV(id string, token uint64) (playback.Plan, er
 	if !s.playbackCurrent(token, requestID) {
 		return playback.Plan{}, nil
 	}
-	return s.playback.Fallback(context.Background(), id)
+	return s.playback.Fallback(context.Background(), id, start)
 }
 
 func (s *ShellService) claimPlayback(token uint64) (uint64, bool) {

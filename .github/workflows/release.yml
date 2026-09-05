@@ -1,8 +1,10 @@
-# UnBox 分平台原生出包。
+# UnBox 分平台出包，每平台覆盖 amd64 + arm64（macOS 为 universal）。
 #
 # Wails v3 桌面应用依赖平台原生工具链（Linux 的 GTK/WebKit、macOS 的
-# WKWebView、Windows 的 WebView2 + syso），无法可靠交叉编译，所以放弃
-# goreleaser，改用「每个平台各自的 runner 原生编译 + 打包」。
+# WKWebView、Windows 的 WebView2 + syso），所以放弃 goreleaser，改用
+# 「每个平台各自的 runner 原生编译 amd64，arm64 在同 runner 上交叉编译」：
+# Windows 走纯 Go（CGO=0）交叉编译 GOARCH=arm64；Linux arm64 借 wails-cross
+# Docker 镜像（Zig cgo 交叉编译）；macOS 用 lipo 合成 arm64+amd64 通用二进制。
 #
 # 触发方式：
 #   - 推送 v* 标签（如 v0.1.0）→ 构建并自动创建 GitHub Release 挂载产物
@@ -10,8 +12,9 @@
 #
 # 产物：
 #   - Linux   UnBox-<ver>-linux-amd64.deb / .AppImage
-#   - Windows UnBox-<ver>-windows-amd64-installer.exe / -amd64.exe
-#   - macOS   UnBox-<ver>-macos-<arch>.zip（内含 .app）
+#             UnBox-<ver>-linux-arm64.deb
+#   - Windows UnBox-<ver>-windows-amd64/arm64-installer.exe / -amd64.exe / -arm64.exe
+#   - macOS   UnBox-<ver>-macos-universal.zip（内含 .app，arm64 + amd64 通用二进制）
 
 name: release
 
@@ -35,11 +38,26 @@ jobs:
         include:
           - os: ubuntu-24.04
             name: linux-amd64
+            arch: amd64
+          - os: ubuntu-24.04
+            name: linux-arm64
+            arch: arm64
           - os: windows-latest
             name: windows-amd64
+            arch: amd64
+          - os: windows-latest
+            name: windows-arm64
+            arch: arm64
           - os: macos-latest
-            name: macos
+            name: macos-universal
+            # 不设 arch：universal 内部按 task var 各编 amd64/arm64 再 lipo
     runs-on: ${{ matrix.os }}
+    # ARCH 驱动 stock Taskfile 里所有 {{.ARCH | default ARCH}}（syso 架构、
+    # build:native 的 GOARCH、NSIS ARG_FLAG）；GOARCH 供 generate:deb 的
+    # nfpm.yaml `arch: ${GOARCH}` 读取（该步骤在宿主跑，不在 Docker 内）。
+    env:
+      ARCH: ${{ matrix.arch }}
+      GOARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,17 +91,28 @@ jobs:
             echo "VERSION=0.0.1" >> "$GITHUB_ENV"
           fi
 
-      - name: Build
-        run: wails3 build
+      # Linux arm64 在 amd64 runner 上交叉编译，需 wails-cross Docker 镜像
+      # （含 Zig 做 cgo 交叉编译）；amd64 原生编译，无需 Docker。
+      - name: Setup Docker cross-compile image
+        if: matrix.name == 'linux-arm64'
+        run: wails3 task setup:docker
 
       - name: Package Linux (deb + AppImage)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.arch == 'amd64'
         run: |
           wails3 task linux:create:deb
           wails3 task linux:create:appimage
           V="${GITHUB_REF_NAME#v}"
-          mv bin/*.deb "UnBox-${V}-linux-amd64.deb"
-          mv bin/*.AppImage "UnBox-${V}-linux-amd64.AppImage"
+          mv bin/*.deb       "UnBox-${V}-linux-amd64.deb"
+          mv bin/*.AppImage  "UnBox-${V}-linux-amd64.AppImage"
+          ls -la
+
+      - name: Package Linux arm64 (deb only)
+        if: runner.os == 'Linux' && matrix.arch == 'arm64'
+        run: |
+          wails3 task linux:create:deb
+          V="${GITHUB_REF_NAME#v}"
+          mv bin/*.deb "UnBox-${V}-linux-arm64.deb"
           ls -la
 
       - name: Package Windows (NSIS installer)
@@ -94,17 +123,21 @@ jobs:
           export PATH="/c/Program Files (x86)/NSIS:$PATH"
           wails3 task windows:package
           V="${GITHUB_REF_NAME#v}"
-          mv bin/*-installer.exe "UnBox-${V}-windows-amd64-installer.exe"
-          mv bin/unbox.exe "UnBox-${V}-windows-amd64.exe"
+          # NSIS OutFile = unbox-<arch>-installer.exe（ARG_FLAG → AMD64/ARM64），
+          # 便携 exe = bin/unbox.exe（build:native 输出不带架构后缀，每矩阵条目
+          # 独立 runner 无冲突）。
+          mv bin/*-installer.exe "UnBox-${V}-windows-${ARCH}-installer.exe"
+          mv bin/unbox.exe       "UnBox-${V}-windows-${ARCH}.exe"
           ls -la
 
-      - name: Package macOS (.app → zip)
+      - name: Package macOS (universal .app → zip)
         if: runner.os == 'macOS'
         run: |
-          wails3 task darwin:package
+          # darwin:package:universal 先按 amd64/arm64 各编一次，再用 lipo 合成
+          # 通用二进制（Apple Silicon 与 Intel 通吃），无需 Intel runner。
+          wails3 task darwin:package:universal
           V="${GITHUB_REF_NAME#v}"
-          ARCH="$(uname -m)"
-          (cd bin && zip -qr "../UnBox-${V}-macos-${ARCH}.zip" unbox.app)
+          (cd bin && zip -qr "../UnBox-${V}-macos-universal.zip" unbox.app)
           ls -la
 
       - name: Upload artifacts
@@ -112,7 +145,7 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: UnBox-*
-          if-no-files-found: warn
+          if-no-files-found: error
 
   release:
     needs: build

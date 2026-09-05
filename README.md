@@ -51,20 +51,22 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 
 | 平台 | 安装包 | 说明 |
 |------|--------|------|
-| Windows | `.exe`（NSIS 安装程序或便携版） | 双击安装；首次播放 HEVC / RTMP 会提示自动下载 mpv |
-| macOS | `.zip`（内含 `.app`） | 解压拖入「应用程序」；HEVC 需 `brew install mpv` |
-| Linux | `.deb`（Ubuntu / Debian）或 `.AppImage` | `.deb` 双击安装，AppImage 加执行权限直接运行；HEVC 需 `sudo apt install mpv` |
+| Windows | `.exe`（NSIS 安装程序或便携版）· **amd64 / arm64** | 双击安装；首次播放 HEVC / RTMP 会提示自动下载 mpv |
+| macOS | `.zip`（内含 `.app`，**arm64 + amd64 通用**） | 解压拖入「应用程序」；HEVC 需 `brew install mpv` |
+| Linux | `.deb`（Ubuntu / Debian）· **amd64 / arm64** 或 `.AppImage`（**仅 amd64**） | `.deb` 双击安装，AppImage 加执行权限直接运行；HEVC 需 `sudo apt install mpv` |
 
 > 💡 **关于 mpv**：mpv 是一个可选的外部播放器，仅在播放 HEVC / RTMP / 本地文件时
 > 需要。应用内置探测与一键安装引导，未装时也能正常使用 Web 播放器看 H.264 内容。
 
 ## 🖥️ 系统要求
 
-| 平台 | 最低版本 | 运行依赖 |
-|------|----------|----------|
-| Windows | Windows 10 1809+ | WebView2（安装包内置引导安装）；HEVC / RTMP 需 mpv（应用内一键下载） |
-| macOS | macOS 12 Monterey+ | 系统内置 WKWebView；HEVC 需 `brew install mpv` |
-| Linux | Ubuntu 24.04+ / Debian 13+（需 GTK4 ≥ 4.14 + WebKitGTK 6.0） | `libgtk-4-1`、`libwebkitgtk-6.0-4`（`.deb` 自动声明依赖）；HEVC 需 `sudo apt install mpv` |
+| 平台 | 架构 | 最低版本 | 运行依赖 |
+|------|------|----------|----------|
+| Windows | amd64 / arm64 | Windows 10 1809+ | WebView2（安装包内置引导安装）；HEVC / RTMP 需 mpv（应用内一键下载） |
+| macOS | amd64 + arm64（通用二进制） | macOS 12 Monterey+ | 系统内置 WKWebView；HEVC 需 `brew install mpv` |
+| Linux | amd64 / arm64 | Ubuntu 24.04+ / Debian 13+（需 GTK4 ≥ 4.14 + WebKitGTK 6.0） | `libgtk-4-1`、`libwebkitgtk-6.0-4`（`.deb` 自动声明依赖）；HEVC 需 `sudo apt install mpv` |
+
+> WebView2 Runtime 支持 Windows 10 1809+ 的 arm64 构建版本，故 Windows 两架构最低版本一致。
 
 > 运行时**无需**安装 Go / Node 等开发环境 —— 前端资源已编译进二进制，除上表外无其他运行时依赖。
 
@@ -99,7 +101,8 @@ mise run build:linux    # 或 build:win / build:mac
 ```
 
 发布打包走 [GitHub Actions](.github/workflows/release.yml)：推送 `v*` 标签后，
-三个平台各自原生编译并自动创建 Release 挂载产物。
+五个目标（Linux amd64/arm64、Windows amd64/arm64、macOS universal）各自原生 /
+交叉编译，并自动创建 Release 挂载产物。
 
 ## 🧱 技术栈
 

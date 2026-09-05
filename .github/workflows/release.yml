@@ -52,12 +52,25 @@ jobs:
             name: macos-universal
             # 不设 arch：universal 内部按 task var 各编 amd64/arm64 再 lipo
     runs-on: ${{ matrix.os }}
-    # ARCH 驱动 stock Taskfile 里所有 {{.ARCH | default ARCH}}（syso 架构、
-    # build:native 的 GOARCH、NSIS ARG_FLAG）；GOARCH 供 generate:deb 的
-    # nfpm.yaml `arch: ${GOARCH}` 读取（该步骤在宿主跑，不在 Docker 内）。
+    # ARCH 驱动 stock Taskfile 里所有 {{.ARCH}}（syso 架构、NSIS ARG_FLAG、
+    # 单 arch build 的 GOARCH）；universal 路径里 build:universal 用显式
+    # task var（ARCH=amd64/arm64）覆盖 env，故 macOS 此处 ARCH 为空也无碍。
+    #
+    # GOARCH 绝不在 job 级设置——两个坑都因它而起：
+    #   1) arm64 任务里 `go install wails3` 会交叉编译，二进制落进
+    #      $GOPATH/bin/<GOOS>_<GOARCH>/ 子目录，而 setup-go 只把 $GOPATH/bin
+    #      加进 PATH → wails3: command not found。
+    #   2) macOS universal：matrix.arch 为空 → job 级 GOARCH=""（空串但已
+    #      设置）。go-task 里 shell env 优先级高于 Task env:，build:native
+    #      的 `env: GOARCH: '{{.ARCH | default ARCH}}'`（应解为 amd64/arm64）
+    #      被空串覆盖，两次 go build 都退回宿主架构（macos-latest=arm64）
+    #      → lipo 报 "same architectures (arm64)"。去掉 job 级 GOARCH 后
+    #      Task env 才生效，两架构才分得开。
+    # Linux generate:deb 仍需 shell GOARCH 供 nfpm.yaml `arch: ${GOARCH}` 读取，
+    # 故在各 Linux 打包步骤内 export GOARCH="${ARCH}"（此时 wails3 已装好，
+    # 不会触发坑 1；值与 Task env 一致，不触发坑 2）。
     env:
       ARCH: ${{ matrix.arch }}
-      GOARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
 
@@ -100,6 +113,7 @@ jobs:
       - name: Package Linux (deb + AppImage)
         if: runner.os == 'Linux' && matrix.arch == 'amd64'
         run: |
+          export GOARCH="${ARCH}"   # nfpm.yaml `arch: ${GOARCH}` 读宿主 env
           wails3 task linux:create:deb
           wails3 task linux:create:appimage
           V="${GITHUB_REF_NAME#v}"
@@ -110,6 +124,7 @@ jobs:
       - name: Package Linux arm64 (deb only)
         if: runner.os == 'Linux' && matrix.arch == 'arm64'
         run: |
+          export GOARCH="${ARCH}"   # nfpm.yaml `arch: ${GOARCH}` 读宿主 env
           wails3 task linux:create:deb
           V="${GITHUB_REF_NAME#v}"
           mv bin/*.deb "UnBox-${V}-linux-arm64.deb"

@@ -68,6 +68,23 @@ type VodFavorite struct {
 	AddedAt int64
 }
 
+// LibraryDir 是一个媒体库目录。
+type LibraryDir struct {
+	Path    string
+	AddedAt int64
+}
+
+// LibraryItem 是扫描出的一个视频文件。
+type LibraryItem struct {
+	Path   string
+	Name   string
+	Dir    string
+	Ext    string
+	Size   int64
+	MTime  int64
+	Poster string
+}
+
 // Store 封装 SQLite 连接。
 type Store struct{ db *sql.DB }
 
@@ -116,6 +133,8 @@ func (s *Store) migrate() error {
 		`CREATE TABLE IF NOT EXISTS vod_history (site TEXT NOT NULL, vod_id TEXT NOT NULL, vod_title TEXT NOT NULL, vod_logo TEXT, ep_id TEXT, ep_name TEXT, source TEXT, progress INTEGER NOT NULL DEFAULT 0, duration INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (site, vod_id))`,
 		`CREATE TABLE IF NOT EXISTS vod_search_history (query TEXT PRIMARY KEY, searched_at INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS vod_favorites (site TEXT NOT NULL, vod_id TEXT NOT NULL, title TEXT NOT NULL, logo TEXT, grp TEXT, added_at INTEGER NOT NULL, PRIMARY KEY (site, vod_id))`,
+		`CREATE TABLE IF NOT EXISTS library_dirs (path TEXT PRIMARY KEY, added_at INTEGER NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS library_items (path TEXT PRIMARY KEY, name TEXT NOT NULL, dir TEXT NOT NULL, ext TEXT NOT NULL, size INTEGER NOT NULL DEFAULT 0, mtime INTEGER NOT NULL DEFAULT 0, poster TEXT)`,
 	}
 	for _, q := range stmts {
 		if _, err := s.db.Exec(q); err != nil {
@@ -391,6 +410,75 @@ func (s *Store) ListVodFavorites() ([]VodFavorite, error) {
 			return nil, err
 		}
 		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) AddLibraryDir(path string) error {
+	_, err := s.db.Exec(`INSERT OR REPLACE INTO library_dirs(path, added_at) VALUES(?,?)`, path, time.Now().Unix())
+	return err
+}
+
+func (s *Store) RemoveLibraryDir(path string) error {
+	_, err := s.db.Exec(`DELETE FROM library_dirs WHERE path=?`, path)
+	if err == nil {
+		_, err = s.db.Exec(`DELETE FROM library_items WHERE dir=?`, path)
+	}
+	return err
+}
+
+func (s *Store) ListLibraryDirs() ([]LibraryDir, error) {
+	rows, err := s.db.Query(`SELECT path, added_at FROM library_dirs ORDER BY added_at, path`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LibraryDir
+	for rows.Next() {
+		var d LibraryDir
+		if err := rows.Scan(&d.Path, &d.AddedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// ReplaceLibraryItems 以事务整体替换某目录的扫描结果：先删该目录旧条目再插入新条目。
+func (s *Store) ReplaceLibraryItems(dir string, items []LibraryItem) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM library_items WHERE dir=?`, dir); err != nil {
+		return err
+	}
+	for _, it := range items {
+		if _, err := tx.Exec(
+			`INSERT INTO library_items(path,name,dir,ext,size,mtime,poster) VALUES(?,?,?,?,?,?,?)`,
+			it.Path, it.Name, it.Dir, it.Ext, it.Size, it.MTime, it.Poster); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ListLibraryItems() ([]LibraryItem, error) {
+	rows, err := s.db.Query(`SELECT path,name,dir,ext,size,mtime,poster FROM library_items ORDER BY dir, name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LibraryItem
+	for rows.Next() {
+		var it LibraryItem
+		var poster sql.NullString
+		if err := rows.Scan(&it.Path, &it.Name, &it.Dir, &it.Ext, &it.Size, &it.MTime, &poster); err != nil {
+			return nil, err
+		}
+		it.Poster = poster.String
+		out = append(out, it)
 	}
 	return out, rows.Err()
 }

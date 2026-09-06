@@ -1676,7 +1676,7 @@ body[data-theme="8bit"],
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.35rem;
   align-content: flex-start;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   min-height: 0;
   max-height: none;
   overflow-y: auto;

@@ -64,11 +64,20 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 |------|------|----------|----------|
 | Windows | amd64 / arm64 | Windows 10 1809+ | WebView2（安装包内置引导安装）；HEVC / RTMP 需 mpv（应用内一键下载） |
 | macOS | amd64 + arm64（通用二进制） | macOS 12 Monterey+ | 系统内置 WKWebView；HEVC 需 `brew install mpv` |
-| Linux | amd64 | Ubuntu 24.04+ / Debian 13+（需 GTK4 ≥ 4.14 + WebKitGTK 6.0） | `libgtk-4-1`、`libwebkitgtk-6.0-4`（`.deb` 自动声明依赖）；HEVC 需 `sudo apt install mpv` |
+| Linux | amd64 | Ubuntu 24.04+ / Debian 13+（需 GTK4 ≥ 4.14 + WebKitGTK 6.0） | `libgtk-4-1`、`libwebkitgtk-6.0-4`、`gstreamer1.0-libav`、`gstreamer1.0-plugins-bad`（`.deb` 自动声明依赖）；HEVC / MKV 等需 `sudo apt install mpv` |
 
 > WebView2 Runtime 支持 Windows 10 1809+ 的 arm64 构建版本，故 Windows 两架构最低版本一致。
 
 > 运行时**无需**安装 Go / Node 等开发环境 —— 前端资源已编译进二进制，除上表外无其他运行时依赖。
+
+> Linux 使用 `.AppImage` 时不会自动安装系统依赖。若出现 WebKit 的 `WebVTT encoder` 或 MP4 无法播放提示，请执行：
+>
+> ```bash
+> sudo apt update
+> sudo apt install gstreamer1.0-libav gstreamer1.0-plugins-bad
+> ```
+>
+> 安装后重启 UnBox；MKV、HEVC、RTMP 等格式仍需 `mpv`。
 
 > 🐧 **Linux 沙箱（userns）**：WebKitGTK 用 bubblewrap 做 web 进程沙箱，依赖**非特权用户命名空间**（unprivileged userns）。Ubuntu 24.04+ 默认以 AppArmor 限制该能力，若首次运行报 `bwrap: setting up uid map: Permission denied`，请执行：
 >

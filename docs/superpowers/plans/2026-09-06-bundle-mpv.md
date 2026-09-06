@@ -1,5 +1,7 @@
 # 随应用分发 mpv 实现计划
 
+里程碑：M4 增量（mpv 随应用分发，替代「mpv 需手动安装」）
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让 mpv 随应用分发，装好即用——`MPVStatus()` 直接返回 `Available=true`，用户无需手动安装 mpv；现有按需安装保留为兜底。

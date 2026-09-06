@@ -293,13 +293,14 @@ body {
   background: var(--btn-hover);
 }
 
+/* 上下等距，返回按钮与「正在播放」在本条内垂直居中（底边留 0 会把内容压向播放器一侧） */
 .vod-detail-head {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   flex: 0 0 auto;
   min-width: 0;
-  padding: 0.75rem 1rem 0;
+  padding: 0.75rem 1rem;
 }
 
 .vod-detail-head .vod-back {

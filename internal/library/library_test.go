@@ -66,6 +66,9 @@ func TestLibraryStreamForRouting(t *testing.T) {
 	if err != nil || mkv.Kind != player.StreamLocal || mkv.URL != "file:///x/b.mkv" {
 		t.Fatalf("mkv=%+v err=%v", mkv, err)
 	}
+	if _, err := lib.StreamFor("/x/readme.txt"); err == nil {
+		t.Fatal("非视频文件应被拒绝")
+	}
 }
 
 func TestLibraryRecordProgress(t *testing.T) {
@@ -77,6 +80,35 @@ func TestLibraryRecordProgress(t *testing.T) {
 	}
 	h, err := st.ListVodHistory(10)
 	if err != nil || len(h) != 1 || h[0].Site != "local" || h[0].VodID != "/x/a.mp4" || h[0].Progress != 42 {
+		t.Fatalf("h=%+v err=%v", h, err)
+	}
+}
+
+func TestLibraryRecordProgressKeepsPoster(t *testing.T) {
+	root := t.TempDir()
+	media := filepath.Join(root, "movie.mp4")
+	poster := filepath.Join(root, "movie-poster.jpg")
+	if err := os.WriteFile(media, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(poster, []byte("poster"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	st := openLibraryTest(t)
+	defer st.Close()
+	lib := New(st)
+	if err := lib.AddDir(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.Scan(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.RecordProgress(media, 42, 100); err != nil {
+		t.Fatal(err)
+	}
+	h, err := st.ListVodHistory(10)
+	if err != nil || len(h) != 1 || h[0].VodLogo == "" {
 		t.Fatalf("h=%+v err=%v", h, err)
 	}
 }

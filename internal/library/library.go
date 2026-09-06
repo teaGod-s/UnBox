@@ -139,6 +139,9 @@ func (l *Library) StreamFor(path string) (player.Stream, error) {
 	if ext == "mp4" || ext == "m4v" || ext == "webm" {
 		return player.Stream{URL: l.server.register(absolute), Kind: player.StreamMP4}, nil
 	}
+	if !videoExts[ext] {
+		return player.Stream{}, fmt.Errorf("不支持的媒体格式: %s", filepath.Ext(absolute))
+	}
 	return player.Stream{URL: "file://" + filepath.ToSlash(absolute), Kind: player.StreamLocal}, nil
 }
 
@@ -151,8 +154,19 @@ func (l *Library) RecordProgress(path string, progress, duration int) error {
 	if err != nil {
 		return err
 	}
+	items, err := l.store.ListLibraryItems()
+	if err != nil {
+		return err
+	}
+	var poster string
+	for _, item := range items {
+		if item.Path == absolute {
+			poster = item.Poster
+			break
+		}
+	}
 	return l.store.UpsertVodHistory(store.VodHistory{
 		Site: "local", VodID: absolute, VodTitle: displayName(absolute),
-		Source: "local", Progress: progress, Duration: duration,
+		VodLogo: poster, Source: "local", Progress: progress, Duration: duration,
 	})
 }

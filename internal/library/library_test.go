@@ -112,3 +112,16 @@ func TestLibraryRecordProgressKeepsPoster(t *testing.T) {
 		t.Fatalf("h=%+v err=%v", h, err)
 	}
 }
+
+func TestLibraryStreamForRejectsPathOutsideRegisteredDirs(t *testing.T) {
+	root := t.TempDir()
+	st := openLibraryTest(t)
+	defer st.Close()
+	lib := New(st)
+	if err := lib.AddDir(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.StreamFor(filepath.Join(t.TempDir(), "outside.mp4")); err == nil {
+		t.Fatal("媒体库目录之外的路径应被拒绝")
+	}
+}

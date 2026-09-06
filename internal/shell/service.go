@@ -224,6 +224,20 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 	}
 }
 
+// ServiceShutdown 在 Wails 退出服务阶段释放媒体库 HTTP 服务和播放资源。
+func (s *ShellService) ServiceShutdown() error {
+	var firstErr error
+	if s.library != nil {
+		firstErr = s.library.Close()
+	}
+	if s.playback != nil {
+		if err := s.playback.Close(); firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
 // AddLibraryDir 注册一个本地媒体库目录。
 func (s *ShellService) AddLibraryDir(path string) error {
 	return s.library.AddDir(path)

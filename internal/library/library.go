@@ -34,6 +34,14 @@ func New(st *store.Store) *Library {
 	return &Library{store: st, server: newServer()}
 }
 
+// Close 关闭本地媒体服务。
+func (l *Library) Close() error {
+	if l == nil || l.server == nil {
+		return nil
+	}
+	return l.server.close()
+}
+
 func (l *Library) AddDir(path string) error {
 	if l.store == nil {
 		return fmt.Errorf("媒体库存储未就绪")
@@ -135,6 +143,11 @@ func (l *Library) StreamFor(path string) (player.Stream, error) {
 	if err != nil {
 		return player.Stream{}, fmt.Errorf("媒体路径无效: %w", err)
 	}
+	if l.store != nil {
+		if err := l.validateManagedPath(absolute); err != nil {
+			return player.Stream{}, err
+		}
+	}
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(absolute), "."))
 	if ext == "mp4" || ext == "m4v" || ext == "webm" {
 		return player.Stream{URL: l.server.register(absolute), Kind: player.StreamMP4}, nil
@@ -143,6 +156,20 @@ func (l *Library) StreamFor(path string) (player.Stream, error) {
 		return player.Stream{}, fmt.Errorf("不支持的媒体格式: %s", filepath.Ext(absolute))
 	}
 	return player.Stream{URL: "file://" + filepath.ToSlash(absolute), Kind: player.StreamLocal}, nil
+}
+
+func (l *Library) validateManagedPath(path string) error {
+	dirs, err := l.store.ListLibraryDirs()
+	if err != nil {
+		return err
+	}
+	for _, dir := range dirs {
+		rel, err := filepath.Rel(dir.Path, path)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return nil
+		}
+	}
+	return fmt.Errorf("媒体路径不在已注册目录中: %s", path)
 }
 
 // RecordProgress 以 site="local" 复用 vod_history，供首页续播。

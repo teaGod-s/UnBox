@@ -10,6 +10,11 @@ describe('playback scope', () => {
     expect(playbackPlanForMode('live', plans, 'vod')).toBeNull()
   })
 
+  it('allows the library page to reuse the vod playback slot', () => {
+    const plans = { live: 'live-plan', vod: 'library-plan' }
+    expect(playbackPlanForMode('library', plans, 'vod')).toBe('library-plan')
+  })
+
   it('keeps the captured fallback scope when the request resolves after a page switch', async () => {
     let resolve!: (plan: { ID: string }) => void
     const request = new Promise<{ ID: string }>(done => { resolve = done })
@@ -31,6 +36,7 @@ describe('playback scope', () => {
 
   it('rejects late vod progress outside the vod detail page', () => {
     expect(shouldRecordVodProgress('vod', 'detail')).toBe(true)
+    expect(shouldRecordVodProgress('library', 'list')).toBe(true)
     expect(shouldRecordVodProgress('live', 'detail')).toBe(false)
     expect(shouldRecordVodProgress('vod', 'list')).toBe(false)
   })

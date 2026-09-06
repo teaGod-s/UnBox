@@ -805,6 +805,121 @@ body {
 
 .home-list .row-delete { margin-left: auto; }
 
+.library-page {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.library-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.library-toolbar h2 { margin: 0; }
+.library-actions { display: flex; gap: 0.5rem; }
+
+.library-add {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.library-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.6rem;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+}
+
+.library-dirs,
+.library-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.library-dirs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.library-dirs li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.35rem 0.5rem;
+  overflow: hidden;
+  color: var(--text-soft);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 0.35rem;
+}
+
+.library-dirs li > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-warning { color: #e6b450; }
+
+.library-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.5rem;
+  overflow-y: auto;
+}
+
+.library-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  min-height: 4.5rem;
+  padding: 0.5rem;
+  cursor: pointer;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 0.4rem;
+}
+
+.library-list li:hover { background: var(--btn-bg); }
+.library-list .thumb { width: 44px; height: 60px; object-fit: cover; flex: 0 0 auto; border-radius: 0.3rem; background: var(--row-alt); }
+
+.library-item-info {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.library-item-info strong,
+.library-item-info small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-item-info small { color: var(--text-dim); }
+.library-progress { flex: 0 0 auto; color: var(--accent); font-size: 0.8rem; }
+
+.library-player {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.library-player .playback-view { width: min(100%, 720px); aspect-ratio: 16 / 9; }
+
 .tabs .settings-btn { margin-left: auto; }
 
 .log-view {

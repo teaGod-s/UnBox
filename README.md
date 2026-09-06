@@ -56,6 +56,11 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 | macOS | `.zip`（内含 `.app`，**arm64 + amd64 通用**） | 解压拖入「应用程序」；HEVC 需 `brew install mpv` |
 | Linux | `.deb`（Ubuntu / Debian）或 `.AppImage` | `.deb` 双击安装，AppImage 加执行权限直接运行；HEVC / MKV / RTMP 等需 `sudo apt install mpv` |
 
+> ⚠️ **Windows 首次运行提示**：安装包暂未做代码签名，首次双击 `.exe`（安装程序或便携版）时
+> SmartScreen 会弹出「Windows 已保护你的电脑 / 发布者未知」。点「**更多信息**」→「**仍要运行**」
+> 即可正常安装；每次下载新版本首次运行时可能再次提示，处理方式相同。
+> 该提示需应用获得代码签名证书后才会消失，不是病毒拦截。
+
 > 💡 **关于 mpv**：mpv 是一个可选的外部播放器，用于 HEVC / RTMP 以及 MKV、AVI、RMVB、TS
 > 等本地容器。MP4 / M4V / WebM 使用内置 Web 播放，但 Linux 仍依赖 GStreamer 解码插件。
 > 应用内置探测与安装引导，未装时也能正常使用 Web 播放器看 H.264 内容。

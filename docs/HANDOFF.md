@@ -1,4 +1,4 @@
-# Handoff — 当前状态与待办（2026-09-01）
+# Handoff — 当前状态与待办（2026-09-06）
 
 接手时先读 `AGENTS.md` 建立上下文，再读本文件了解进度与卡点。
 
@@ -29,7 +29,12 @@
   - 代码提交：`c54c23cd`、`30b3cd27`、`69119f3e`、`83bf134d`、`641a0df6`、`94922abd`、`386a7774`、`1be06d6b`、`24c6315b`；真实源校准为 `6274940e`、`77c5d8f3`、`832903e0`。
   - 最终验证：`go test ./... -count=1`、`go vet ./...`、`CGO_ENABLED=1 go build ./...`、`gofmt` 全部通过。
 
-- **点播播放与导航修复已完成**（分支 `fix/vod-playback-navigation`，待合入 master）：
+- **M3 本地媒体库已完成**（已合入 master，merge `adcc8f3e`，2026-09-06）：
+  `internal/library`（递归扫描 + 片名/海报匹配 + 带 token 鉴权与防穿越的本地 HTTP
+  服务 + 进度门面）、`internal/store` 目录/条目表、`internal/shell` 绑定方法、前端
+  媒体库 tab（扫描 → 浏览 → 播放，切页停止，断点续播）。详见下方「近期更新」。
+
+- **点播播放与导航修复已完成**（已合入 master，merge `dfb8777a`，2026-09-04）：
   - 直播/点播播放器计划与页面归属隔离，切页不会显示另一页面的画面或写入点播进度。
   - 详情页折叠简介后保留原生播放控件；集数每页 36 集，分页支持两侧箭头滚动和等宽网格。
   - 类目、线路、站点选择器仅在点播列表页显示；详情返回支持首页、搜索结果和原类目列表，搜索结果缓存 5 分钟。
@@ -41,6 +46,30 @@
 `docs/superpowers/specs/2026-08-24-unbox-m2-design.md`（M2）、
 `docs/superpowers/specs/2026-08-25-unbox-m4-playback-design.md`（M4）、
 `docs/superpowers/specs/2026-08-29-unbox-m5-js-engine-design.md`（M5）。
+
+## 近期更新（2026-09-01 之后）
+
+> 09-01 快照之后合入 master 的更新。下方「M4 之后新增的功能（本次会话）」为当时的
+> 冻结快照，保留作历史记录，不再更新。
+
+- **vod-ux / vod-nav 已合入**：点播 UX 改进（`b311b21c`，09-03）与播放/导航修复
+  （`dfb8777a`，09-04）均已合入（09-01 快照记为「待合入」，现完成）。
+- **播放原地重试 + mpv 断点续播**（`47b1e957`，09-05，含于 v0.4.5）：hls.js 的
+  `MEDIA_ERROR`/`NETWORK_ERROR` 先原地重试（各自设上限），耗尽再 fallback；mpegts.js
+  网络错误 `unload()+load()` 重试。fallback 携带 `currentTime`，mpv 从断点 `Seek`
+  续播（seek 失败非致命）。Linux 无 MSE，不受影响。
+- **Linux arm64 出包：尝试后放弃**（`f48d976f` → `bb0a2892`，09-05，含于 v0.4.5）：
+  试图让 stock build.sh 直接编 arm64，但它构建仓库根 `.`（`cmd/unbox` 才是 main），
+  `go build -o X .` 退出码 0 却只产几十 KB ar 归档，deb 无可执行文件。遂移除 Linux
+  arm64；现矩阵四目标：Linux amd64、Windows amd64/arm64、macOS universal。恢复需先改
+  `build/docker/build.sh` / `Dockerfile.cross`，暂不值得。
+- **M3 本地媒体库**（merge `adcc8f3e`，09-06，v0.4.5 之后，尚未发版）：14 个提交，
+  自底向上：`store` 媒体库目录/条目表（`f8d94716`）→ `library` 递归扫描 + 片名清洗/
+  海报匹配（`0c7b2b0b`/`9992ad3d`/`5242cb39`）→ 带 token 鉴权 + 防目录穿越的本地文件
+  HTTP 服务（`6c968264`）→ 目录/条目/进度门面（`e68167b7`）→ Wails 绑定
+  （`8163eaba`）→ 前端媒体库 tab（`48147692`）→ 安全加固（限制路径 `03ccb38b`、
+  阻止符号链接越界 `fc76b5f1`、切页停止播放 `947d3b49`）→ Linux GStreamer 依赖声明
+  （`a761c04b`）→ README 媒体库说明（`802352e9`）。
 
 ## M4 之后新增的功能（本次会话）
 
@@ -99,7 +128,7 @@
   FongMi多线路源完整站点，只两条路：远程爬虫代理 / 接受放弃。
 - **M5.3 dr_py 方言**：核心适配已完成。后续仅保留非本次范围的 `filter`/`filter_url`/`filter_def`、crypto-js
   和 `muban` 全量模板对齐。
-- **M3 本地媒体库**：未开始。
+- **M3 本地媒体库**：✅ 已完成（merge `adcc8f3e`，2026-09-06），详见上方「近期更新」。
 - **Windows/macOS 实测**：打包已由 GH Actions 自动化，但 mpv 插件下载/安装、Web 播放的
   运行时行为仍需各自宿主机实测。
 - 停车项：failover `Events()` fan-out、probe 同步阻塞 `Load`、tvbox 剧集缓存上限、

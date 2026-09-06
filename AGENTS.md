@@ -61,6 +61,8 @@ mise run scan          # go run ./cmd/unbox-scan
   - `failover` — 故障切换包装。
 - `internal/playback` — 播放编排：Resolver（share 页解析）→ Controller（Web/mpv 路由）
   → Proxy（本地代理 + HLS 分片重写）。
+- `internal/library` — 本地媒体库：递归扫描识别视频 + 片名/海报匹配，带 token 鉴权与防
+  目录穿越的本地文件 HTTP 服务 + 进度门面（M3）。
 - `internal/shell` — 全部 Wails glue（app / 窗口 / 服务）。
 - `internal/store` — SQLite 持久化（`modernc.org/sqlite`，纯 Go 无 cgo）。
 - `cmd/unbox` — 主程序入口；`cmd/unbox-scan` — 扫描 CLI。

@@ -159,6 +159,9 @@ func (l *Library) StreamFor(path string) (player.Stream, error) {
 }
 
 func (l *Library) validateManagedPath(path string) error {
+	if l.store == nil {
+		return fmt.Errorf("媒体库存储未就绪")
+	}
 	dirs, err := l.store.ListLibraryDirs()
 	if err != nil {
 		return err
@@ -166,7 +169,15 @@ func (l *Library) validateManagedPath(path string) error {
 	for _, dir := range dirs {
 		rel, err := filepath.Rel(dir.Path, path)
 		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return nil
+			resolvedDir, dirErr := filepath.EvalSymlinks(dir.Path)
+			resolvedPath, pathErr := filepath.EvalSymlinks(path)
+			if dirErr != nil || pathErr != nil {
+				continue
+			}
+			resolvedRel, relErr := filepath.Rel(resolvedDir, resolvedPath)
+			if relErr == nil && resolvedRel != ".." && !strings.HasPrefix(resolvedRel, ".."+string(filepath.Separator)) {
+				return nil
+			}
 		}
 	}
 	return fmt.Errorf("媒体路径不在已注册目录中: %s", path)

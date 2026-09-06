@@ -125,3 +125,25 @@ func TestLibraryStreamForRejectsPathOutsideRegisteredDirs(t *testing.T) {
 		t.Fatal("媒体库目录之外的路径应被拒绝")
 	}
 }
+
+func TestLibraryStreamForRejectsSymlinkEscapingRegisteredDir(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	target := filepath.Join(outside, "outside.mp4")
+	if err := os.WriteFile(target, []byte("outside"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "linked.mp4")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("当前文件系统不支持符号链接: %v", err)
+	}
+	st := openLibraryTest(t)
+	defer st.Close()
+	lib := New(st)
+	if err := lib.AddDir(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.StreamFor(link); err == nil {
+		t.Fatal("逃逸到注册目录之外的符号链接应被拒绝")
+	}
+}

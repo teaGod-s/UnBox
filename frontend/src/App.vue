@@ -236,7 +236,7 @@ async function recheckMpv() {
 async function switchMode(m: 'home' | 'vod' | 'live' | 'library' | 'search' | 'favorites' | 'settings') {
   if (m !== 'search' && searching.value) await invalidateSearch()
   if (m !== 'live' && activePlayback.value?.scope === 'live') await stopPlayback('live')
-  if (m !== 'vod' && activePlayback.value?.scope === 'vod') await stopPlayback('vod')
+  if (m !== mode.value && activePlayback.value?.scope === 'vod') await stopPlayback('vod')
   if (vodView.value === 'detail') currentVod.value = null
   mode.value = m
   if (m === 'vod') {

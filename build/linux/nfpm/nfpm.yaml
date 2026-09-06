@@ -28,6 +28,9 @@ contents:
 depends:
   - libgtk-4-1
   - libwebkitgtk-6.0-4
+  # WebKitGTK uses GStreamer for native MP4/WebM playback and WebVTT subtitles.
+  - gstreamer1.0-libav
+  - gstreamer1.0-plugins-bad
 
 # Distribution-specific overrides for different package formats
 overrides:

@@ -23,8 +23,9 @@ FongMi 多线路源（CMS JSON、drpy 服务、FongMi js0 爬虫）与 M3U / TXT
 ## ✨ 特性
 
 - **直播 + 点播**：一套界面同时支持 IPTV 直播与视频点播，分类 / 分组 / 搜索齐全。
+- **本地媒体库**：添加本地目录并递归扫描视频，支持海报 / 片名展示、断点续播与统一播放入口。
 - **智能播放路由**：H.264 走内置 Web 播放器（hls.js / mpegts.js / 原生 `<video>`），
-  HEVC / RTMP / 本地文件自动切换到外部 mpv，兼容性拉满。
+  HEVC / RTMP / MKV 等本地容器自动切换到外部 mpv；MP4 / M4V / WebM 优先使用内置 Web 播放。
 - **断点续播**：自动记录观看进度与历史，首页一键接着看。
 - **全站搜索**：并发搜索所有已导入站点，结果实时刷新、显示所属站点，可随时中断。
 - **多线路 / 多站点**：FongMi多线路源支持切换线路，自动记忆上次站点。
@@ -53,10 +54,11 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 |------|--------|------|
 | Windows | `.exe`（NSIS 安装程序或便携版）· **amd64 / arm64** | 双击安装；首次播放 HEVC / RTMP 会提示自动下载 mpv |
 | macOS | `.zip`（内含 `.app`，**arm64 + amd64 通用**） | 解压拖入「应用程序」；HEVC 需 `brew install mpv` |
-| Linux | `.deb`（Ubuntu / Debian）或 `.AppImage` | `.deb` 双击安装，AppImage 加执行权限直接运行；HEVC 需 `sudo apt install mpv` |
+| Linux | `.deb`（Ubuntu / Debian）或 `.AppImage` | `.deb` 双击安装，AppImage 加执行权限直接运行；HEVC / MKV / RTMP 等需 `sudo apt install mpv` |
 
-> 💡 **关于 mpv**：mpv 是一个可选的外部播放器，仅在播放 HEVC / RTMP / 本地文件时
-> 需要。应用内置探测与一键安装引导，未装时也能正常使用 Web 播放器看 H.264 内容。
+> 💡 **关于 mpv**：mpv 是一个可选的外部播放器，用于 HEVC / RTMP 以及 MKV、AVI、RMVB、TS
+> 等本地容器。MP4 / M4V / WebM 使用内置 Web 播放，但 Linux 仍依赖 GStreamer 解码插件。
+> 应用内置探测与安装引导，未装时也能正常使用 Web 播放器看 H.264 内容。
 
 ## 🖥️ 系统要求
 
@@ -64,11 +66,21 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 |------|------|----------|----------|
 | Windows | amd64 / arm64 | Windows 10 1809+ | WebView2（安装包内置引导安装）；HEVC / RTMP 需 mpv（应用内一键下载） |
 | macOS | amd64 + arm64（通用二进制） | macOS 12 Monterey+ | 系统内置 WKWebView；HEVC 需 `brew install mpv` |
-| Linux | amd64 | Ubuntu 24.04+ / Debian 13+（需 GTK4 ≥ 4.14 + WebKitGTK 6.0） | `libgtk-4-1`、`libwebkitgtk-6.0-4`（`.deb` 自动声明依赖）；HEVC 需 `sudo apt install mpv` |
+| Linux | amd64 | Ubuntu 24.04+ / Debian 13+（需 GTK4 ≥ 4.14 + WebKitGTK 6.0） | `libgtk-4-1`、`libwebkitgtk-6.0-4`、`gstreamer1.0-libav`、`gstreamer1.0-plugins-bad`（`.deb` 自动声明依赖）；HEVC / MKV 等需 `sudo apt install mpv` |
 
 > WebView2 Runtime 支持 Windows 10 1809+ 的 arm64 构建版本，故 Windows 两架构最低版本一致。
 
-> 运行时**无需**安装 Go / Node 等开发环境 —— 前端资源已编译进二进制，除上表外无其他运行时依赖。
+> 运行时**无需**安装 Go / Node 等开发环境 —— 前端资源已编译进二进制。Linux `.deb` 会声明 GTK /
+> WebKit / GStreamer 依赖；使用 `.AppImage` 时请按下方说明手动安装。
+
+> Linux 使用 `.AppImage` 时不会自动安装系统依赖。若出现 WebKit 的 `WebVTT encoder` 或 MP4 无法播放提示，请执行：
+>
+> ```bash
+> sudo apt update
+> sudo apt install gstreamer1.0-libav gstreamer1.0-plugins-bad
+> ```
+>
+> 安装后重启 UnBox；MKV、HEVC、RTMP 等格式仍需 `mpv`。
 
 > 🐧 **Linux 沙箱（userns）**：WebKitGTK 用 bubblewrap 做 web 进程沙箱，依赖**非特权用户命名空间**（unprivileged userns）。Ubuntu 24.04+ 默认以 AppArmor 限制该能力，若首次运行报 `bwrap: setting up uid map: Permission denied`，请执行：
 >
@@ -84,7 +96,8 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 1. 打开 **设置** 页，粘贴导入 **点播源**（TVBox 单线路 / FongMi 多线路 JSON 地址）或 **直播源**（M3U / TXT / 订阅地址）。
 2. **点播** 页选择线路与站点，浏览分类或全站搜索，点进详情页选集即可播放。
 3. **直播** 页选择分组与频道，点击播放。
-4. **首页** 查看观看历史，点击任意记录断点续播。
+4. **媒体库** 页添加本地目录，点击「重新扫描」后即可浏览并播放本地视频。
+5. **首页** 查看观看历史，点击任意记录断点续播。
 
 ## 🔧 开发者构建
 
@@ -101,8 +114,8 @@ mise run build:linux    # 或 build:win / build:mac
 ```
 
 发布打包走 [GitHub Actions](.github/workflows/release.yml)：推送 `v*` 标签后，
-四个目标（Linux amd64、Windows amd64/arm64、macOS universal）各自原生 /
-交叉编译，并自动创建 Release 挂载产物。
+按 Linux amd64、Windows amd64/arm64、macOS universal 四个目标构建，并自动创建
+Release 挂载产物。
 
 ## 🧱 技术栈
 
@@ -112,7 +125,7 @@ mise run build:linux    # 或 build:win / build:mac
 
 ## 🗺️ 路线图
 
-- [ ] **M3 本地媒体库** —— 本地视频扫描、媒体库浏览与播放
+- [x] **M3 本地媒体库** —— 本地视频扫描、媒体库浏览与播放
 - [ ] Windows / macOS 完整实测与收尾
 
 ## ⚠️ 已知限制

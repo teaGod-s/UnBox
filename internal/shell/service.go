@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/unbox/unbox/internal/config"
+	"github.com/unbox/unbox/internal/library"
 	"github.com/unbox/unbox/internal/playback"
 	"github.com/unbox/unbox/internal/player"
 	"github.com/unbox/unbox/internal/player/mpvplugin"
@@ -213,6 +214,7 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 		live:             pv,
 		player:           p,
 		store:            st,
+		library:          library.New(st),
 		vods:             map[string]provider.Provider{},
 		vodNames:         map[string]string{},
 		playback:         controller,
@@ -220,6 +222,64 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 		vodCategoryCache: make(map[string]vodCategoryCacheEntry),
 		vodCategoryNow:   time.Now,
 	}
+}
+
+// ServiceShutdown 在 Wails 退出服务阶段释放媒体库 HTTP 服务和播放资源。
+func (s *ShellService) ServiceShutdown() error {
+	var firstErr error
+	if s.library != nil {
+		firstErr = s.library.Close()
+	}
+	if s.playback != nil {
+		if err := s.playback.Close(); firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// AddLibraryDir 注册一个本地媒体库目录。
+func (s *ShellService) AddLibraryDir(path string) error {
+	return s.library.AddDir(path)
+}
+
+// RemoveLibraryDir 移除一个本地媒体库目录及其扫描条目。
+func (s *ShellService) RemoveLibraryDir(path string) error {
+	return s.library.RemoveDir(path)
+}
+
+// ListLibraryDirs 返回已注册的本地媒体库目录。
+func (s *ShellService) ListLibraryDirs() ([]library.LibraryDir, error) {
+	return s.library.ListDirs()
+}
+
+// ScanLibrary 扫描所有已注册的本地媒体库目录。
+func (s *ShellService) ScanLibrary() (library.ScanResult, error) {
+	return s.library.Scan()
+}
+
+// RescanLibrary 是 ScanLibrary 的前端友好别名。
+func (s *ShellService) RescanLibrary() (library.ScanResult, error) {
+	return s.ScanLibrary()
+}
+
+// ListLibrary 返回本地媒体库扫描出的条目。
+func (s *ShellService) ListLibrary() ([]library.LibraryItem, error) {
+	return s.library.List()
+}
+
+// PrepareLibrary 按本地媒体扩展名选择 Web 或 mpv 播放路由。
+func (s *ShellService) PrepareLibrary(path string) (playback.Plan, error) {
+	stream, err := s.library.StreamFor(path)
+	if err != nil {
+		return playback.Plan{}, err
+	}
+	return s.playback.Prepare(context.Background(), stream)
+}
+
+// RecordLibraryProgress 记录本地媒体的观看进度，供首页继续观看使用。
+func (s *ShellService) RecordLibraryProgress(path string, progress, duration float64) error {
+	return s.library.RecordProgress(path, int(progress), int(duration))
 }
 
 // progressMu 串行化进度事件的上报（collectChannels 的并发回调会并发触发 emit）。

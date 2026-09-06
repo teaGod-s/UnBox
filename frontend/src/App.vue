@@ -14,6 +14,8 @@ const DONATE_URL = 'https://afdian.com/a/teaGod'
 
 interface ChannelInfo { ID: string; Name: string; Group: string; Logo: string; Favorited: boolean }
 interface Progress { Stage: string; Message: string; Done: number; Total: number }
+interface LibraryDir { Path: string; AddedAt: number }
+interface LibraryItem { Path: string; Name: string; Dir: string; Ext: string; Size: number; MTime: number; Poster: string }
 
 const platform = ref('…')
 const playerReady = ref(false)
@@ -28,7 +30,7 @@ const importSummary = ref('')
 const errMsg = ref('')
 const importProgress = ref<Progress | null>(null)
 const importing = ref(false)
-const mode = ref<'home' | 'vod' | 'live' | 'search' | 'favorites' | 'settings'>('home')
+const mode = ref<'home' | 'vod' | 'live' | 'library' | 'search' | 'favorites' | 'settings'>('home')
 const sources = ref<SourceInfo[]>([])
 const activeSite = ref('')
 const activeLine = ref('')
@@ -76,7 +78,16 @@ const showVodHistory = ref(false)
 const showLiveHistory = ref(false)
 const homeHistory = ref<VodHistoryInfo[]>([])
 const currentVod = ref<{ site: string; vodID: string } | null>(null)
+const currentLibraryPath = ref('')
 const pendingSeek = ref(0)
+const libraryDirs = ref<LibraryDir[]>([])
+const libraryItems = ref<LibraryItem[]>([])
+const libraryAddingDir = ref(false)
+const libraryNewDir = ref('')
+const libraryScanning = ref(false)
+const libraryMessage = ref('')
+const libraryError = ref('')
+const libraryUnavailable = ref<string[]>([])
 // 延迟续播目标：进详情时记下上次看的集数与进度，等用户点播放才套用。
 const vodResume = ref<{ EpID: string; Progress: number } | null>(null)
 const logs = ref('')
@@ -125,6 +136,7 @@ const activePlaybackPlan = computed(() => playbackPlanForMode(mode.value, {
 const livePagePlaybackPlan = computed(() => mode.value === 'live' && playbackOwner.value === 'live' ? livePlaybackPlan.value : null)
 const vodPagePlaybackPlan = computed(() => mode.value === 'vod' && vodView.value === 'detail' && playbackOwner.value === 'vod' ? vodPlaybackPlan.value : null)
 const showVodNoResults = computed(() => shouldShowVodNoResults(vodQuery.value, completedSearchQuery.value, searching.value, vodSearchItems.value.length))
+const libraryPagePlaybackPlan = computed(() => mode.value === 'library' && playbackOwner.value === 'vod' ? vodPlaybackPlan.value : null)
 
 function resetEpisodePage() {
   episodePage.value = 0
@@ -221,10 +233,10 @@ async function recheckMpv() {
   } catch (e) { handleError(e) }
 }
 
-async function switchMode(m: 'home' | 'vod' | 'live' | 'search' | 'favorites' | 'settings') {
+async function switchMode(m: 'home' | 'vod' | 'live' | 'library' | 'search' | 'favorites' | 'settings') {
   if (m !== 'search' && searching.value) await invalidateSearch()
   if (m !== 'live' && activePlayback.value?.scope === 'live') await stopPlayback('live')
-  if (m !== 'vod' && activePlayback.value?.scope === 'vod') await stopPlayback('vod')
+  if (m !== mode.value && activePlayback.value?.scope === 'vod') await stopPlayback('vod')
   if (vodView.value === 'detail') currentVod.value = null
   mode.value = m
   if (m === 'vod') {
@@ -244,6 +256,7 @@ async function switchMode(m: 'home' | 'vod' | 'live' | 'search' | 'favorites' | 
     await loadVodFavorites()
   }
   else if (m === 'home') await refreshHome()
+  else if (m === 'library') { await loadLibrary(); await refreshHome() }
   else if (m === 'settings') { await reloadSourceHistory(); await refreshLogs(); await loadSearchThreads() }
 }
 
@@ -251,6 +264,68 @@ async function refreshHome() {
   try {
     homeHistory.value = (await ShellService.ListVodHistory()) ?? []
   } catch (e) { handleError(e) }
+}
+
+async function loadLibrary() {
+  libraryError.value = ''
+  try {
+    libraryDirs.value = (await ShellService.ListLibraryDirs()) ?? []
+    libraryItems.value = (await ShellService.ListLibrary()) ?? []
+  } catch (e) {
+    libraryError.value = String(e)
+    handleError(e)
+  }
+}
+
+async function addLibraryDir() {
+  libraryAddingDir.value = true
+  libraryError.value = ''
+}
+
+async function confirmLibraryDir() {
+  const path = libraryNewDir.value.trim()
+  if (!path) return
+  try {
+    await ShellService.AddLibraryDir(path)
+    libraryNewDir.value = ''
+    libraryAddingDir.value = false
+    await loadLibrary()
+  } catch (e) {
+    libraryError.value = String(e)
+    handleError(e)
+  }
+}
+
+async function removeLibraryDir(path: string) {
+  try {
+    await ShellService.RemoveLibraryDir(path)
+    await loadLibrary()
+  } catch (e) {
+    libraryError.value = String(e)
+    handleError(e)
+  }
+}
+
+async function rescanLibrary() {
+  if (libraryScanning.value) return
+  libraryScanning.value = true
+  libraryError.value = ''
+  libraryMessage.value = ''
+  try {
+    const result = await ShellService.RescanLibrary()
+    libraryUnavailable.value = result.Unavailable ?? []
+    libraryMessage.value = `扫描完成：新增 ${result.Added}，移除 ${result.Removed}`
+    await loadLibrary()
+  } catch (e) {
+    libraryError.value = String(e)
+    handleError(e)
+  } finally {
+    libraryScanning.value = false
+  }
+}
+
+function libraryProgress(path: string) {
+  return homeHistory.value.find(h => h.Site === 'local' && h.VodID === path)
 }
 
 async function loadVodSearchHistory() {
@@ -314,6 +389,11 @@ function fmtProgress(sec: number) {
 
 async function resumeVod(h: VodHistoryInfo) {
   errMsg.value = ''
+  if (h.Site === 'local') {
+    await switchMode('library')
+    await playLibraryItem(h.VodID)
+    return
+  }
   try {
     await stopPlayback('live')
     mode.value = 'vod'
@@ -326,6 +406,38 @@ async function resumeVod(h: VodHistoryInfo) {
     vodDetail.value = await ShellService.VodDetail(h.Site, h.VodID)
     await applyVodResume(h)
   } catch (e) { handleError(e) }
+}
+
+async function playLibraryItem(path: string) {
+  errMsg.value = ''
+  await stopPlayback('live')
+  const token = beginPlayback('vod')
+  vodPlaybackPlan.value = null
+  vodPlaybackToken.value = 0
+  vodPlaybackStatus.value = 'preparing'
+  vodPlaybackError.value = ''
+  currentVod.value = null
+  currentLibraryPath.value = path
+  const history = libraryProgress(path)
+  pendingSeek.value = history?.Progress ?? 0
+  vodNowPlaying.value = libraryItems.value.find(item => item.Path === path)?.Name ?? path
+  try {
+    const plan = await ShellService.PrepareLibrary(path) as unknown as PlaybackPlan
+    if (!isCurrentPlayback('vod', token)) { await pauseStalePlayback(token); return }
+    vodPlaybackPlan.value = plan
+    vodPlaybackToken.value = token
+    vodPlaybackStatus.value = 'playing'
+    await ShellService.RecordLibraryProgress(path, pendingSeek.value, history?.Duration ?? 0)
+    await refreshHome()
+  } catch (e) {
+    if (isCurrentPlayback('vod', token)) {
+      vodPlaybackPlan.value = null
+      vodPlaybackToken.value = 0
+      vodPlaybackStatus.value = 'error'
+      vodPlaybackError.value = String(e)
+      handleError(e)
+    }
+  }
 }
 
 // applyPendingSeek 给 mpv 后端补一次定位（网页播放器由 PlaybackView 的 seek-to 自行消费）。
@@ -730,7 +842,7 @@ async function fallbackToMpv(scope: PlaybackScope, id: string, token: number, po
       scope,
       async () => await ShellService.FallbackToMPVWithToken(id, token, start) as unknown as PlaybackPlan,
       () => isCurrentPlayback(scope, token) &&
-        (scope === 'live' ? mode.value === 'live' : mode.value === 'vod' && vodView.value === 'detail'),
+        (scope === 'live' ? mode.value === 'live' : (mode.value === 'vod' && vodView.value === 'detail') || mode.value === 'library'),
       (target, plan) => {
         if (target === 'live') {
           livePlaybackPlan.value = plan
@@ -778,6 +890,7 @@ async function stopPlayback(scope: PlaybackScope) {
     vodPlaybackToken.value = 0
     vodNowPlaying.value = ''
     currentVod.value = null
+    currentLibraryPath.value = ''
     vodPlaybackStatus.value = 'idle'
     vodPlaybackError.value = ''
   }
@@ -814,6 +927,17 @@ async function onVodProgress(token: number, time: number, duration: number) {
   catch { /* 进度保存失败不阻断 */ }
 }
 
+async function onLibraryProgress(token: number, time: number, duration: number) {
+  if (!isCurrentPlayback('vod', token) || mode.value !== 'library' || !currentLibraryPath.value) return
+  const now = Date.now()
+  if (now - lastProgressSave < 10000) return
+  lastProgressSave = now
+  try {
+    await ShellService.RecordLibraryProgress(currentLibraryPath.value, time, duration)
+    await refreshHome()
+  } catch { /* 进度保存失败不阻断播放 */ }
+}
+
 async function refreshLogs() {
   try { logs.value = await ShellService.GetLogs() } catch (e) { handleError(e) }
 }
@@ -848,10 +972,14 @@ async function copyLogs() {
 
 async function pollMpvProgress() {
   const token = vodPlaybackToken.value
-  if (!isCurrentPlayback('vod', token) || !shouldRecordVodProgress(mode.value, vodView.value) || !currentVod.value || activePlaybackPlan.value?.Backend !== 'mpv') return
+  if (!isCurrentPlayback('vod', token) || !shouldRecordVodProgress(mode.value, vodView.value) || activePlaybackPlan.value?.Backend !== 'mpv') return
   try {
     const pos = await ShellService.Position()
-    await ShellService.UpdateVodProgress(currentVod.value.site, currentVod.value.vodID, pos, 0)
+    if (mode.value === 'library' && currentLibraryPath.value) {
+      await ShellService.RecordLibraryProgress(currentLibraryPath.value, pos, 0)
+    } else if (currentVod.value) {
+      await ShellService.UpdateVodProgress(currentVod.value.site, currentVod.value.vodID, pos, 0)
+    }
   } catch { /* 忽略 */ }
 }
 
@@ -946,6 +1074,7 @@ onMounted(() => {
       <button :class="{ active: mode === 'home' }" @click="switchMode('home')">首页</button>
       <button :class="{ active: mode === 'vod' }" @click="switchMode('vod')">点播</button>
       <button :class="{ active: mode === 'live' }" @click="switchMode('live')">直播</button>
+      <button :class="{ active: mode === 'library' }" @click="switchMode('library')">媒体库</button>
       <button :class="{ active: mode === 'search' }" @click="switchMode('search')">搜索</button>
       <button :class="{ active: mode === 'favorites' }" @click="switchMode('favorites')">收藏</button>
       <button class="settings-btn" :class="{ active: mode === 'settings' }" @click="switchMode('settings')">设置</button>
@@ -1054,6 +1183,46 @@ onMounted(() => {
           </li>
         </ul>
       </section>
+    </section>
+
+    <!-- 媒体库 -->
+    <section v-if="mode === 'library'" class="library-page">
+      <div class="library-toolbar">
+        <h2>媒体库</h2>
+        <div class="library-actions">
+          <button type="button" @click="addLibraryDir">添加目录</button>
+          <button type="button" :disabled="libraryScanning" @click="rescanLibrary">{{ libraryScanning ? '扫描中…' : '重新扫描' }}</button>
+        </div>
+      </div>
+      <div v-if="libraryMessage" class="ok">{{ libraryMessage }}</div>
+      <div v-if="libraryError" class="src-import-error"><span>{{ libraryError }}</span><button type="button" title="关闭" @click="libraryError = ''">✕</button></div>
+      <div v-if="libraryUnavailable.length" class="library-warning">无法访问：{{ libraryUnavailable.join('、') }}</div>
+      <form v-if="libraryAddingDir" class="library-add" @submit.prevent="confirmLibraryDir">
+        <input v-model="libraryNewDir" autofocus placeholder="输入目录绝对路径" />
+        <button type="submit">确定</button>
+        <button type="button" @click="libraryAddingDir = false; libraryNewDir = ''">取消</button>
+      </form>
+      <ul class="library-dirs">
+        <li v-for="dir in libraryDirs" :key="dir.Path">
+          <span>{{ dir.Path }}</span>
+          <button type="button" class="row-delete" title="移除目录" @click="removeLibraryDir(dir.Path)">移除</button>
+        </li>
+      </ul>
+      <p v-if="!libraryItems.length" class="home-empty">尚未扫描到视频</p>
+      <ul v-else class="library-list">
+        <li v-for="item in libraryItems" :key="item.Path" @click="playLibraryItem(item.Path)">
+          <img v-if="item.Poster" :src="item.Poster" class="thumb" loading="lazy" alt="" @error="imgError" />
+          <span class="library-item-info"><strong>{{ item.Name }}</strong><small>{{ item.Dir }}</small></span>
+          <span v-if="libraryProgress(item.Path)?.Progress" class="library-progress">看到 {{ fmtProgress(libraryProgress(item.Path)!.Progress) }}</span>
+        </li>
+      </ul>
+      <aside v-if="libraryPagePlaybackPlan || vodPlaybackStatus === 'preparing' || vodPlaybackStatus === 'error'" class="library-player">
+        <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>
+        <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载本地视频…</p>
+        <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">本地视频播放失败：{{ vodPlaybackError }}</p>
+        <PlaybackView :plan="libraryPagePlaybackPlan" :seek-to="pendingSeek" @(fallback)="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @progress="(time, duration) => onLibraryProgress(vodPlaybackToken, time, duration)" />
+        <div class="controls" v-if="libraryPagePlaybackPlan?.Backend === 'mpv'"><button @click="pause">暂停</button><button @click="resume">继续</button><input type="range" min="0" max="100" @input="setVolume" /></div>
+      </aside>
     </section>
 
     <!-- 点播 -->

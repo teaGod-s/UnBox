@@ -1,4 +1,4 @@
-export type PlaybackMode = 'home' | 'vod' | 'live' | 'search' | 'favorites' | 'settings'
+export type PlaybackMode = 'home' | 'vod' | 'live' | 'library' | 'search' | 'favorites' | 'settings'
 export type PlaybackScope = 'live' | 'vod'
 export type PlaybackStatus = 'idle' | 'preparing' | 'playing' | 'error'
 
@@ -18,9 +18,9 @@ export function shouldPauseStalePlayback(active: ActivePlaybackSession | null): 
 }
 
 export function playbackPlanForMode<T>(mode: PlaybackMode, plans: { live: T | null; vod: T | null }, owner?: PlaybackScope): T | null {
-  if (owner && owner !== mode) return null
+  if (owner && owner !== mode && !(mode === 'library' && owner === 'vod')) return null
   if (mode === 'live') return plans.live
-  if (mode === 'vod') return plans.vod
+  if (mode === 'vod' || mode === 'library') return plans.vod
   return null
 }
 
@@ -37,5 +37,5 @@ export async function resolvePlaybackFallback<T>(
 }
 
 export function shouldRecordVodProgress(mode: PlaybackMode, vodView: string): boolean {
-  return mode === 'vod' && vodView === 'detail'
+  return (mode === 'vod' && vodView === 'detail') || mode === 'library'
 }

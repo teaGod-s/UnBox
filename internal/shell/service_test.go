@@ -3,6 +3,7 @@ package shell
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -27,6 +28,69 @@ func newTestService(t *testing.T) *ShellService {
 	svc := NewShellService(live.New(channels), nil, s)
 	t.Cleanup(func() { s.Close() })
 	return svc
+}
+
+func TestLibraryDirRoundTrip(t *testing.T) {
+	svc := newTestService(t)
+	dir := t.TempDir()
+	if err := svc.AddLibraryDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	dirs, err := svc.ListLibraryDirs()
+	if err != nil || len(dirs) != 1 || dirs[0].Path != dir {
+		t.Fatalf("dirs=%+v err=%v", dirs, err)
+	}
+	if err := svc.RemoveLibraryDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	dirs, err = svc.ListLibraryDirs()
+	if err != nil || len(dirs) != 0 {
+		t.Fatalf("remove dirs=%+v err=%v", dirs, err)
+	}
+}
+
+func TestLibraryBindingsScanListAndProgress(t *testing.T) {
+	svc := newTestService(t)
+	root := t.TempDir()
+	path := filepath.Join(root, "movie.mp4")
+	if err := os.WriteFile(path, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.AddLibraryDir(root); err != nil {
+		t.Fatal(err)
+	}
+	result, err := svc.ScanLibrary()
+	if err != nil || result.Added != 1 {
+		t.Fatalf("scan=%+v err=%v", result, err)
+	}
+	items, err := svc.ListLibrary()
+	if err != nil || len(items) != 1 || items[0].Path != path {
+		t.Fatalf("items=%+v err=%v", items, err)
+	}
+	if err := svc.RecordLibraryProgress(path, 12, 90); err != nil {
+		t.Fatal(err)
+	}
+	history, err := svc.ListVodHistory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].Site != "local" || history[0].VodID != path || history[0].Progress != 12 {
+		t.Fatalf("history=%+v", history)
+	}
+}
+
+func TestPrepareLibraryRejectsUnregisteredPath(t *testing.T) {
+	svc := newTestService(t)
+	if _, err := svc.PrepareLibrary(filepath.Join(t.TempDir(), "outside.mp4")); err == nil {
+		t.Fatal("未注册目录中的本地媒体应被拒绝")
+	}
+}
+
+func TestPrepareLibraryRequiresStore(t *testing.T) {
+	svc := NewShellService(nil, nil, nil)
+	if _, err := svc.PrepareLibrary("/tmp/movie.mp4"); err == nil {
+		t.Fatal("无媒体库存储时不应允许本地播放")
+	}
 }
 
 func TestThemeRoundTrip(t *testing.T) {
@@ -54,7 +118,6 @@ func TestThemeEmptyService(t *testing.T) {
 		t.Fatalf("无 store 应安全返回空串, got %q, %v", theme, err)
 	}
 }
-
 
 func TestImportSubscriptionPlaylist(t *testing.T) {
 	svc := newTestService(t)

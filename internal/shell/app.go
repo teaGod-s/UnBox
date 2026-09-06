@@ -17,6 +17,7 @@ import (
 
 	assets "github.com/unbox/unbox"
 	"github.com/unbox/unbox/internal/config"
+	"github.com/unbox/unbox/internal/library"
 	"github.com/unbox/unbox/internal/playback"
 	"github.com/unbox/unbox/internal/player"
 	"github.com/unbox/unbox/internal/player/mpvplugin"
@@ -36,6 +37,7 @@ const testStreamURL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
 type ShellService struct {
 	player           player.Player
 	store            *store.Store
+	library          *library.Library
 	live             provider.Provider            // 已加载的直播 provider（LoadLive 后）
 	liveSources      []config.Live                // 待按需拉取的直播源定义
 	liveCount        int                          // 已加载的直播频道数

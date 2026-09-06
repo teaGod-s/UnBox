@@ -29,6 +29,25 @@ func newTestService(t *testing.T) *ShellService {
 	return svc
 }
 
+func TestLibraryDirRoundTrip(t *testing.T) {
+	svc := newTestService(t)
+	dir := t.TempDir()
+	if err := svc.AddLibraryDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	dirs, err := svc.ListLibraryDirs()
+	if err != nil || len(dirs) != 1 || dirs[0].Path != dir {
+		t.Fatalf("dirs=%+v err=%v", dirs, err)
+	}
+	if err := svc.RemoveLibraryDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	dirs, err = svc.ListLibraryDirs()
+	if err != nil || len(dirs) != 0 {
+		t.Fatalf("remove dirs=%+v err=%v", dirs, err)
+	}
+}
+
 func TestThemeRoundTrip(t *testing.T) {
 	svc := newTestService(t)
 	theme, err := svc.GetTheme()
@@ -54,7 +73,6 @@ func TestThemeEmptyService(t *testing.T) {
 		t.Fatalf("无 store 应安全返回空串, got %q, %v", theme, err)
 	}
 }
-
 
 func TestImportSubscriptionPlaylist(t *testing.T) {
 	svc := newTestService(t)

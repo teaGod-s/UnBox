@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -43,27 +44,44 @@ func (g *MpvGenerator) Generate(videoPath, cachePath string) error {
 		return fmt.Errorf("创建缩略图目录失败: %w", err)
 	}
 	_ = os.Remove(cachePath)
+	outDir, err := os.MkdirTemp(filepath.Dir(cachePath), ".unbox-thumb-*")
+	if err != nil {
+		return fmt.Errorf("创建 mpv 输出目录失败: %w", err)
+	}
+	defer os.RemoveAll(outDir)
 	ctx, cancel := context.WithTimeout(context.Background(), g.timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, g.mpvPath,
 		"--no-config", "--vo=image", "--vo-image-format=jpg",
-		"--frames=1", "--start=10%", "--o="+cachePath, videoPath)
+		"--frames=1", "--start=10%", "--vo-image-outdir="+outDir, videoPath)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if err := cmd.Run(); err != nil {
-		_ = os.Remove(cachePath)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return fmt.Errorf("mpv 抓帧超时: %w", ctx.Err())
 		}
 		return fmt.Errorf("mpv 抓帧失败: %w", err)
 	}
-	info, err := os.Stat(cachePath)
-	if err != nil || info.Size() == 0 {
-		_ = os.Remove(cachePath)
-		if err != nil {
-			return fmt.Errorf("mpv 抓帧未产出文件: %w", err)
-		}
-		return fmt.Errorf("mpv 抓帧未产出文件: %s", cachePath)
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return fmt.Errorf("读取 mpv 输出目录失败: %w", err)
 	}
-	return nil
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if ext := strings.ToLower(filepath.Ext(entry.Name())); ext != ".jpg" && ext != ".jpeg" {
+			continue
+		}
+		generated := filepath.Join(outDir, entry.Name())
+		info, statErr := os.Stat(generated)
+		if statErr != nil || info.Size() == 0 {
+			continue
+		}
+		if err := os.Rename(generated, cachePath); err != nil {
+			return fmt.Errorf("保存 mpv 缩略图失败: %w", err)
+		}
+		return nil
+	}
+	return fmt.Errorf("mpv 抓帧未产出文件: %s", cachePath)
 }

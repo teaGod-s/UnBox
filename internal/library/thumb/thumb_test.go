@@ -13,8 +13,9 @@ func fakeMPV(t *testing.T) string {
 	dir := t.TempDir()
 	script := filepath.Join(dir, "fake-mpv.sh")
 	body := `#!/bin/sh
-for i in "$@"; do case "$i" in --o=*) out="${i#--o=}";; esac; done
-printf '\xff\xd8\xff\xd9' > "$out"
+for i in "$@"; do case "$i" in --vo-image-outdir=*) out="${i#--vo-image-outdir=}";; esac; done
+mkdir -p "$out"
+printf '\xff\xd8\xff\xd9' > "$out/00000001.jpg"
 `
 	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
 		t.Fatal(err)

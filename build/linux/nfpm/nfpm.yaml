@@ -31,6 +31,7 @@ depends:
   # WebKitGTK uses GStreamer for native MP4/WebM playback and WebVTT subtitles.
   - gstreamer1.0-libav
   - gstreamer1.0-plugins-bad
+  - mpv
 
 # Distribution-specific overrides for different package formats
 overrides:

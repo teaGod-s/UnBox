@@ -866,7 +866,9 @@ body {
   min-height: 0; /* 不加的话 min-height:auto 会让它按内容撑开，溢出而非内部滚动 */
   flex-direction: column;
   gap: 0.75rem;
-  padding-inline: 0.5rem;
+  padding-left: 0.5rem;
+  /* 右侧留出 body gap + 左侧内边距，使卡片两侧相对播放器父容器对称 */
+  padding-right: calc(1rem + 0.5rem);
   overflow-y: auto;
   scrollbar-width: thin;
 }

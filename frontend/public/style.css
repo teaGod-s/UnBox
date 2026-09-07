@@ -905,11 +905,41 @@ body {
 .library-add input {
   flex: 1;
   min-width: 0;
-  padding: 0.45rem 0.6rem;
+  padding: 0.45rem 2.5rem 0.45rem 0.6rem;
   color: var(--text);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 0.4rem;
+}
+
+/* wrapper 承接 flex:1，让 input 在其内铺满，browse 钮 absolute 叠在右侧 */
+.library-add-input {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+
+/* 三层选择器特异性 0,3,0 压过 .library-add button 的 0,1,1，
+   保证 overlay 钮透明无边框，不继承按钮底色 */
+.library-add .library-add-input .library-add-browse {
+  position: absolute;
+  right: 0.3rem;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.15rem 0.35rem;
+  font-size: 0.85rem;
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 0.3rem;
+  white-space: nowrap;
+}
+
+.library-add .library-add-input .library-add-browse:hover {
+  color: var(--accent);
+  background: transparent;
 }
 
 .library-dirs,

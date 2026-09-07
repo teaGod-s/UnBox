@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Events, Browser } from '@wailsio/runtime'
+import { Events, Browser, Dialogs } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type VodFavoriteInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import VodDetailHeader from './components/VodDetailHeader.vue'
@@ -294,6 +294,18 @@ async function confirmLibraryDir() {
     libraryError.value = String(e)
     handleError(e)
   }
+}
+
+// 走各平台原生目录选择器（Windows 资源管理器 / macOS NSOpenPanel / Linux GTK），
+// 选完填入输入框：与手动录入殊途同归走 confirmLibraryDir，两种方式并存。
+async function browseLibraryDir() {
+  const picked = await Dialogs.OpenFile({
+    CanChooseDirectories: true,
+    CanChooseFiles: false,
+    AllowsMultipleSelection: false,
+    Title: '选择媒体目录',
+  })
+  if (picked) libraryNewDir.value = picked
 }
 
 async function removeLibraryDir(path: string) {
@@ -1222,7 +1234,10 @@ onMounted(() => {
       <div class="library-body">
         <aside class="library-player">
           <form v-if="libraryAddingDir" class="library-add" @submit.prevent="confirmLibraryDir">
-            <input v-model="libraryNewDir" autofocus placeholder="输入目录绝对路径" />
+            <div class="library-add-input">
+              <input v-model="libraryNewDir" autofocus placeholder="输入目录绝对路径" />
+              <button type="button" class="library-add-browse" title="浏览目录…" @click="browseLibraryDir">浏览</button>
+            </div>
             <button type="submit">确定</button>
             <button type="button" @click="libraryAddingDir = false; libraryNewDir = ''">取消</button>
           </form>

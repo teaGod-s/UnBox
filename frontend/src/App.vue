@@ -1027,6 +1027,25 @@ function imgError(e: Event) {
   ;(e.target as HTMLImageElement).style.display = 'none'
 }
 
+// scrollxEnter/Leave 让过长文本在悬停时自动左滑揭示隐藏部分（无手动滚动条）。
+// 纯 CSS 做不到：translateX 百分比相对自身宽度，无法得知溢出量，故用 JS 量取。
+function scrollxEnter(e: MouseEvent) {
+  const box = e.currentTarget as HTMLElement
+  const inner = box.firstElementChild as HTMLElement | null
+  if (!inner) return
+  const overflow = inner.scrollWidth - box.clientWidth
+  if (overflow <= 0) return
+  inner.style.transition = `transform ${Math.min(3000, 600 + overflow * 4)}ms ease-out`
+  inner.style.transform = `translateX(${-overflow}px)`
+}
+function scrollxLeave(e: MouseEvent) {
+  const box = e.currentTarget as HTMLElement
+  const inner = box.firstElementChild as HTMLElement | null
+  if (!inner) return
+  inner.style.transition = 'transform 300ms ease-in-out'
+  inner.style.transform = ''
+}
+
 onMounted(() => {
   refresh()
   loadTheme()
@@ -1194,35 +1213,39 @@ onMounted(() => {
           <button type="button" :disabled="libraryScanning" @click="rescanLibrary">{{ libraryScanning ? '扫描中…' : '重新扫描' }}</button>
         </div>
       </div>
-      <div v-if="libraryMessage" class="ok">{{ libraryMessage }}</div>
-      <div v-if="libraryError" class="src-import-error"><span>{{ libraryError }}</span><button type="button" title="关闭" @click="libraryError = ''">✕</button></div>
-      <div v-if="libraryUnavailable.length" class="library-warning">无法访问：{{ libraryUnavailable.join('、') }}</div>
-      <form v-if="libraryAddingDir" class="library-add" @submit.prevent="confirmLibraryDir">
-        <input v-model="libraryNewDir" autofocus placeholder="输入目录绝对路径" />
-        <button type="submit">确定</button>
-        <button type="button" @click="libraryAddingDir = false; libraryNewDir = ''">取消</button>
-      </form>
-      <ul class="library-dirs">
-        <li v-for="dir in libraryDirs" :key="dir.Path">
-          <span>{{ dir.Path }}</span>
-          <button type="button" class="row-delete" title="移除目录" @click="removeLibraryDir(dir.Path)">移除</button>
-        </li>
-      </ul>
-      <p v-if="!libraryItems.length" class="home-empty">尚未扫描到视频</p>
-      <ul v-else class="library-list">
-        <li v-for="item in libraryItems" :key="item.Path" @click="playLibraryItem(item.Path)">
-          <img v-if="item.Poster" :src="item.Poster" class="thumb" loading="lazy" alt="" @error="imgError" />
-          <span class="library-item-info"><strong>{{ item.Name }}</strong><small>{{ item.Dir }}</small></span>
-          <span v-if="libraryProgress(item.Path)?.Progress" class="library-progress">看到 {{ fmtProgress(libraryProgress(item.Path)!.Progress) }}</span>
-        </li>
-      </ul>
-      <aside v-if="libraryPagePlaybackPlan || vodPlaybackStatus === 'preparing' || vodPlaybackStatus === 'error'" class="library-player">
-        <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>
-        <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载本地视频…</p>
-        <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">本地视频播放失败：{{ vodPlaybackError }}</p>
-        <PlaybackView :plan="libraryPagePlaybackPlan" :seek-to="pendingSeek" @(fallback)="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @progress="(time, duration) => onLibraryProgress(vodPlaybackToken, time, duration)" />
-        <div class="controls" v-if="libraryPagePlaybackPlan?.Backend === 'mpv'"><button @click="pause">暂停</button><button @click="resume">继续</button><input type="range" min="0" max="100" @input="setVolume" /></div>
-      </aside>
+      <div class="library-body">
+        <aside class="library-player">
+          <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>
+          <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载本地视频…</p>
+          <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">本地视频播放失败：{{ vodPlaybackError }}</p>
+          <PlaybackView :plan="libraryPagePlaybackPlan" :seek-to="pendingSeek" empty-text="点右侧视频开始播放" @(fallback)="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @progress="(time, duration) => onLibraryProgress(vodPlaybackToken, time, duration)" />
+          <div class="controls" v-if="libraryPagePlaybackPlan?.Backend === 'mpv'"><button @click="pause">暂停</button><button @click="resume">继续</button><input type="range" min="0" max="100" @input="setVolume" /></div>
+        </aside>
+        <div class="library-side">
+          <div v-if="libraryMessage" class="ok">{{ libraryMessage }}</div>
+          <div v-if="libraryError" class="src-import-error"><span>{{ libraryError }}</span><button type="button" title="关闭" @click="libraryError = ''">✕</button></div>
+          <div v-if="libraryUnavailable.length" class="library-warning">无法访问：{{ libraryUnavailable.join('、') }}</div>
+          <form v-if="libraryAddingDir" class="library-add" @submit.prevent="confirmLibraryDir">
+            <input v-model="libraryNewDir" autofocus placeholder="输入目录绝对路径" />
+            <button type="submit">确定</button>
+            <button type="button" @click="libraryAddingDir = false; libraryNewDir = ''">取消</button>
+          </form>
+          <ul class="library-dirs">
+            <li v-for="dir in libraryDirs" :key="dir.Path">
+              <span class="scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ dir.Path }}</span></span>
+              <button type="button" class="row-delete" title="移除目录" @click="removeLibraryDir(dir.Path)">移除</button>
+            </li>
+          </ul>
+          <p v-if="!libraryItems.length" class="home-empty">尚未扫描到视频</p>
+          <ul v-else class="library-list">
+            <li v-for="item in libraryItems" :key="item.Path" @click="playLibraryItem(item.Path)">
+              <img v-if="item.Poster" :src="item.Poster" class="thumb" loading="lazy" alt="" @error="imgError" />
+              <span class="library-item-info"><strong class="scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ item.Name }}</span></strong><small class="scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ item.Dir }}</span></small></span>
+              <span v-if="libraryProgress(item.Path)?.Progress" class="library-progress">看到 {{ fmtProgress(libraryProgress(item.Path)!.Progress) }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
     </section>
 
     <!-- 点播 -->

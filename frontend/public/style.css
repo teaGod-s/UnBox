@@ -822,11 +822,85 @@ body {
 }
 
 .library-toolbar h2 { margin: 0; }
+
+/* 播放器在左占大头（填满剩余宽度 80%），片单条在右恒占 20%、随窗口切 1/2 列，整体内部滚动 */
+.library-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 1rem;
+}
+
+.library-player {
+  display: flex;
+  flex: 1 1 auto; /* 填满片单条之外的剩余宽度（约 80–90%） */
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+}
+
+.library-player .now {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+}
+
+.library-player .playback-view {
+  flex: 0 0 auto; /* 不填充播放器剩余高度：盒子保持 16:9，高窗下下方留白（面板色），宽窗下 max-height 兜底不溢出、视频靠 object-fit:contain 居中不变形 */
+  width: 100%;
+  aspect-ratio: 16/9;
+  max-height: 100%;
+}
+
+.library-side {
+  display: flex;
+  flex: 0 0 20%; /* 片单条恒占页宽 20%，不随窗口缩放；播放器填其余 80% */
+  min-width: 0;
+  min-height: 0; /* 不加的话 min-height:auto 会让它按内容撑开，溢出而非内部滚动 */
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  container-type: inline-size; /* 片单条够宽（窗口 ≥1200px、条宽 ≥240px）时切两列 */
+}
+
+/* 子项按内容高度排布，不压缩，超出部分由 .library-side 滚动 */
+.library-side > * { flex: 0 0 auto; }
+
 .library-actions { display: flex; gap: 0.5rem; }
 
 .library-add {
   display: flex;
   gap: 0.5rem;
+}
+
+.library-actions button,
+.library-add button {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.library-actions button:hover,
+.library-add button:hover:not(:disabled) {
+  background: var(--btn-hover);
+}
+
+.library-actions button:disabled,
+.library-add button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .library-add input {
@@ -848,7 +922,8 @@ body {
 
 .library-dirs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* 目录区始终单行：多了横向滚动，不换行、不下压片单 */
+  overflow-x: auto;
   gap: 0.4rem;
 }
 
@@ -856,6 +931,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  flex-shrink: 0; /* 不被压缩：多了靠 .library-dirs 横向滚动，而非把目录挤窄 */
   max-width: 100%;
   padding: 0.35rem 0.5rem;
   overflow: hidden;
@@ -865,19 +941,17 @@ body {
   border-radius: 0.35rem;
 }
 
-.library-dirs li > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .library-warning { color: #e6b450; }
 
 .library-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: 1fr; /* 片单条窄时单列 */
   gap: 0.5rem;
-  overflow-y: auto;
+}
+
+/* 片单条自身够宽（≥240px，约 20%@1200px+ 窗口）才切两列，否则单列不挤 */
+@container (min-width: 240px) {
+  .library-list { grid-template-columns: 1fr 1fr; }
 }
 
 .library-list li {
@@ -904,22 +978,29 @@ body {
   gap: 0.2rem;
 }
 
-.library-item-info strong,
-.library-item-info small {
+.library-item-info small { color: var(--text-dim); }
+
+.library-progress {
+  flex: 0 0 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--accent);
+  font-size: 0.8rem;
 }
 
-.library-item-info small { color: var(--text-dim); }
-.library-progress { flex: 0 0 auto; color: var(--accent); font-size: 0.8rem; }
-
-.library-player {
-  flex: 0 0 auto;
-  min-width: 0;
+/* 过长片名/路径：默认省略号截断；悬停时由 JS 自动左滑揭示隐藏部分（无手动滚动条） */
+.scrollx {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.library-player .playback-view { width: min(100%, 720px); aspect-ratio: 16 / 9; }
+.scrollx-inner {
+  display: inline-block;
+  white-space: nowrap;
+}
 
 .tabs .settings-btn { margin-left: auto; }
 

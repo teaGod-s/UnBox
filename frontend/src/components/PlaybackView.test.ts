@@ -202,4 +202,19 @@ describe('PlaybackView', () => {
     expect(wrapper.find('video').exists()).toBe(false)
     expect(wrapper.text()).toContain('mpv')
   })
+
+  it('shows the default empty text with no plan', () => {
+    const wrapper = mount(PlaybackView, { props: { plan: null } })
+    expect(wrapper.find('video').exists()).toBe(false)
+    expect(wrapper.text()).toContain('选择频道或剧集开始播放')
+  })
+
+  it('shows the empty text the caller provides', () => {
+    const wrapper = mount(PlaybackView, {
+      props: { plan: null, emptyText: '点右侧视频开始播放' },
+    })
+    expect(wrapper.find('video').exists()).toBe(false)
+    expect(wrapper.text()).toContain('点右侧视频开始播放')
+    expect(wrapper.text()).not.toContain('选择频道或剧集开始播放')
+  })
 })

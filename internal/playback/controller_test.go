@@ -37,7 +37,7 @@ func (f *fakePlayer) Load(_ context.Context, s player.Stream) error {
 }
 func (f *fakePlayer) Play() error                             { f.played++; return nil }
 func (f *fakePlayer) Pause() error                            { return nil }
-func (f *fakePlayer) Seek(sec float64) error { f.seeked = append(f.seeked, sec); return nil }
+func (f *fakePlayer) Seek(sec float64) error                  { f.seeked = append(f.seeked, sec); return nil }
 func (f *fakePlayer) SetVolume(int) error                     { return nil }
 func (f *fakePlayer) SelectTrack(player.TrackKind, int) error { return nil }
 func (f *fakePlayer) State() player.State                     { return player.State{} }

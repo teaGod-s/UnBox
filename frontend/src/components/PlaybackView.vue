@@ -11,7 +11,7 @@ export interface PlaybackPlan {
   CanFallback: boolean
 }
 
-const props = defineProps<{ plan: PlaybackPlan | null; seekTo?: number }>()
+const props = defineProps<{ plan: PlaybackPlan | null; seekTo?: number; emptyText?: string }>()
 const emit = defineEmits<{ fallback: [id: string, position: number]; progress: [time: number, duration: number] }>()
 const video = ref<HTMLVideoElement | null>(null)
 let hls: Hls | null = null
@@ -122,6 +122,6 @@ onBeforeUnmount(cleanup)
   <div class="playback-view">
     <video v-if="plan?.Backend === 'web'" ref="video" controls playsinline preload="metadata" @timeupdate="onTimeUpdate" @loadedmetadata="onLoadedMetadata" />
     <div v-else-if="plan?.Backend === 'mpv'" class="mpv-status">正在使用 mpv 播放</div>
-    <div v-else class="playback-empty">选择频道或剧集开始播放</div>
+    <div v-else class="playback-empty">{{ emptyText || '选择频道或剧集开始播放' }}</div>
   </div>
 </template>

@@ -1208,6 +1208,12 @@ onMounted(() => {
     <section v-if="mode === 'library'" class="library-page">
       <div class="library-toolbar">
         <h2>媒体库</h2>
+        <ul class="library-dirs">
+          <li v-for="dir in libraryDirs" :key="dir.Path">
+            <span class="scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ dir.Path }}</span></span>
+            <button type="button" class="row-delete" title="移除目录" @click="removeLibraryDir(dir.Path)">移除</button>
+          </li>
+        </ul>
         <div class="library-actions">
           <button type="button" @click="addLibraryDir">添加目录</button>
           <button type="button" :disabled="libraryScanning" @click="rescanLibrary">{{ libraryScanning ? '扫描中…' : '重新扫描' }}</button>
@@ -1230,12 +1236,6 @@ onMounted(() => {
             <button type="submit">确定</button>
             <button type="button" @click="libraryAddingDir = false; libraryNewDir = ''">取消</button>
           </form>
-          <ul class="library-dirs">
-            <li v-for="dir in libraryDirs" :key="dir.Path">
-              <span class="scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ dir.Path }}</span></span>
-              <button type="button" class="row-delete" title="移除目录" @click="removeLibraryDir(dir.Path)">移除</button>
-            </li>
-          </ul>
           <p v-if="!libraryItems.length" class="home-empty">尚未扫描到视频</p>
           <ul v-else class="library-list">
             <li v-for="item in libraryItems" :key="item.Path" @click="playLibraryItem(item.Path)">

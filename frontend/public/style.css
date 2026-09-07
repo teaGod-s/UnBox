@@ -823,7 +823,7 @@ body {
 
 .library-toolbar h2 { margin: 0; }
 
-/* 播放器在左占大头（填满剩余宽度 80%），片单条在右恒占 20%、随窗口切 1/2 列，整体内部滚动 */
+/* 播放器在左占大头（填满剩余宽度 80%），片单条在右恒占 20%、恒为单列，整体内部滚动 */
 .library-body {
   display: flex;
   flex: 1;
@@ -867,7 +867,6 @@ body {
   flex-direction: column;
   gap: 0.75rem;
   overflow-y: auto;
-  container-type: inline-size; /* 片单条够宽（窗口 ≥1200px、条宽 ≥240px）时切两列 */
 }
 
 /* 子项按内容高度排布，不压缩，超出部分由 .library-side 滚动 */
@@ -922,7 +921,10 @@ body {
 
 .library-dirs {
   display: flex;
-  flex-wrap: nowrap; /* 目录区始终单行：多了横向滚动，不换行、不下压片单 */
+  flex: 1 1 auto; /* 填满工具条标题与按钮之间的剩余宽度 */
+  min-width: 0; /* 允许内部 overflow-x 滚动，而非把工具条撑宽 */
+  align-items: center;
+  flex-wrap: nowrap; /* 目录区始终单行：多了横向滚动，不换行 */
   overflow-x: auto;
   gap: 0.4rem;
 }
@@ -932,7 +934,7 @@ body {
   align-items: center;
   gap: 0.4rem;
   flex-shrink: 0; /* 不被压缩：多了靠 .library-dirs 横向滚动，而非把目录挤窄 */
-  max-width: 100%;
+  max-width: 16rem; /* 单条目录不独占整行：超出靠省略号+悬停左滑揭示 */
   padding: 0.35rem 0.5rem;
   overflow: hidden;
   color: var(--text-soft);
@@ -945,13 +947,8 @@ body {
 
 .library-list {
   display: grid;
-  grid-template-columns: 1fr; /* 片单条窄时单列 */
+  grid-template-columns: 1fr; /* 片单恒为单列 */
   gap: 0.5rem;
-}
-
-/* 片单条自身够宽（≥240px，约 20%@1200px+ 窗口）才切两列，否则单列不挤 */
-@container (min-width: 240px) {
-  .library-list { grid-template-columns: 1fr 1fr; }
 }
 
 .library-list li {

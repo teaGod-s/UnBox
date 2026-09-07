@@ -866,8 +866,12 @@ body {
   min-height: 0; /* 不加的话 min-height:auto 会让它按内容撑开，溢出而非内部滚动 */
   flex-direction: column;
   gap: 0.75rem;
+  padding-inline: 0.5rem;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
+
+.library-side::-webkit-scrollbar { width: 6px; }
 
 /* 子项按内容高度排布，不压缩，超出部分由 .library-side 滚动 */
 .library-side > * { flex: 0 0 auto; }

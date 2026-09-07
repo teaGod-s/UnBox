@@ -14,3 +14,10 @@ describe('live layout contract', () => {
     expect(stylesheet).toMatch(/@media \(max-width: 900px\)[\s\S]*grid-template-areas:[\s\S]*"player"[\s\S]*"groups"[\s\S]*"channels"/)
   })
 })
+
+describe('library playlist layout contract', () => {
+  it('keeps symmetric card padding and a narrow vertical scrollbar', () => {
+    expect(stylesheet).toMatch(/\.library-side\s*\{[^}]*padding-inline:\s*0\.5rem;[^}]*scrollbar-width:\s*thin;/s)
+    expect(stylesheet).toMatch(/\.library-side::?-webkit-scrollbar\s*\{[^}]*width:\s*6px;/s)
+  })
+})

@@ -16,6 +16,7 @@ type server struct {
 	mu     sync.Mutex
 	ln     net.Listener
 	ids    map[string]string
+	rev    map[string]string
 	seq    int
 	token  string
 	closed bool
@@ -26,7 +27,7 @@ func newServer() *server {
 	if _, err := rand.Read(b); err != nil {
 		panic(fmt.Sprintf("生成本地媒体服务 token 失败: %v", err))
 	}
-	return &server{ids: make(map[string]string), token: hex.EncodeToString(b)}
+	return &server{ids: make(map[string]string), rev: make(map[string]string), token: hex.EncodeToString(b)}
 }
 
 // register 登记一个文件路径并返回可访问的 URL。
@@ -38,9 +39,13 @@ func (s *server) register(path string) string {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if id, ok := s.rev[absPath]; ok {
+		return s.urlLocked(id)
+	}
 	s.seq++
 	id := fmt.Sprintf("%d", s.seq)
 	s.ids[id] = absPath
+	s.rev[absPath] = id
 	if s.ln == nil && !s.closed {
 		ln, err := net.Listen("tcp4", "127.0.0.1:0")
 		if err == nil {
@@ -50,6 +55,10 @@ func (s *server) register(path string) string {
 			}()
 		}
 	}
+	return s.urlLocked(id)
+}
+
+func (s *server) urlLocked(id string) string {
 	host := "127.0.0.1"
 	if s.ln != nil {
 		host = s.ln.Addr().String()
@@ -71,6 +80,7 @@ func (s *server) handler() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		http.ServeFile(w, r, path)
 	})
 }

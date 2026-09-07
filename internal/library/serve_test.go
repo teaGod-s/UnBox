@@ -31,6 +31,20 @@ func TestServerServesRegisteredFile(t *testing.T) {
 	if string(b) != "fake-video-bytes" {
 		t.Fatalf("body=%q", b)
 	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("CORS 头=%q, want *", got)
+	}
+}
+
+func TestServerRegisterDeduplicatesPath(t *testing.T) {
+	s := newServer()
+	defer s.close()
+	p := filepath.Join(t.TempDir(), "a.mp4")
+	u1 := s.register(p)
+	u2 := s.register(p)
+	if u1 != u2 {
+		t.Fatalf("同一路径应复用注册: %q != %q", u1, u2)
+	}
 }
 
 func TestServerRejectsBadToken(t *testing.T) {

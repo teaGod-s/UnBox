@@ -6,6 +6,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/dop251/goja v0.0.0-20260826204918-8f1c0696a37b
 	github.com/wailsapp/wails/v3 v3.0.0-beta.9
+	golang.org/x/sync v0.22.0
 	golang.org/x/text v0.41.0
 	modernc.org/sqlite v1.56.0
 )

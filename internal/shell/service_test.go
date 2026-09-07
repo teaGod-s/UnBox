@@ -2,6 +2,7 @@ package shell
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -9,6 +10,8 @@ import (
 	"time"
 
 	"github.com/unbox/unbox/internal/config"
+	"github.com/unbox/unbox/internal/library"
+	"github.com/unbox/unbox/internal/library/thumb"
 	"github.com/unbox/unbox/internal/player"
 	"github.com/unbox/unbox/internal/provider"
 	"github.com/unbox/unbox/internal/provider/live"
@@ -90,6 +93,26 @@ func TestPrepareLibraryRequiresStore(t *testing.T) {
 	svc := NewShellService(nil, nil, nil)
 	if _, err := svc.PrepareLibrary("/tmp/movie.mp4"); err == nil {
 		t.Fatal("无媒体库存储时不应允许本地播放")
+	}
+}
+
+func TestLibraryThumbBindings(t *testing.T) {
+	svc := NewShellService(nil, nil, nil)
+	svc.library = library.New(nil, filepath.Join(t.TempDir(), "posters"), nil)
+	svc.mpvPlugin = nil
+	path := filepath.Join(t.TempDir(), "movie.mp4")
+	videoURL, posterURL, cached, err := svc.EnsureThumb(path, 1)
+	if err != nil || cached || videoURL == "" || posterURL == "" {
+		t.Fatalf("EnsureThumb = %q, %q, %v, %v", videoURL, posterURL, cached, err)
+	}
+	if _, err := svc.SaveThumb(path, 1, []byte{0xff, 0xd8, 0xff, 0xd9}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, cached, err = svc.EnsureThumb(path, 1); err != nil || !cached {
+		t.Fatalf("缓存后的 EnsureThumb cached=%v err=%v", cached, err)
+	}
+	if _, err := svc.GenerateThumbMpv(path, 1); !errors.Is(err, thumb.ErrNoMpv) {
+		t.Fatalf("无 mpv 时应透传 ErrNoMpv, got %v", err)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unbox/unbox/internal/library/thumb"
 	"github.com/unbox/unbox/internal/player"
 	"github.com/unbox/unbox/internal/store"
 )
@@ -26,12 +27,30 @@ type ScanResult struct {
 
 // Library 是本地媒体库门面：目录管理、扫描、播放流和进度记录。
 type Library struct {
-	store  *store.Store
-	server *server
+	store      *store.Store
+	server     *server
+	postersDir string
+	thumbGen   thumb.Generator
 }
 
-func New(st *store.Store) *Library {
-	return &Library{store: st, server: newServer()}
+// New 创建媒体库。可选参数依次为缓存目录和缩略图生成器，保留单参数调用兼容性。
+func New(st *store.Store, options ...any) *Library {
+	postersDir := ""
+	var gen thumb.Generator
+	if len(options) > 0 {
+		postersDir, _ = options[0].(string)
+	}
+	if len(options) > 1 {
+		gen, _ = options[1].(thumb.Generator)
+	}
+	if postersDir == "" {
+		if root, err := os.UserConfigDir(); err == nil {
+			postersDir = filepath.Join(root, "unbox", "posters")
+		} else {
+			postersDir = filepath.Join(os.TempDir(), "unbox", "posters")
+		}
+	}
+	return &Library{store: st, server: newServer(), postersDir: postersDir, thumbGen: gen}
 }
 
 // Close 关闭本地媒体服务。

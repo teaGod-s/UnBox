@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/unbox/unbox/internal/config"
 	"github.com/unbox/unbox/internal/library"
+	"github.com/unbox/unbox/internal/library/thumb"
 	"github.com/unbox/unbox/internal/playback"
 	"github.com/unbox/unbox/internal/player"
 	"github.com/unbox/unbox/internal/player/mpvplugin"
@@ -214,7 +216,7 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 		live:             pv,
 		player:           p,
 		store:            st,
-		library:          library.New(st),
+		library:          library.New(st, filepath.Join(root, "unbox", "posters"), nil),
 		vods:             map[string]provider.Provider{},
 		vodNames:         map[string]string{},
 		playback:         controller,
@@ -266,6 +268,34 @@ func (s *ShellService) RescanLibrary() (library.ScanResult, error) {
 // ListLibrary 返回本地媒体库扫描出的条目。
 func (s *ShellService) ListLibrary() ([]library.LibraryItem, error) {
 	return s.library.List()
+}
+
+// EnsureThumb 注册文件 URL 与缓存 URL，返回是否已缓存。
+func (s *ShellService) EnsureThumb(path string, mtime int64) (videoURL, posterURL string, cached bool, err error) {
+	if s.library == nil {
+		return "", "", false, errors.New("媒体库未就绪")
+	}
+	return s.library.EnsureThumb(path, mtime)
+}
+
+// SaveThumb 写入前端 web-canvas 抓到的 JPEG 字节到缓存。
+func (s *ShellService) SaveThumb(path string, mtime int64, jpeg []byte) (posterURL string, err error) {
+	if s.library == nil {
+		return "", errors.New("媒体库未就绪")
+	}
+	return s.library.SaveThumb(path, mtime, jpeg)
+}
+
+// GenerateThumbMpv 使用当前可用的 mpv 抓取本地视频首帧。
+func (s *ShellService) GenerateThumbMpv(path string, mtime int64) (posterURL string, err error) {
+	if s.library == nil {
+		return "", errors.New("媒体库未就绪")
+	}
+	mpvPath := ""
+	if s.mpvPlugin != nil {
+		mpvPath = s.mpvPlugin.Status().Path
+	}
+	return s.library.GenerateThumbMpv(path, mtime, thumb.NewMpvGenerator(mpvPath, 15*time.Second))
 }
 
 // PrepareLibrary 按本地媒体扩展名选择 Web 或 mpv 播放路由。

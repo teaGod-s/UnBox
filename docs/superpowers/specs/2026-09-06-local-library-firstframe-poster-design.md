@@ -1,7 +1,7 @@
 # 本地媒体库首帧兜底海报设计
 
 - 日期：2026-09-06
-- 状态：已批准设计，待写实现计划
+- 状态：已实现并合入 master（2026-09-07）
 - 范围：`internal/library`、`internal/shell`、`frontend/src/App.vue`
 - 不引入：ffmpeg、新原生依赖、mpv 强依赖
 
@@ -105,9 +105,9 @@ func (g *MpvGenerator) Generate(videoPath, cachePath string) error
 
 `Generate` 实现：
 - `mpvPath == ""` → 返回 `ErrNoMpv`。
-- 起子进程：`mpv --no-config --vo=image --frames=1 --start=10%
-  --o=<cachePath> <videoPath>`（具体 `--vo=image` 输出参数以实测为准；备选
-  `screenshot-to-file`）。超时 `timeout`（默认 15s）杀进程。
+- 起子进程：`mpv --no-config --vo=image --vo-image-format=jpg --frames=1 --start=10%
+  --vo-image-outdir=<temporaryDir> <videoPath>`，再把输出目录中的非空 JPG 原子搬运到缓存。
+  超时 `timeout`（默认 15s）杀进程。
 - 成功后校验 `cachePath` 存在且非空，否则返错。
 - `--start=10%`：mpv 原生 seek 高效，不封顶 60s（与主路径的已知小差异，见 4.6）。
 
@@ -230,5 +230,6 @@ func (s *ShellService) GenerateThumbMpv(path string, mtime int64) (posterURL str
   仅走 mpv 兜底（但 mpv 可能不在 → 纯文字）。
 - **非 faststart MP4**：浏览器为 seek 到 10% 可能需下载较多数据；本地 loopback 尚可，
   大文件首帧略慢（1–2s 量级）。可接受。
-- **`--vo=image` 输出参数**：具体 mpv 版本对 `--vo=image --o=<path>` 的支持以实测为准，
-  `--start=10%` 语法稳定。备选 `screenshot-to-file` IPC（需常驻 mpv，不取）。
+- **`--vo=image` 输出参数**：已按实际 mpv 行为使用 `--vo-image-outdir=<temporaryDir>`；
+  `--o=<path>` 是通用编码输出参数，不能作为图片输出路径。生成器会从临时目录找到非空
+  `.jpg`/`.jpeg` 并原子搬运到按 `(path, mtime)` 计算的缓存文件，`--start=10%` 语法稳定。

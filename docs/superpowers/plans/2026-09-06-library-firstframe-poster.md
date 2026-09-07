@@ -1,6 +1,10 @@
 # 本地媒体库首帧兜底海报 实现计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> 状态：已完成并合入 `master`（2026-09-07）。实际实现采用 `--vo-image-outdir` 临时目录，
+> 首帧海报只运行时回填，不写入带随机端口/token 的 URL；片单最终布局为播放器与片单间距
+> `6px`、片单右侧留白 `12px`、滚动条宽度 `6px`。
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 本地媒体库中无海报的条目，用视频本身的一帧生成缩略图海报（web-canvas 主路径 + mpv 兜底），懒生成、按 `(path, mtime)` 缓存。
 
@@ -33,9 +37,10 @@
 - Consumes: 无（纯逻辑，依赖 `os/exec`）。
 - Produces: `var ErrNoMpv`；`type Generator interface { Generate(videoPath, cachePath string) error }`；`type MpvGenerator struct { mpvPath string; timeout time.Duration }` 及其 `Generate`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
-`internal/library/thumb/thumb_test.go`（fake mpv = 一段可执行脚本，写一张最小 JPEG 到 `--o=` 参数指定的路径）：
+`internal/library/thumb/thumb_test.go`（fake mpv = 一段可执行脚本，写一张最小 JPEG 到
+`--vo-image-outdir=` 指定的输出目录）：
 
 ```go
 package thumb
@@ -48,15 +53,16 @@ import (
 	"time"
 )
 
-// fakeMPV 写一个脚本到临时目录，脚本把一个小 JPEG 写到 --o= 后跟的路径，返回其路径。
+// fakeMPV 写一个脚本到临时目录，脚本把一个小 JPEG 写到 --vo-image-outdir= 后跟的目录，返回其路径。
 func fakeMPV(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	script := filepath.Join(dir, "fake-mpv.sh")
 	body := `#!/bin/sh
-# 提取 --o=<path>，写入一个最小 JPEG 字节
-for i in "$@"; do case "$i" in --o=*) out="${i#--o=}";; esac; done
-printf '\xff\xd8\xff\xd9' > "$out"
+# 提取 --vo-image-outdir=<dirname>，写入一个最小 JPEG 字节
+for i in "$@"; do case "$i" in --vo-image-outdir=*) out="${i#--vo-image-outdir=}";; esac; done
+mkdir -p "$out"
+printf '\xff\xd8\xff\xd9' > "$out/00000001.jpg"
 `
 	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
@@ -84,12 +90,12 @@ func TestGenerateNoMpv(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `go test ./internal/library/thumb/ -count=1`
 Expected: FAIL（`undefined: MpvGenerator` / `undefined: ErrNoMpv`）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `internal/library/thumb/thumb.go`：
 
@@ -127,7 +133,7 @@ func NewMpvGenerator(mpvPath string, timeout time.Duration) *MpvGenerator {
 }
 
 // Generate 抓取 videoPath 的 10% 处一帧写入 cachePath。
-// 具体 --vo=image 输出参数以实测为准（见计划「风险」）；此处按目标写法实现。
+// mpv 先输出到临时目录，再把生成的图片搬运到缓存路径。
 func (g *MpvGenerator) Generate(videoPath, cachePath string) error {
 	if g.mpvPath == "" {
 		return ErrNoMpv
@@ -135,32 +141,38 @@ func (g *MpvGenerator) Generate(videoPath, cachePath string) error {
 	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
 		return err
 	}
+	temporaryDir, err := os.MkdirTemp(filepath.Dir(cachePath), ".unbox-thumb-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(temporaryDir)
 	ctx, cancel := context.WithTimeout(context.Background(), g.timeout)
 	defer cancel()
 	// --vo-image-format=jpg 使输出为 JPEG，与 .jpg 扩展一致。
 	cmd := exec.CommandContext(ctx, g.mpvPath,
 		"--no-config", "--vo=image", "--vo-image-format=jpg",
-		"--frames=1", "--start=10%", "--o="+cachePath, videoPath)
+		"--frames=1", "--start=10%", "--vo-image-outdir="+temporaryDir, videoPath)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("mpv 抓帧失败: %w", err)
 	}
-	if info, err := os.Stat(cachePath); err != nil || info.Size() == 0 {
+	// 从 temporaryDir 找到非空 .jpg/.jpeg 后原子搬运到 cachePath。
+	if err := moveGeneratedJpeg(temporaryDir, cachePath); err != nil {
 		return fmt.Errorf("mpv 抓帧未产出文件: %s", cachePath)
 	}
 	return nil
 }
 ```
 
-> 注：`timeout` 为 0 时应视为「用默认 15s」，此处在 `NewMpvGenerator` 不做默认、由调用方（Task 4）传 15s；实现者若愿在此处兜底 `if timeout<=0 { timeout=15*time.Second }` 亦可，测试不受影响。
+> 实现：`NewMpvGenerator` 在 `timeout <= 0` 时统一使用默认 15s。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `go test ./internal/library/thumb/ -count=1`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add internal/library/thumb/thumb.go internal/library/thumb/thumb_test.go
@@ -179,7 +191,7 @@ git commit -m "feat(library): thumb 包 mpv 一次性抓帧生成器"
 - Consumes: `server.register(path)`、`server.handler()`（现状见 `serve.go`）。
 - Produces: handler 响应带 `Access-Control-Allow-Origin: *`；`register` 对同一绝对路径返回同一 id/URL。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `internal/library/serve_test.go`：
 
@@ -218,12 +230,12 @@ func TestRegisterDedupsByPath(t *testing.T) {
 
 （`TestHandlerSetsCORS` 里访问 `s.registeredURL` 是伪代码，实现者按现有 `register` 的返回逻辑自行取得带 token 的 URL，或直接拼 `"/v/1?t="+s.token`。重点是断言 CORS 头。）
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `go test ./internal/library/ -run 'TestHandlerSetsCORS|TestRegisterDedupsByPath' -count=1`
 Expected: FAIL（CORS 头缺失 / 去重不成立）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `serve.go`：
 
@@ -234,12 +246,12 @@ Expected: FAIL（CORS 头缺失 / 去重不成立）。
 
 注意：CORS 头加在**鉴权通过之后**、`ServeFile` 之前即可；鉴权失败路径（403）可不加，但加了也无害。
 
-- [ ] **Step 4: 运行确认通过 + 回归**
+- [x] **Step 4: 运行确认通过 + 回归**
 
 Run: `go test ./internal/library/ -count=1` 及 `go test ./internal/... -count=1`
 Expected: PASS；既有 token 鉴权 / 防穿越 / register 用例不回归。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add internal/library/serve.go internal/library/serve_test.go
@@ -262,7 +274,7 @@ git commit -m "feat(library): serve 加 CORS 头 + register 按路径去重"
   - `func (l *Library) GenerateThumbMpv(path string, mtime int64) (posterURL string, err error)`
   - `Library` 新增字段 `postersDir string`、`thumbGen thumb.Generator`；`New` 签名加 `postersDir` 与 `thumbGen` 参数（或新增 setter）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `internal/library/thumb_cache_test.go`（注入 fake `thumb.Generator`、临时 `postersDir`）：
 
@@ -327,12 +339,12 @@ func TestGenerateThumbMpvNoMpv(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `go test ./internal/library/ -run 'TestEnsureThumb|TestGenerateThumbMpv' -count=1`
 Expected: FAIL（`undefined: EnsureThumb` 等）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `internal/library/thumb_cache.go`（新文件，包 `library`）：
 
@@ -344,12 +356,12 @@ Expected: FAIL（`undefined: EnsureThumb` 等）。
 
 > 说明：`New` 签名变更会暂时打断 `internal/shell/service.go` 的编译。为避免中间态，**Task 3 与 Task 4 作为一个连贯提交或紧邻完成**：Task 3 实现 library 侧 + 单测，Task 4 立即改 service.go 调用点恢复全库编译，再一起 `go build ./...` 验证。计划按两步走但合并提交亦可。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `go test ./internal/library/ -count=1`
 Expected: PASS。
 
-- [ ] **Step 5: 提交（与 Task 4 一并编译验证后提交）**
+- [x] **Step 5: 提交（与 Task 4 一并编译验证后提交）**
 
 见 Task 4 Step 5。
 
@@ -368,7 +380,7 @@ Expected: PASS。
   - `func (s *ShellService) SaveThumb(path string, mtime int64, jpeg []byte) (posterURL string, err error)`
   - `func (s *ShellService) GenerateThumbMpv(path string, mtime int64) (posterURL string, err error)`
 
-- [ ] **Step 1: 改 library 构造点**
+- [x] **Step 1: 改 library 构造点**
 
 `internal/shell/service.go` 构造 `ShellService` 处（现 `library: library.New(st)`）：
 
@@ -394,21 +406,21 @@ func (s *ShellService) GenerateThumbMpv(path string, mtime int64) (string, error
 
 > 具体注入方式二选一，实现者择一落地并保持一致：(a) `Library` 加 `SetThumbGenerator(thumb.Generator)` 方法，`GenerateThumbMpv` 前用懒解析的 generator 覆盖；(b) `GenerateThumbMpv` 直接接受 `thumb.Generator` 参数，由 ShellService 每次构造传入。**推荐 (b)**（更纯，`Library` 不持有可变 generator 状态），即 `Library.GenerateThumbMpv(path, mtime int64, gen thumb.Generator)`。
 
-- [ ] **Step 2: 写失败测试（shell 侧，注入 fake）**
+- [x] **Step 2: 写失败测试（shell 侧，注入 fake）**
 
 断言 `EnsureThumb`/`SaveThumb`/`GenerateThumbMpv` 正确委托 `s.library`（用 fake library 或直接构造带临时目录的 Library）。核心覆盖：`GenerateThumbMpv` 在 mpv 缺席时透传 `thumb.ErrNoMvp`。
 
-- [ ] **Step 3: 运行确认失败 → 实现 → 通过**
+- [x] **Step 3: 运行确认失败 → 实现 → 通过**
 
 Run: `go test ./internal/shell/ -count=1`、`go build ./...`
 Expected: 先 FAIL 后 PASS；全库编译恢复（`go build ./...` 绿）。
 
-- [ ] **Step 4: 全量回归**
+- [x] **Step 4: 全量回归**
 
 Run: `go test ./... -count=1`、`go vet ./...`、`gofmt -l`
 Expected: 全绿。
 
-- [ ] **Step 5: 提交（含 Task 3 的 library 侧改动）**
+- [x] **Step 5: 提交（含 Task 3 的 library 侧改动）**
 
 ```bash
 git add internal/library/thumb_cache.go internal/library/thumb_cache_test.go internal/library/library.go internal/shell/service.go internal/shell/service_test.go
@@ -427,7 +439,7 @@ git commit -m "feat(library): 缩略图编排 + ShellService 绑定"
 - Consumes: `ShellService.EnsureThumb/SaveThumb/GenerateThumbMpv`（Task 4）、`LibraryItem{Path,MTime,Poster}`。
 - Produces: 无导出；内部响应式 `thumbAttempted` Map、`thumbSemaphore`（生成段并发 1–2）。
 
-- [ ] **Step 1: 写失败测试（mock ShellService + fake video/canvas）**
+- [x] **Step 1: 写失败测试（mock ShellService + fake video/canvas）**
 
 覆盖（对应设计稿 §6 前端部分）：
 - cached → 直接设 `Poster`，不建 video。
@@ -437,12 +449,12 @@ git commit -m "feat(library): 缩略图编排 + ShellService 绑定"
 - **cached 检查段并发不受 1–2 限制；生成段并发 ≤ 2**。
 - 重渲染不重试已 attempted 条目。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd frontend && npm test`
 Expected: FAIL（管线尚未实现）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `App.vue` 的媒体库列表渲染处，对 `Poster == ""` 且 `!thumbAttempted.has(item.Path)` 的条目触发管线（设计稿 §4.4 流程）：
 
@@ -453,12 +465,12 @@ Expected: FAIL（管线尚未实现）。
 
 实现细节以设计稿 §4.4 为准；关键差异仅在**分段限流**（本计划 Global Constraints 修订 A）。
 
-- [ ] **Step 4: 运行确认通过 + 生产构建**
+- [x] **Step 4: 运行确认通过 + 生产构建**
 
 Run: `cd frontend && npm test`、`npm run build`
 Expected: PASS、构建通过。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add frontend/src/App.vue frontend/src/__tests__/
@@ -470,6 +482,8 @@ git commit -m "feat(frontend): 媒体库首帧缩略图懒生成管线"
 ## 风险与验收（承自设计稿 §7–§8）
 
 - **Canvas 污染**：依赖 CORS + `crossorigin="anonymous"`，三平台 WebView 各验一次；**Linux WebKitGTK 最先验**（GStreamer 解码的 video 画 canvas 最可能出岔子），失败则该平台主路径退化（web 可解码但污染 → 只能 mpv 兜底 → 纯文字）。
-- **`--vo=image` 输出参数**：`--vo-image-format=jpg` 与 `--o=` 需对着**实际随包 mpv 构建**实测；备选 `screenshot-to-file`。
+- **`--vo=image` 输出参数**：使用 `--vo-image-format=jpg` 与 `--vo-image-outdir=`；
+  `--o=` 是通用编码输出参数，不能作为图片输出路径。实现会从临时目录选取非空 JPG 后
+  原子搬运到缓存，已用实际 mpv 验证。
 - **非 faststart MP4**：seek 10% 可能多拉数据，本地 loopback 下 1–2s 量级，可接受。
 - **手动验收**（本地 WSL/Linux）：无海报 MP4 主路径出图 → 无海报 MKV 装 mpv 出图 → 卸 mpv 纯文字不卡 → 重启秒回填不重抓 → 改 mtime 重生成 → 大量条目滚动时生成段限流生效。

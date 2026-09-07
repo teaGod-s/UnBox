@@ -1221,6 +1221,11 @@ onMounted(() => {
       </div>
       <div class="library-body">
         <aside class="library-player">
+          <form v-if="libraryAddingDir" class="library-add" @submit.prevent="confirmLibraryDir">
+            <input v-model="libraryNewDir" autofocus placeholder="输入目录绝对路径" />
+            <button type="submit">确定</button>
+            <button type="button" @click="libraryAddingDir = false; libraryNewDir = ''">取消</button>
+          </form>
           <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>
           <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载本地视频…</p>
           <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">本地视频播放失败：{{ vodPlaybackError }}</p>
@@ -1231,11 +1236,6 @@ onMounted(() => {
           <div v-if="libraryMessage" class="ok">{{ libraryMessage }}</div>
           <div v-if="libraryError" class="src-import-error"><span>{{ libraryError }}</span><button type="button" title="关闭" @click="libraryError = ''">✕</button></div>
           <div v-if="libraryUnavailable.length" class="library-warning">无法访问：{{ libraryUnavailable.join('、') }}</div>
-          <form v-if="libraryAddingDir" class="library-add" @submit.prevent="confirmLibraryDir">
-            <input v-model="libraryNewDir" autofocus placeholder="输入目录绝对路径" />
-            <button type="submit">确定</button>
-            <button type="button" @click="libraryAddingDir = false; libraryNewDir = ''">取消</button>
-          </form>
           <p v-if="!libraryItems.length" class="home-empty">尚未扫描到视频</p>
           <ul v-else class="library-list">
             <li v-for="item in libraryItems" :key="item.Path" @click="playLibraryItem(item.Path)">

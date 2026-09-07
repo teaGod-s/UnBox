@@ -46,3 +46,23 @@ func TestManagerInstallUnsupportedOSIsManual(t *testing.T) {
 		t.Fatal("unsupported install should fail")
 	}
 }
+
+func TestManagerStatusPrefersBundledExecutable(t *testing.T) {
+	exeDir := filepath.Join(t.TempDir(), "app")
+	if err := os.MkdirAll(filepath.Join(exeDir, "mpv"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bundled := filepath.Join(exeDir, "mpv", "mpv.exe")
+	if err := os.WriteFile(bundled, []byte("fake"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	orig := executablePath
+	executablePath = func() (string, error) { return filepath.Join(exeDir, "unbox.exe"), nil }
+	t.Cleanup(func() { executablePath = orig })
+	// lookPath 返回一个「系统 mpv」，确保内嵌优先于系统。
+	m := newManager("windows", t.TempDir(), func(string) (string, error) { return `C:\system\mpv.exe`, nil })
+	got := m.Status()
+	if !got.Available || got.Path != bundled {
+		t.Fatalf("Status = %+v, want bundled %q", got, bundled)
+	}
+}

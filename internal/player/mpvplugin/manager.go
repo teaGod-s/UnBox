@@ -25,6 +25,9 @@ const (
 	maxDownload = int64(80 << 20)
 )
 
+// executablePath 是 os.Executable 的可注入替身，供测试覆盖「应用内嵌 mpv」路径。
+var executablePath = os.Executable
+
 type Status struct {
 	Available      bool
 	Path           string
@@ -61,6 +64,9 @@ func newManager(goos, root string, lookPath func(string) (string, error)) *Manag
 }
 
 func (m *Manager) Status() Status {
+	if path := m.bundledPath(); path != "" {
+		return Status{Available: true, Path: path}
+	}
 	if path := m.pluginPath(); path != "" {
 		return Status{Available: true, Path: path}
 	}
@@ -152,6 +158,23 @@ func (m *Manager) pluginPath() string {
 	path := filepath.Join(m.root, "unbox", "plugins", "mpv", exeForOS(m.goos))
 	if _, err := os.Stat(path); err == nil {
 		return path
+	}
+	return ""
+}
+
+// bundledPath 返回随应用分发的 mpv 路径（Windows NSIS 内嵌在 exe 旁 mpv/ 目录）。
+// 非 Windows 或未找到时返回 ""。
+func (m *Manager) bundledPath() string {
+	if m.goos != "windows" {
+		return ""
+	}
+	exe, err := executablePath()
+	if err != nil {
+		return ""
+	}
+	p := filepath.Join(filepath.Dir(exe), "mpv", exeForOS(m.goos))
+	if _, err := os.Stat(p); err == nil {
+		return p
 	}
 	return ""
 }

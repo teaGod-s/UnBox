@@ -828,7 +828,7 @@ body {
   display: flex;
   flex: 1;
   min-height: 0;
-  gap: 1rem;
+  gap: 6px;
 }
 
 .library-player {
@@ -866,7 +866,8 @@ body {
   min-height: 0; /* 不加的话 min-height:auto 会让它按内容撑开，溢出而非内部滚动 */
   flex-direction: column;
   gap: 0.75rem;
-  padding-inline: 6px;
+  padding-left: 0;
+  padding-right: 12px;
   overflow-y: auto;
   scrollbar-width: thin;
 }

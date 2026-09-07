@@ -222,6 +222,16 @@ func (l *Library) RecordProgress(path string, progress, duration int) error {
 			break
 		}
 	}
+	if previous, ok, err := l.store.GetVodHistory("local", absolute); err != nil {
+		return err
+	} else if ok {
+		if duration <= 0 {
+			duration = previous.Duration
+		}
+		if poster == "" {
+			poster = previous.VodLogo
+		}
+	}
 	return l.store.UpsertVodHistory(store.VodHistory{
 		Site: "local", VodID: absolute, VodTitle: displayName(absolute),
 		VodLogo: poster, Source: "local", Progress: progress, Duration: duration,

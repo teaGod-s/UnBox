@@ -84,6 +84,22 @@ func TestLibraryRecordProgress(t *testing.T) {
 	}
 }
 
+func TestLibraryRecordProgressKeepsDurationWhenUnknown(t *testing.T) {
+	st := openLibraryTest(t)
+	defer st.Close()
+	lib := New(st)
+	if err := lib.RecordProgress("/x/a.mp4", 42, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.RecordProgress("/x/a.mp4", 84, 0); err != nil {
+		t.Fatal(err)
+	}
+	h, err := st.ListVodHistory(10)
+	if err != nil || len(h) != 1 || h[0].Progress != 84 || h[0].Duration != 100 {
+		t.Fatalf("h=%+v err=%v", h, err)
+	}
+}
+
 func TestLibraryRecordProgressKeepsPoster(t *testing.T) {
 	root := t.TempDir()
 	media := filepath.Join(root, "movie.mp4")

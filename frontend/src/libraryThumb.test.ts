@@ -30,13 +30,15 @@ describe('library thumbnail pipeline', () => {
     const api = apiFor()
     const target = item('/a.mp4')
     const capture = vi.fn(async () => new Uint8Array([1, 2, 3]))
-    const pipeline = createLibraryThumbPipeline(api, { captureFrame: capture })
+    const onPoster = vi.fn()
+    const pipeline = createLibraryThumbPipeline(api, { captureFrame: capture, onPoster })
 
     await pipeline.ensure(target)
 
     expect(capture).toHaveBeenCalledWith('video:/a.mp4')
     expect(api.SaveThumb).toHaveBeenCalledWith('/a.mp4', 1, new Uint8Array([1, 2, 3]))
     expect(target.Poster).toBe('saved:/a.mp4')
+    expect(onPoster).toHaveBeenCalledWith(target)
     expect(api.GenerateThumbMpv).not.toHaveBeenCalled()
   })
 

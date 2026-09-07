@@ -102,6 +102,14 @@ const libraryThumbPipeline = createLibraryThumbPipeline({
   EnsureThumb: async (path, mtime) => await ShellService.EnsureThumb(path, mtime),
   SaveThumb: async (path, mtime, jpeg) => await ShellService.SaveThumb(path, mtime, bytesToBase64(jpeg)),
   GenerateThumbMpv: async (path, mtime) => await ShellService.GenerateThumbMpv(path, mtime),
+}, {
+  onPoster: (item) => {
+    homeHistory.value = homeHistory.value.map(history =>
+      history.Site === 'local' && history.VodID === item.Path
+        ? { ...history, VodLogo: item.Poster }
+        : history,
+    )
+  },
 })
 // 延迟续播目标：进详情时记下上次看的集数与进度，等用户点播放才套用。
 const vodResume = ref<{ EpID: string; Progress: number } | null>(null)
@@ -277,7 +285,12 @@ async function switchMode(m: 'home' | 'vod' | 'live' | 'library' | 'search' | 'f
 
 async function refreshHome() {
   try {
-    homeHistory.value = (await ShellService.ListVodHistory()) ?? []
+    const history = (await ShellService.ListVodHistory()) ?? []
+    const posters = new Map(libraryItems.value.map(item => [item.Path, item.Poster]))
+    homeHistory.value = history.map(item => {
+      const poster = item.Site === 'local' ? posters.get(item.VodID) : ''
+      return poster ? { ...item, VodLogo: poster } : item
+    })
   } catch (e) { handleError(e) }
 }
 
@@ -446,6 +459,7 @@ async function playLibraryItem(path: string) {
   vodPlaybackError.value = ''
   currentVod.value = null
   currentLibraryPath.value = path
+  lastProgressSave = 0
   const history = libraryProgress(path)
   pendingSeek.value = history?.Progress ?? 0
   vodNowPlaying.value = libraryItems.value.find(item => item.Path === path)?.Name ?? path
@@ -1005,6 +1019,7 @@ async function pollMpvProgress() {
     const pos = await ShellService.Position()
     if (mode.value === 'library' && currentLibraryPath.value) {
       await ShellService.RecordLibraryProgress(currentLibraryPath.value, pos, 0)
+      await refreshHome()
     } else if (currentVod.value) {
       await ShellService.UpdateVodProgress(currentVod.value.site, currentVod.value.vodID, pos, 0)
     }

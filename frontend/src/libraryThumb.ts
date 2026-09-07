@@ -13,6 +13,7 @@ export interface LibraryThumbAPI {
 interface PipelineOptions {
   captureFrame?: (videoURL: string) => Promise<Uint8Array>
   maxConcurrent?: number
+  onPoster?: (item: LibraryThumbItem) => void
 }
 
 function captureVideoFrame(videoURL: string): Promise<Uint8Array> {
@@ -115,6 +116,11 @@ export function createLibraryThumbPipeline(api: LibraryThumbAPI, options: Pipeli
   const semaphore = createSemaphore(Math.max(1, options.maxConcurrent ?? 2))
   const capture = options.captureFrame ?? captureVideoFrame
 
+  function applyPoster(item: LibraryThumbItem, poster: string) {
+    item.Poster = poster
+    if (poster) options.onPoster?.(item)
+  }
+
   async function ensure(item: LibraryThumbItem): Promise<void> {
     if (item.Poster || attempted.has(item.Path)) return
     let videoURL = ''
@@ -122,16 +128,16 @@ export function createLibraryThumbPipeline(api: LibraryThumbAPI, options: Pipeli
       const ensured = await api.EnsureThumb(item.Path, item.MTime)
       videoURL = ensured[0]
       if (ensured[2]) {
-        item.Poster = ensured[1]
+        applyPoster(item, ensured[1])
         return
       }
       await semaphore.run(async () => {
         try {
           const jpeg = await capture(videoURL)
-          item.Poster = await api.SaveThumb(item.Path, item.MTime, jpeg)
+          applyPoster(item, await api.SaveThumb(item.Path, item.MTime, jpeg))
         } catch {
           try {
-            item.Poster = await api.GenerateThumbMpv(item.Path, item.MTime)
+            applyPoster(item, await api.GenerateThumbMpv(item.Path, item.MTime))
           } catch {
             attempted.add(item.Path)
           }

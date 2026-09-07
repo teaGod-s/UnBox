@@ -1231,16 +1231,16 @@ onMounted(() => {
           <button type="button" :disabled="libraryScanning" @click="rescanLibrary">{{ libraryScanning ? '扫描中…' : '重新扫描' }}</button>
         </div>
       </div>
+      <form v-if="libraryAddingDir" class="library-add" @submit.prevent="confirmLibraryDir">
+        <div class="library-add-input">
+          <input v-model="libraryNewDir" autofocus placeholder="输入目录绝对路径" />
+          <button type="button" class="library-add-browse" title="浏览目录…" @click="browseLibraryDir">浏览</button>
+        </div>
+        <button type="submit">确定</button>
+        <button type="button" @click="libraryAddingDir = false; libraryNewDir = ''">取消</button>
+      </form>
       <div class="library-body">
         <aside class="library-player">
-          <form v-if="libraryAddingDir" class="library-add" @submit.prevent="confirmLibraryDir">
-            <div class="library-add-input">
-              <input v-model="libraryNewDir" autofocus placeholder="输入目录绝对路径" />
-              <button type="button" class="library-add-browse" title="浏览目录…" @click="browseLibraryDir">浏览</button>
-            </div>
-            <button type="submit">确定</button>
-            <button type="button" @click="libraryAddingDir = false; libraryNewDir = ''">取消</button>
-          </form>
           <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>
           <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载本地视频…</p>
           <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">本地视频播放失败：{{ vodPlaybackError }}</p>

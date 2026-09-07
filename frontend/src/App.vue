@@ -5,6 +5,7 @@ import { ShellService, type SourceInfo, type Section, type VodItem, type Episode
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import VodDetailHeader from './components/VodDetailHeader.vue'
 import { clampEpisodePage, episodePageRanges, paginateEpisodes } from './episodes'
+import { createLibraryThumbPipeline } from './libraryThumb'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
 import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, pickResumeSeek, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodResumeView, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
@@ -16,6 +17,15 @@ interface ChannelInfo { ID: string; Name: string; Group: string; Logo: string; F
 interface Progress { Stage: string; Message: string; Done: number; Total: number }
 interface LibraryDir { Path: string; AddedAt: number }
 interface LibraryItem { Path: string; Name: string; Dir: string; Ext: string; Size: number; MTime: number; Poster: string }
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
+  }
+  return btoa(binary)
+}
 
 const platform = ref('…')
 const playerReady = ref(false)
@@ -88,6 +98,11 @@ const libraryScanning = ref(false)
 const libraryMessage = ref('')
 const libraryError = ref('')
 const libraryUnavailable = ref<string[]>([])
+const libraryThumbPipeline = createLibraryThumbPipeline({
+  EnsureThumb: async (path, mtime) => await ShellService.EnsureThumb(path, mtime),
+  SaveThumb: async (path, mtime, jpeg) => await ShellService.SaveThumb(path, mtime, bytesToBase64(jpeg)),
+  GenerateThumbMpv: async (path, mtime) => await ShellService.GenerateThumbMpv(path, mtime),
+})
 // 延迟续播目标：进详情时记下上次看的集数与进度，等用户点播放才套用。
 const vodResume = ref<{ EpID: string; Progress: number } | null>(null)
 const logs = ref('')
@@ -271,6 +286,7 @@ async function loadLibrary() {
   try {
     libraryDirs.value = (await ShellService.ListLibraryDirs()) ?? []
     libraryItems.value = (await ShellService.ListLibrary()) ?? []
+    void libraryThumbPipeline.ensureAll(libraryItems.value)
   } catch (e) {
     libraryError.value = String(e)
     handleError(e)

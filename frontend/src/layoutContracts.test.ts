@@ -17,7 +17,7 @@ describe('live layout contract', () => {
 
 describe('library playlist layout contract', () => {
   it('keeps symmetric card padding and a narrow vertical scrollbar', () => {
-    expect(stylesheet).toMatch(/\.library-side\s*\{[^}]*padding-left:\s*0\.5rem;[^}]*padding-right:\s*calc\(1rem \+ 0\.5rem\);[^}]*scrollbar-width:\s*thin;/s)
+    expect(stylesheet).toMatch(/\.library-side\s*\{[^}]*padding-inline:\s*6px;[^}]*scrollbar-width:\s*thin;/s)
     expect(stylesheet).toMatch(/\.library-side::?-webkit-scrollbar\s*\{[^}]*width:\s*6px;/s)
   })
 })

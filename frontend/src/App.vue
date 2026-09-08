@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Events, Browser, Dialogs } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type VodFavoriteInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import VodDetailHeader from './components/VodDetailHeader.vue'
 import { clampEpisodePage, episodePageRanges, paginateEpisodes } from './episodes'
 import { createLibraryThumbPipeline } from './libraryThumb'
+import { normalizeContentCardStyle, type ContentCardStyle } from './contentCardStyle'
 import { initializeHomeState } from './startup'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
 import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, pickResumeSeek, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodResumeView, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
@@ -144,6 +145,13 @@ const themeOptions = [
   { id: '8bit', label: '8bit' },
 ]
 const currentTheme = ref('default')
+const contentCardStyle = ref<ContentCardStyle>('list')
+const cardContextMenu = ref<{
+  x: number
+  y: number
+  kind: 'history' | 'favorite'
+  item: VodHistoryInfo | VodFavoriteInfo
+} | null>(null)
 let lastProgressSave = 0
 
 const showMpvInstallPrompt = computed(() => shouldShowMpvInstallPrompt(platform.value, mpvReady.value, mpvFallbackRequested.value))
@@ -403,6 +411,40 @@ async function deleteVodFavorite(favorite: VodFavoriteInfo) {
     vodFavorites.value = removeVodFavorite(vodFavorites.value, favorite.Site, favorite.VodID)
     if (currentVod.value?.site === favorite.Site && currentVod.value.vodID === favorite.VodID) vodFavorited.value = false
   } catch (e) { handleError(e) }
+}
+
+function openCardContextMenu(kind: 'history' | 'favorite', item: VodHistoryInfo | VodFavoriteInfo, event: MouseEvent) {
+  if (contentCardStyle.value !== 'grid') return
+  event.preventDefault()
+  const menuWidth = 128
+  const menuHeight = 48
+  cardContextMenu.value = {
+    kind,
+    item,
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+  }
+}
+
+function closeCardContextMenu() {
+  cardContextMenu.value = null
+}
+
+function handleCardContextMenuKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') closeCardContextMenu()
+}
+
+async function deleteContextCard() {
+  const target = cardContextMenu.value
+  closeCardContextMenu()
+  if (!target) return
+  const message = target.kind === 'history' ? '确定删除这条观看记录吗？' : '确定删除这条收藏吗？'
+  if (!window.confirm(message)) return
+  if (target.kind === 'history') {
+    await deleteHomeHistory(target.item as VodHistoryInfo)
+  } else {
+    await deleteVodFavorite(target.item as VodFavoriteInfo)
+  }
 }
 
 async function toggleVodFavorite() {
@@ -1047,11 +1089,22 @@ async function applyTheme(name: string) {
   try { await ShellService.SetTheme(name) } catch (e) { handleError(e) }
 }
 
+async function applyContentCardStyle(style = contentCardStyle.value) {
+  contentCardStyle.value = normalizeContentCardStyle(style)
+  try { await ShellService.SetContentCardStyle(contentCardStyle.value) } catch (e) { handleError(e) }
+}
+
 async function loadTheme() {
   try {
     const theme = await ShellService.GetTheme()
     currentTheme.value = theme || 'default'
     document.body.dataset.theme = currentTheme.value
+  } catch (e) { handleError(e) }
+}
+
+async function loadContentCardStyle() {
+  try {
+    contentCardStyle.value = normalizeContentCardStyle(await ShellService.GetContentCardStyle())
   } catch (e) { handleError(e) }
 }
 
@@ -1093,6 +1146,9 @@ function scrollxLeave(e: MouseEvent) {
 onMounted(() => {
   refresh()
   loadTheme()
+  loadContentCardStyle()
+  document.addEventListener('click', closeCardContextMenu)
+  document.addEventListener('keydown', handleCardContextMenuKeydown)
   Events.On('import:progress', (ev: any) => { importProgress.value = ev.data as Progress })
   Events.On('search:start', (ev: any) => {
     const data = ev.data as { ID: number; Token: number; Query: string }
@@ -1115,6 +1171,11 @@ onMounted(() => {
     }
   })
   setInterval(pollMpvProgress, 10000)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', closeCardContextMenu)
+  document.removeEventListener('keydown', handleCardContextMenuKeydown)
 })
 
 </script>
@@ -1147,14 +1208,21 @@ onMounted(() => {
     <section v-if="mode === 'home'" class="home">
       <h2>观看记录</h2>
       <p v-if="!homeHistory.length" class="home-empty">暂无观看记录，去「点播」看看吧</p>
-      <ul v-else class="home-list">
-        <li v-for="h in homeHistory" :key="h.Site + h.VodID" @click="resumeVod(h)">
+      <ul v-else class="home-list" :class="{ 'content-card-grid': contentCardStyle === 'grid' }">
+        <li v-for="h in homeHistory" :key="h.Site + h.VodID" :class="{ 'content-card': contentCardStyle === 'grid' }" @click="resumeVod(h)" @contextmenu="openCardContextMenu('history', h, $event)">
           <img v-if="h.VodLogo" :src="h.VodLogo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
-          <span class="home-info">
-            <span class="name">{{ h.VodTitle }}</span>
-            <span class="sub">{{ h.SiteName || h.Site }} · {{ h.EpName }}{{ fmtProgress(h.Progress) ? ' · 看到 ' + fmtProgress(h.Progress) : '' }}</span>
-          </span>
-          <button class="row-delete" type="button" title="删除观看记录" @click.stop="deleteHomeHistory(h)">删除</button>
+          <template v-if="contentCardStyle === 'grid'">
+            <span class="content-card-badge content-card-site">{{ h.SiteName || h.Site }}</span>
+            <span v-if="h.EpName || fmtProgress(h.Progress)" class="content-card-badge content-card-progress">{{ h.EpName }}{{ fmtProgress(h.Progress) ? ' · 观看进度 ' + fmtProgress(h.Progress) : '' }}</span>
+            <span class="content-card-badge content-card-title scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ h.VodTitle }}</span></span>
+          </template>
+          <template v-else>
+            <span class="home-info">
+              <span class="name">{{ h.VodTitle }}</span>
+              <span class="sub">{{ h.SiteName || h.Site }} · {{ h.EpName }}{{ fmtProgress(h.Progress) ? ' · 看到 ' + fmtProgress(h.Progress) : '' }}</span>
+            </span>
+            <button class="row-delete" type="button" title="删除观看记录" @click.stop="deleteHomeHistory(h)">删除</button>
+          </template>
         </li>
       </ul>
     </section>
@@ -1192,14 +1260,20 @@ onMounted(() => {
     <section v-if="mode === 'favorites'" class="favorites-page">
       <h2>点播收藏</h2>
       <p v-if="!vodFavorites.length" class="home-empty">暂无点播收藏</p>
-      <ul v-else class="favorites-list">
-        <li v-for="favorite in vodFavorites" :key="favorite.Site + favorite.VodID" @click="openVodFavorite(favorite)">
+      <ul v-else class="favorites-list" :class="{ 'content-card-grid': contentCardStyle === 'grid' }">
+        <li v-for="favorite in vodFavorites" :key="favorite.Site + favorite.VodID" :class="{ 'content-card': contentCardStyle === 'grid' }" @click="openVodFavorite(favorite)" @contextmenu="openCardContextMenu('favorite', favorite, $event)">
           <img v-if="favorite.Logo" :src="favorite.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
-          <span class="home-info">
-            <span class="name">{{ favorite.Title }}</span>
-            <span class="sub">{{ siteName(favorite.Site) || favorite.Site }}{{ favorite.Group ? ' · ' + favorite.Group : '' }}</span>
-          </span>
-          <button class="row-delete" type="button" title="删除收藏" @click.stop="deleteVodFavorite(favorite)">删除</button>
+          <template v-if="contentCardStyle === 'grid'">
+            <span class="content-card-badge content-card-site">{{ siteName(favorite.Site) || favorite.Site }}</span>
+            <span class="content-card-badge content-card-title scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ favorite.Title }}</span></span>
+          </template>
+          <template v-else>
+            <span class="home-info">
+              <span class="name">{{ favorite.Title }}</span>
+              <span class="sub">{{ siteName(favorite.Site) || favorite.Site }}{{ favorite.Group ? ' · ' + favorite.Group : '' }}</span>
+            </span>
+            <button class="row-delete" type="button" title="删除收藏" @click.stop="deleteVodFavorite(favorite)">删除</button>
+          </template>
         </li>
       </ul>
     </section>
@@ -1323,10 +1397,16 @@ onMounted(() => {
 
         <section class="vod-main">
           <VodDetailHeader v-if="vodView === 'detail'" :now-playing="vodNowPlaying" @back="backFromVodDetail" />
-          <ul v-if="vodView !== 'detail'">
-            <li v-for="it in visibleVodItems" :key="it.ID + (it.Site || '')" class="channel" @click="openVodDetail(it)">
+          <ul v-if="vodView !== 'detail'" :class="{ 'content-card-grid': contentCardStyle === 'grid' }">
+            <li v-for="it in visibleVodItems" :key="it.ID + (it.Site || '')" class="channel" :class="{ 'content-card': contentCardStyle === 'grid' }" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
-              <span class="name">{{ it.Title }}</span><span class="group">{{ vodItemSub(it) }}</span>
+              <template v-if="contentCardStyle === 'grid'">
+                <span class="content-card-badge content-card-site">{{ siteName(it.Site) || it.Group || '点播' }}</span>
+                <span class="content-card-badge content-card-title scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ it.Title }}</span></span>
+              </template>
+              <template v-else>
+                <span class="name">{{ it.Title }}</span><span class="group">{{ vodItemSub(it) }}</span>
+              </template>
             </li>
           </ul>
           <div v-else-if="vodView === 'detail' && vodDetail" class="vod-detail">
@@ -1410,6 +1490,17 @@ onMounted(() => {
             <button class="src-del" @click="deleteSource('live', s.Ref)">删除</button>
           </li>
         </ul>
+      </section>
+
+      <section class="src-section">
+        <h3>内容卡片样式</h3>
+        <div class="src-add">
+          <select v-model="contentCardStyle" @change="applyContentCardStyle()">
+            <option value="list">列表</option>
+            <option value="grid">网格</option>
+          </select>
+          <span>控制点播、首页记录和收藏页的内容展示方式</span>
+        </div>
       </section>
 
       <section class="src-section">
@@ -1532,6 +1623,16 @@ onMounted(() => {
           <li><a href="https://github.com/cure53/DOMPurify" target="_blank" rel="noopener">DOMPurify</a><span class="oss-ver">v3.4.14</span><span class="oss-lic">Apache-2.0</span> — HTML 清洗</li>
         </ul>
       </div>
+    </div>
+
+    <div
+      v-if="cardContextMenu"
+      class="content-card-context-menu"
+      :style="{ left: cardContextMenu.x + 'px', top: cardContextMenu.y + 'px' }"
+      role="menu"
+      @click.stop
+    >
+      <button type="button" role="menuitem" @click="deleteContextCard">删除</button>
     </div>
 
     <div v-if="errMsg" class="error-box">

@@ -804,6 +804,100 @@ body {
 .home-info .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-info .sub { color: var(--text-dim); font-size: 0.85rem; }
 
+/* 内容卡片网格：海报作为卡片底图，站点/进度/标题叠加在半透明文字框中。 */
+.content-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.content-card-grid .content-card {
+  position: relative;
+  display: block;
+  min-width: 0;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  padding: 0;
+  background: var(--row-alt);
+  border: 1px solid var(--panel-border);
+  border-radius: 0.4rem;
+  isolation: isolate;
+}
+
+.content-card-grid .content-card:hover { background: var(--btn-bg); }
+
+.content-card-grid .content-card > .thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+  z-index: 0;
+}
+
+.content-card-badge {
+  position: absolute;
+  left: 0.35rem;
+  right: 0.35rem;
+  min-width: 0;
+  padding: 0.22rem 0.35rem;
+  overflow: hidden;
+  color: var(--text-white);
+  background: rgba(0, 0, 0, 0.58);
+  border-radius: 0.25rem;
+  font-size: 0.76rem;
+  line-height: 1.25;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  z-index: 1;
+}
+
+.content-card-site {
+  top: 0.35rem;
+  right: auto;
+  max-width: calc(100% - 0.7rem);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.content-card-progress {
+  bottom: 2rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.content-card-title {
+  bottom: 0.35rem;
+  white-space: nowrap;
+}
+
+.content-card-title .scrollx-inner { display: inline-block; }
+
+.content-card-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 7rem;
+  padding: 0.25rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 0.35rem;
+  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.28);
+}
+
+.content-card-context-menu button {
+  width: 100%;
+  padding: 0.4rem 0.65rem;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 0.25rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.content-card-context-menu button:hover { background: var(--btn-hover); }
+
 .home-list .row-delete { margin-left: auto; }
 
 .library-page {
@@ -1676,6 +1770,8 @@ body[data-theme="8bit"],
   list-style: none;
   overflow-y: auto;
 }
+
+.vod-main ul.content-card-grid { overflow-y: auto; }
 
 .vod-detail {
   flex: 1;

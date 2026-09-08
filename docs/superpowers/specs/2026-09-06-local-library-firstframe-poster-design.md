@@ -5,6 +5,8 @@
 - 范围：`internal/library`、`internal/shell`、`frontend/src/App.vue`
 - 不引入：ffmpeg、新原生依赖、mpv 强依赖
 
+> mpv 分发策略已在 `docs/superpowers/plans/2026-09-06-bundle-mpv.md` 落地：Windows NSIS 安装包内嵌便携 mpv，Linux `.deb` 声明 `mpv` 依赖；macOS 与 Linux `.AppImage` 仍保留安装命令兜底。本文中的“可选”表示首帧 WebView 主路径不依赖 mpv，并不表示 Windows NSIS 包缺少 mpv。
+
 ## 1. 背景与目标
 
 M3 本地媒体库扫描本地目录、按片名/海报文件匹配，无海报的条目回退为纯文字卡片。
@@ -12,8 +14,9 @@ M3 本地媒体库扫描本地目录、按片名/海报文件匹配，无海报�
 资源管理器的视频缩略图）。
 
 约束（来自既有决策）：
-- mpv 是可选外部播放器，**默认不安装**（Windows 仅在首次播 HEVC/RTMP 时自动下载，
-  macOS/Linux 需 `brew/apt install`）。不能让兜底功能依赖一个常缺席的组件。
+- mpv 是可选外部播放器，首帧 WebView 主路径不依赖 mpv。Windows NSIS 安装包已内嵌 mpv；
+  Linux `.deb` 安装时声明发行版 `mpv` 依赖；macOS 与 Linux `.AppImage` 仍需用户自行安装。
+  不能让兜底功能依赖一个常缺席的组件。
 - ffmpeg 刻意不引入（`internal/player/mpvproc/mpvproc_test.go:27` 注释「M1 不引入 ffmpeg」）。
 - go.mod 无任何媒体解码库。
 

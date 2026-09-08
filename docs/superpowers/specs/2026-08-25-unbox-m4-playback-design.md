@@ -1,6 +1,8 @@
 # Unbox M4 — 播放架构重设计（内置 Web 播放 + mpv 插件）
 
-> 状态：设计稿，待评审。实现计划另立 `docs/superpowers/plans/` 下。
+> 状态：已实现。播放架构保持本文结论；mpv 的分发方式已由
+> `docs/superpowers/plans/2026-09-06-bundle-mpv.md` 更新：Windows NSIS 安装包内嵌便携
+> mpv，Linux `.deb` 声明 `mpv` 依赖，macOS 与 Linux `.AppImage` 保留安装命令兜底。
 
 ## 目标
 
@@ -10,6 +12,9 @@
 2. **mpv 降级为插件**：运行时探测 mpv；未安装时 UI 提供**一键安装**；装了才用于
    HEVC/RTMP/本地文件等 Web 播不了的内容。
 3. **播放路由**：按流格式 + 编码自动选后端，前端无感。
+
+本文第 4 节关于 Windows “下载预编译 mpv.exe 到用户插件目录”的内容是早期实现方案（仅保留为兼容旧便携版/旧安装的回退），
+现行 Windows 安装包优先使用应用目录下的 `mpv\\mpv.exe`；用户插件目录和系统 PATH 仍作为回退。
 
 ## 背景（spike 实测，2026-08-25）
 
@@ -65,17 +70,18 @@
 - **编码探测**是路由的关键：对 m3u8 抓 `CODECS=`（主播放列表）或用 ffprobe 类
   嗅探；首版可先按格式路由 + 对 HEVC 失败时降级 mpv（跑起来再优化）。
 
-### 4. mpv 插件（探测 + 一键安装）
+### 4. mpv 插件（探测 + 安装兜底）
 
-- **探测**：复用现有 `PickPlayer()`（`exec.LookPath("mpv")`）。存在→启用 mpv 后端，
-  否则前端「播放器就绪」显示「Web 模式」。
-- **一键安装**（用户已定）：前端「安装 mpv 插件」按钮。**Linux/macOS 弹出安装命令
-  让用户自己执行**（动手能力强，免去 GUI 弹 sudo 密码框的复杂度）：
+- **探测优先级**：应用目录内嵌 mpv → 用户插件目录 → 系统 `PATH`。存在→启用 mpv 后端，
+  否则前端「播放器就绪」显示「Web 模式」。Windows NSIS 安装包的内嵌路径为应用目录
+  下的 `mpv\\mpv.exe`。
+- **安装兜底**：前端「安装 mpv 插件」按钮仅用于没有随包提供 mpv 的场景。**Linux/macOS
+  弹出安装命令让用户自己执行**（免去 GUI 弹 sudo 密码框的复杂度）：
   - **Linux**：按探测到的包管理器弹 `sudo apt install mpv` / `sudo dnf install mpv` /
     `sudo pacman -S mpv`；用户执行后点「我已安装」重新探测。
   - **macOS**：弹 `brew install mpv`（有 brew）或提示下载 mpv；同样用户自己装。
-  - **Windows**：用户对命令行不熟，走**下载预编译 mpv.exe**（固定来源）→ 解压到
-    `%APPDATA%/unbox/plugins/mpv/` → 用绝对路径探测。
+  - **Windows**：NSIS 安装包已内嵌 mpv；便携版或旧安装仍可走保留的下载流程，解压到
+    `%APPDATA%/unbox/plugins/mpv/` 后用绝对路径探测。
 - 安装成功后重新 `LookPath` / 用插件目录绝对路径刷新 mpv 后端。
 
 ### 5. share 线路 URL 解析（Go，Resolve 层）
@@ -122,7 +128,8 @@
 - **丢弃 mpvlib**（用户已定）：删除 `internal/player/mpvlib/`，macOS 统一走
   「Web + 外部 mpv」。`PickPlayer()` 三平台统一为 `exec.LookPath("mpv")` → mpvproc，
   不再有 libmpv/CAMetalLayer 分支。
-- **Linux/macOS 安装 = 弹命令用户自己执行**（用户已定）；仅 Windows 走下载。
+- **Linux/macOS 安装 = 弹命令用户自己执行**（用户已定）；Windows NSIS 安装包内嵌 mpv，
+  便携版/旧安装保留下载插件目录的回退流程。
 
 ## 已排除
 

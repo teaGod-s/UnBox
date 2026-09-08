@@ -57,7 +57,7 @@ mise run scan          # go run ./cmd/unbox-scan
 - `internal/probe` — URL 探测 / 测速排序。
 - `internal/player` — 播放器接口（`Player`）；
   - `mpvproc` — mpv 子进程 + JSON IPC（三平台统一，独立窗口）；
-  - `mpvplugin` — 外部 mpv 探测 + 一键安装（Linux/macOS 弹命令，Windows 下载）；
+  - `mpvplugin` — 外部 mpv 探测 + 安装兜底（Windows NSIS 安装包优先使用应用目录内嵌 mpv，随后检查用户插件目录和系统 PATH；Linux/macOS 仍弹安装命令）；
   - `failover` — 故障切换包装。
 - `internal/playback` — 播放编排：Resolver（share 页解析）→ Controller（Web/mpv 路由）
   → Proxy（本地代理 + HLS 分片重写）。

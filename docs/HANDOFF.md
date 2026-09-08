@@ -12,7 +12,7 @@
   - 播放路由：H.264 HTTP → Web；HEVC / RTMP / 本地文件 / 无 MSE → mpv。
   - Linux WebKitGTK 无 MSE → HLS/FLV/TS 走 mpv，MP4 走原生 `<video>`。
   - share 页 URL 解析 + Go 代理（HMAC 签名 + HLS 分片重写）。
-  - mpv 插件：探测 + 一键安装（Linux/macOS 弹命令，Windows 下载 mpv.exe 并校验 SHA）。
+  - mpv 播放器：探测优先级为应用目录内嵌 mpv → 用户插件目录 → 系统 PATH；Linux/macOS 保留安装命令兜底。
   - 丢弃 mpvlib，三平台统一「Web + 外部 mpv」。
 
 - **M5.1 已完成**（已合入 master）：
@@ -139,8 +139,7 @@
   和 `muban` 全量模板对齐。
 - **M3 本地媒体库**：✅ 已完成（基础 merge `adcc8f3e`，首帧海报与布局修复已合入 master，
   2026-09-07），详见上方「近期更新」。
-- **Windows/macOS 实测**：打包已由 GH Actions 自动化，但 mpv 插件下载/安装、Web 播放的
-  运行时行为仍需各自宿主机实测。
+- **Windows/macOS 实测**：打包已由 GH Actions 自动化；Windows NSIS 内嵌 mpv 的下载、解压、安装包执行和无系统 mpv 播放仍需 Windows 宿主机实测，macOS 仍需验证外部 mpv 安装与播放。
 - 停车项：failover `Events()` fan-out、probe 同步阻塞 `Load`、tvbox 剧集缓存上限、
   点播收藏等。
 

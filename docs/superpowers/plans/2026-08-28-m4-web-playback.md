@@ -1,5 +1,9 @@
 # Unbox M4 Web Playback Implementation Plan
 
+> 历史实现计划：本文记录 M4 首次实现时的播放与 mpv 插件方案。Windows mpv 的旧版安装包
+> 约束已由 `docs/superpowers/plans/2026-09-06-bundle-mpv.md` supersede；当前 Windows
+> NSIS 安装包内嵌 amd64/arm64 便携 mpv，用户插件目录和系统 PATH 仅作为回退。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement M4's built-in Web playback path, authenticated local stream proxy, share-page resolution, automatic mpv fallback, and cross-platform mpv plugin installation UX.
@@ -17,7 +21,8 @@
 - Web playback supports HLS, HTTP-FLV, HTTP-TS, and MP4 without external executables.
 - RTMP, local files, and positively identified HEVC require mpv; unknown HLS codecs try Web first and may fall back to mpv.
 - Proxy listeners bind only to `127.0.0.1`; proxy tokens are cryptographically random and expire from memory.
-- Windows mpv is pinned to `mpv-setup-x86_64-0.41.0.exe` with SHA-256 `1b32d5eb7e713ecc5853c18107daffac652e29474dfd517a4ddb792dc45e40fc`.
+- Windows mpv 的旧版 `mpv-setup-x86_64-0.41.0.exe` 约束已废弃；当前固定资产、架构和 SHA-256
+  记录见 `docs/superpowers/plans/2026-09-06-bundle-mpv.md`。
 - Linux/macOS never run privilege-escalation commands; the UI displays a command for the user to execute.
 - Public errors and new comments are Chinese.
 - Every behavior change begins with a failing test.

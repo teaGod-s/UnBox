@@ -15,4 +15,4 @@ Verified on Linux:
 
 The frontend LSP bridge could not initialize because it did not locate the worktree TypeScript installation; `vue-tsc` passed as part of the production build.
 
-Native Windows and macOS playback, installer execution, and real WebView media rendering still require their respective host machines. Windows installer metadata is pinned to mpv-distributions `0.41.0` x86_64 with SHA-256 `1b32d5eb7e713ecc5853c18107daffac652e29474dfd517a4ddb792dc45e40fc`.
+Native Windows and macOS playback, installer execution, and real WebView media rendering still require their respective host machines. The current Windows packaging plan uses the unmodified portable `shinchiro/mpv-winbuild-cmake` assets from tag `20260903` (commit `69e63f425a`) for amd64 and arm64; the fixed SHA-256 values are recorded in `docs/superpowers/plans/2026-09-06-bundle-mpv.md`.

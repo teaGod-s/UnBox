@@ -906,10 +906,10 @@ body {
 /* 内容卡片网格：海报作为卡片底图，站点/进度/标题叠加在半透明文字框中。 */
 .content-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-col)), 1fr));
   align-items: start;
-  gap: 0.75rem;
-  padding: 0.75rem;
+  gap: var(--content-gap);
+  padding: var(--content-gap);
 }
 
 .content-card-grid .content-card {
@@ -1002,8 +1002,11 @@ body {
 .content-card-delete-action:hover { background: rgba(255, 123, 114, 0.16); }
 
 .vod-main ul.content-card-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--content-col)), 1fr));
   align-content: start;
+  /* 特异性高于 .vod-main ul 的零内边距，必须在此重新声明留白，
+     否则卡片会贴住面板边框，和左侧类目栏的内边距对不上。 */
+  padding: var(--content-gap);
 }
 
 .home-list .row-delete { margin-left: auto; }
@@ -1402,6 +1405,11 @@ body {
   --deep: #05060b;
   --field: #151a2c;
   --field-border: #2b3245;
+
+  /* 内容网格节奏：卡片列宽 + 统一间距，侧栏与内容面板共用同一组值。 */
+  --content-col: 148px;
+  --content-gap: 0.75rem;
+  --vod-rail: 128px;
 }
 
 /* 多彩渐变毛玻璃：多色渐变背景固定附着 + 半透明面板 + backdrop-blur */
@@ -1764,8 +1772,8 @@ body[data-theme="8bit"],
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: var(--vod-rail) minmax(0, 1fr);
+  gap: var(--content-gap);
 }
 
 .vod-layout.cats-collapsed {
@@ -1780,7 +1788,7 @@ body[data-theme="8bit"],
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-  padding: 0.6rem;
+  padding: var(--content-gap);
   min-height: 0;
   overflow-y: auto;
   background: var(--panel);

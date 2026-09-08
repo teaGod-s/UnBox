@@ -131,6 +131,10 @@ Section
     
     !insertmacro wails.files
 
+    # 内嵌便携 mpv（mpv.exe + 伴随 DLL），供无系统 mpv 时开箱即用
+    SetOutPath "$INSTDIR\mpv"
+    File /r "..\mpv\*.*"
+
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 

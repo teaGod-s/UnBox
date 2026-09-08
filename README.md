@@ -52,27 +52,27 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 
 | 平台 | 安装包 | 说明 |
 |------|--------|------|
-| Windows | `.exe`（NSIS 安装程序或便携版）· **amd64 / arm64** | 双击安装；首次播放 HEVC / RTMP 会提示自动下载 mpv |
+| Windows | `.exe`（NSIS 安装程序或便携版）· **amd64 / arm64** | NSIS 安装包内嵌 mpv，安装后可直接播放 HEVC / RTMP |
 | macOS | `.zip`（内含 `.app`，**arm64 + amd64 通用**） | 解压拖入「应用程序」；HEVC 需 `brew install mpv` |
-| Linux | `.deb`（Ubuntu / Debian）或 `.AppImage` | `.deb` 双击安装，AppImage 加执行权限直接运行；HEVC / MKV / RTMP 等需 `sudo apt install mpv` |
+| Linux | `.deb`（Ubuntu / Debian）或 `.AppImage` | `.deb` 双击安装并自动依赖 mpv，AppImage 加执行权限直接运行；AppImage 播放 HEVC / MKV / RTMP 等需 `sudo apt install mpv` |
 
 > ⚠️ **Windows 首次运行提示**：安装包暂未做代码签名，首次双击 `.exe`（安装程序或便携版）时
 > SmartScreen 会弹出「Windows 已保护你的电脑 / 发布者未知」。点「**更多信息**」→「**仍要运行**」
 > 即可正常安装；每次下载新版本首次运行时可能再次提示，处理方式相同。
 > 该提示需应用获得代码签名证书后才会消失，不是病毒拦截。
 
-> 💡 **关于 mpv**：mpv 是一个可选的外部播放器，用于 HEVC / RTMP 以及 MKV、AVI、RMVB、TS
-> 等本地容器，也用于 WebView 无法解码的视频首帧海报兜底。MP4 / M4V / WebM 使用内置 Web
-> 播放和首帧抓取，但 Linux 仍依赖 GStreamer 解码插件。应用内置探测与安装引导，未装时也能
-> 正常使用 Web 播放器看 H.264 内容；对应视频无法在 WebView 解码时会保留文字卡片。
+> 💡 **关于 mpv**：mpv 用于 HEVC / RTMP 以及 MKV、AVI、RMVB、TS 等本地容器，也用于
+> WebView 无法解码的视频首帧海报兜底。Windows NSIS 安装包内嵌未修改的便携版 mpv，Linux
+> `.deb` 声明发行版 `mpv` 依赖；macOS 和 Linux `.AppImage` 仍需自行安装 mpv。MP4 / M4V /
+> WebM 使用内置 Web 播放和首帧抓取。mpv 项目源码见 https://mpv.io/。
 
 ## 🖥️ 系统要求
 
 | 平台 | 架构 | 最低版本 | 运行依赖 |
 |------|------|----------|----------|
-| Windows | amd64 / arm64 | Windows 10 1809+ | WebView2（安装包内置引导安装）；HEVC / RTMP 需 mpv（应用内一键下载） |
+| Windows | amd64 / arm64 | Windows 10 1809+ | WebView2（安装包内置引导安装）；NSIS 安装包内嵌 mpv |
 | macOS | amd64 + arm64（通用二进制） | macOS 12 Monterey+ | 系统内置 WKWebView；HEVC 需 `brew install mpv` |
-| Linux | amd64 | Ubuntu 24.04+ / Debian 13+（需 GTK4 ≥ 4.14 + WebKitGTK 6.0） | `libgtk-4-1`、`libwebkitgtk-6.0-4`、`gstreamer1.0-libav`、`gstreamer1.0-plugins-bad`（`.deb` 自动声明依赖）；HEVC / MKV 等需 `sudo apt install mpv` |
+| Linux | amd64 | Ubuntu 24.04+ / Debian 13+（需 GTK4 ≥ 4.14 + WebKitGTK 6.0） | `libgtk-4-1`、`libwebkitgtk-6.0-4`、`gstreamer1.0-libav`、`gstreamer1.0-plugins-bad`、`mpv`（`.deb` 自动声明依赖） |
 
 > WebView2 Runtime 支持 Windows 10 1809+ 的 arm64 构建版本，故 Windows 两架构最低版本一致。
 

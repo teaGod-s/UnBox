@@ -104,6 +104,14 @@ tasks:
       FORMAT: '{{.FORMAT | default "nsis"}}'
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
 
+  fetch:mpv:
+    summary: Download, verify, and extract portable mpv for NSIS bundling
+    dir: build/windows
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File fetch_mpv.ps1 -Arch '{{.ARCH}}'
+
   generate:syso:
     summary: Generates Windows `.syso` file
     dir: build
@@ -117,6 +125,9 @@ tasks:
     dir: build/windows/nsis
     deps:
       - task: build
+      - task: fetch:mpv
+        vars:
+          ARCH: '{{.ARCH | default ARCH}}'
     preconditions:
       - sh: '[ "{{.INSTALL_SCOPE}}" = "user" ] || [ "{{.INSTALL_SCOPE}}" = "machine" ]'
         msg: "INSTALL_SCOPE must be 'user' or 'machine', got '{{.INSTALL_SCOPE}}'"

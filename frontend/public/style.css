@@ -690,6 +690,14 @@ body {
   margin: 0.55rem 0;
 }
 
+/* 个性化：内容展示样式 / 主题 两个选择按钮同一行 */
+.settings-personalize {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.55rem 0;
+}
+
 .settings-choice {
   min-width: 6rem;
   padding: 0.4rem 0.7rem;
@@ -955,9 +963,13 @@ body {
 
 .content-card-progress {
   bottom: 2rem;
+  right: auto;
+  max-width: calc(100% - 0.7rem);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+.content-card-progress .cc-prog { margin-left: 0.5rem; }
 
 .content-card-title {
   bottom: 0.35rem;

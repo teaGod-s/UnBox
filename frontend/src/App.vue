@@ -1234,7 +1234,7 @@ onBeforeUnmount(() => {
           <img v-if="h.VodLogo" :src="h.VodLogo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
           <template v-if="contentCardStyle === 'grid'">
             <span class="content-card-badge content-card-site">{{ h.SiteName || h.Site }}</span>
-            <span v-if="h.EpName || fmtProgress(h.Progress)" class="content-card-badge content-card-progress scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ h.EpName }}{{ fmtProgress(h.Progress) ? ' · 观看进度 ' + fmtProgress(h.Progress) : '' }}</span></span>
+            <span v-if="h.EpName || fmtProgress(h.Progress)" class="content-card-badge content-card-progress scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner"><span v-if="h.EpName" class="cc-ep">{{ h.EpName }}</span><span v-if="fmtProgress(h.Progress)" class="cc-prog">{{ fmtProgress(h.Progress) }}</span></span></span>
             <span class="content-card-badge content-card-title scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ h.VodTitle }}</span></span>
             <div v-if="isContextCard('history', h)" class="content-card-delete-mask" @click.stop>
               <button type="button" class="content-card-delete-action" @click.stop="requestDeleteContextCard">删除</button>
@@ -1528,13 +1528,9 @@ onBeforeUnmount(() => {
 
       <section class="src-section">
         <h3>个性化</h3>
-        <div class="settings-option-row">
-          <span>内容展示样式</span>
-          <button type="button" class="settings-choice" @click="openContentCardStyle">{{ contentCardStyleLabel(contentCardStyle) }}</button>
-        </div>
-        <div class="settings-option-row">
-          <span>主题</span>
-          <button type="button" class="settings-choice" @click="openTheme">{{ themeOptions.find(t => t.id === currentTheme)?.label || '默认' }}</button>
+        <div class="settings-personalize">
+          <button type="button" class="settings-choice" @click="openContentCardStyle">内容展示样式：{{ contentCardStyleLabel(contentCardStyle) }}</button>
+          <button type="button" class="settings-choice" @click="openTheme">主题：{{ themeOptions.find(t => t.id === currentTheme)?.label || '默认' }}</button>
         </div>
       </section>
 

@@ -682,6 +682,97 @@ body {
   border-radius: 0.4rem;
 }
 
+.settings-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.55rem 0;
+}
+
+.settings-choice {
+  min-width: 6rem;
+  padding: 0.4rem 0.7rem;
+  color: var(--text);
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  cursor: pointer;
+  text-align: center;
+}
+
+.settings-choice:hover { background: var(--btn-hover); }
+
+.settings-choice-panel { width: min(480px, 92vw); }
+
+.settings-choice-hint {
+  margin: 0 0 0.85rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.settings-choice-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.settings-choice-options button {
+  padding: 0.65rem;
+  color: var(--text);
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.settings-choice-options button:hover,
+.settings-choice-options button.active {
+  color: var(--accent);
+  background: var(--btn-active-bg);
+  border-color: var(--accent);
+}
+
+.delete-confirmation { width: min(420px, 92vw); }
+
+.delete-confirmation p {
+  margin: 0.75rem 0 1rem;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.delete-confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.delete-confirmation-actions button {
+  padding: 0.4rem 0.75rem;
+  color: var(--text);
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.delete-confirmation-actions button:hover { background: var(--btn-hover); }
+
+.delete-confirmation-actions button.danger {
+  color: #ff7b72;
+  border-color: rgba(255, 123, 114, 0.5);
+}
+
+@media (max-width: 520px) {
+  .settings-option-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-choice { width: 100%; }
+}
+
 .src-import-error {
   display: flex;
   align-items: flex-start;
@@ -807,7 +898,8 @@ body {
 /* 内容卡片网格：海报作为卡片底图，站点/进度/标题叠加在半透明文字框中。 */
 .content-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  align-items: start;
   gap: 0.75rem;
   padding: 0.75rem;
 }
@@ -869,34 +961,38 @@ body {
 
 .content-card-title {
   bottom: 0.35rem;
+  font-size: 0.98rem;
+  font-weight: 600;
+  text-align: center;
   white-space: nowrap;
 }
 
 .content-card-title .scrollx-inner { display: inline-block; }
 
-.content-card-context-menu {
-  position: fixed;
-  z-index: 1000;
-  min-width: 7rem;
-  padding: 0.25rem;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 0.35rem;
-  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.28);
+.content-card-delete-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.58);
 }
 
-.content-card-context-menu button {
-  width: 100%;
-  padding: 0.4rem 0.65rem;
-  color: var(--text);
-  background: transparent;
-  border: 0;
-  border-radius: 0.25rem;
-  text-align: left;
+.content-card-delete-action {
+  padding: 0.45rem 0.8rem;
+  color: #ff7b72;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 123, 114, 0.72);
+  border-radius: 0.35rem;
   cursor: pointer;
 }
 
-.content-card-context-menu button:hover { background: var(--btn-hover); }
+.content-card-delete-action:hover { background: rgba(255, 123, 114, 0.16); }
+
+.vod-main ul.content-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr));
+  align-content: start;
+}
 
 .home-list .row-delete { margin-left: auto; }
 

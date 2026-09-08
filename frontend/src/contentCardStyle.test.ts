@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeContentCardStyle, type ContentCardStyle } from './contentCardStyle'
+import { contentCardStyleLabel, contentCardStyleOptions, normalizeContentCardStyle, type ContentCardStyle } from './contentCardStyle'
 
 describe('content card style', () => {
   it('accepts list and grid styles', () => {
@@ -11,5 +11,13 @@ describe('content card style', () => {
   it('falls back to list for missing or invalid values', () => {
     expect(normalizeContentCardStyle('')).toBe('list')
     expect(normalizeContentCardStyle('cards')).toBe('list')
+  })
+
+  it('presents the persisted grid style as the card option', () => {
+    expect(contentCardStyleOptions).toEqual([
+      { value: 'list', label: '列表' },
+      { value: 'grid', label: '卡片' },
+    ])
+    expect(contentCardStyleLabel('grid')).toBe('卡片')
   })
 })

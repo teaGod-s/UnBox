@@ -6,7 +6,7 @@ import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import VodDetailHeader from './components/VodDetailHeader.vue'
 import { clampEpisodePage, episodePageRanges, paginateEpisodes } from './episodes'
 import { createLibraryThumbPipeline } from './libraryThumb'
-import { normalizeContentCardStyle, type ContentCardStyle } from './contentCardStyle'
+import { contentCardStyleLabel, contentCardStyleOptions, normalizeContentCardStyle, type ContentCardStyle } from './contentCardStyle'
 import { initializeHomeState } from './startup'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
 import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, pickResumeSeek, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodResumeView, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
@@ -121,6 +121,8 @@ const copyMsg = ref('')
 const searchProgress = ref<Progress | null>(null)
 const searchThreads = ref(1)
 const showThreads = ref(false)
+const showContentCardStyle = ref(false)
+const showTheme = ref(false)
 const searching = ref(false)
 const searchRequest = ref(0)
 const activeSearchQuery = ref('')
@@ -147,8 +149,10 @@ const themeOptions = [
 const currentTheme = ref('default')
 const contentCardStyle = ref<ContentCardStyle>('list')
 const cardContextMenu = ref<{
-  x: number
-  y: number
+  kind: 'history' | 'favorite'
+  item: VodHistoryInfo | VodFavoriteInfo
+} | null>(null)
+const deleteConfirmation = ref<{
   kind: 'history' | 'favorite'
   item: VodHistoryInfo | VodFavoriteInfo
 } | null>(null)
@@ -416,30 +420,37 @@ async function deleteVodFavorite(favorite: VodFavoriteInfo) {
 function openCardContextMenu(kind: 'history' | 'favorite', item: VodHistoryInfo | VodFavoriteInfo, event: MouseEvent) {
   if (contentCardStyle.value !== 'grid') return
   event.preventDefault()
-  const menuWidth = 128
-  const menuHeight = 48
-  cardContextMenu.value = {
-    kind,
-    item,
-    x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
-    y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
-  }
+  cardContextMenu.value = { kind, item }
 }
 
 function closeCardContextMenu() {
   cardContextMenu.value = null
 }
 
-function handleCardContextMenuKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') closeCardContextMenu()
+function isContextCard(kind: 'history' | 'favorite', item: VodHistoryInfo | VodFavoriteInfo) {
+  return cardContextMenu.value?.kind === kind && cardContextMenu.value.item === item
 }
 
-async function deleteContextCard() {
-  const target = cardContextMenu.value
+function requestDeleteContextCard() {
+  if (!cardContextMenu.value) return
+  deleteConfirmation.value = cardContextMenu.value
+  cardContextMenu.value = null
+}
+
+function closeDeleteConfirmation() {
+  deleteConfirmation.value = null
+}
+
+function handleCardContextMenuKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
   closeCardContextMenu()
+  closeDeleteConfirmation()
+}
+
+async function confirmDeleteContextCard() {
+  const target = deleteConfirmation.value
+  closeDeleteConfirmation()
   if (!target) return
-  const message = target.kind === 'history' ? '确定删除这条观看记录吗？' : '确定删除这条收藏吗？'
-  if (!window.confirm(message)) return
   if (target.kind === 'history') {
     await deleteHomeHistory(target.item as VodHistoryInfo)
   } else {
@@ -1087,11 +1098,13 @@ async function applyTheme(name: string) {
   currentTheme.value = name
   document.body.dataset.theme = name
   try { await ShellService.SetTheme(name) } catch (e) { handleError(e) }
+  showTheme.value = false
 }
 
 async function applyContentCardStyle(style = contentCardStyle.value) {
   contentCardStyle.value = normalizeContentCardStyle(style)
   try { await ShellService.SetContentCardStyle(contentCardStyle.value) } catch (e) { handleError(e) }
+  showContentCardStyle.value = false
 }
 
 async function loadTheme() {
@@ -1141,6 +1154,14 @@ function scrollxLeave(e: MouseEvent) {
   if (!inner) return
   inner.style.transition = 'transform 300ms ease-in-out'
   inner.style.transform = ''
+}
+
+function openContentCardStyle() {
+  showContentCardStyle.value = true
+}
+
+function openTheme() {
+  showTheme.value = true
 }
 
 onMounted(() => {
@@ -1213,8 +1234,11 @@ onBeforeUnmount(() => {
           <img v-if="h.VodLogo" :src="h.VodLogo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
           <template v-if="contentCardStyle === 'grid'">
             <span class="content-card-badge content-card-site">{{ h.SiteName || h.Site }}</span>
-            <span v-if="h.EpName || fmtProgress(h.Progress)" class="content-card-badge content-card-progress">{{ h.EpName }}{{ fmtProgress(h.Progress) ? ' · 观看进度 ' + fmtProgress(h.Progress) : '' }}</span>
+            <span v-if="h.EpName || fmtProgress(h.Progress)" class="content-card-badge content-card-progress scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ h.EpName }}{{ fmtProgress(h.Progress) ? ' · 观看进度 ' + fmtProgress(h.Progress) : '' }}</span></span>
             <span class="content-card-badge content-card-title scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ h.VodTitle }}</span></span>
+            <div v-if="isContextCard('history', h)" class="content-card-delete-mask" @click.stop>
+              <button type="button" class="content-card-delete-action" @click.stop="requestDeleteContextCard">删除</button>
+            </div>
           </template>
           <template v-else>
             <span class="home-info">
@@ -1266,6 +1290,9 @@ onBeforeUnmount(() => {
           <template v-if="contentCardStyle === 'grid'">
             <span class="content-card-badge content-card-site">{{ siteName(favorite.Site) || favorite.Site }}</span>
             <span class="content-card-badge content-card-title scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ favorite.Title }}</span></span>
+            <div v-if="isContextCard('favorite', favorite)" class="content-card-delete-mask" @click.stop>
+              <button type="button" class="content-card-delete-action" @click.stop="requestDeleteContextCard">删除</button>
+            </div>
           </template>
           <template v-else>
             <span class="home-info">
@@ -1493,17 +1520,6 @@ onBeforeUnmount(() => {
       </section>
 
       <section class="src-section">
-        <h3>内容卡片样式</h3>
-        <div class="src-add">
-          <select v-model="contentCardStyle" @change="applyContentCardStyle()">
-            <option value="list">列表</option>
-            <option value="grid">网格</option>
-          </select>
-          <span>控制点播、首页记录和收藏页的内容展示方式</span>
-        </div>
-      </section>
-
-      <section class="src-section">
         <h3>搜索</h3>
         <div class="src-add">
           <button @click="openThreads">搜索线程：{{ searchThreads }} 个</button>
@@ -1511,15 +1527,14 @@ onBeforeUnmount(() => {
       </section>
 
       <section class="src-section">
-        <h3>主题</h3>
-        <div class="theme-grid">
-          <button
-            v-for="t in themeOptions"
-            :key="t.id"
-            :class="{ active: currentTheme === t.id }"
-            :data-theme="t.id"
-            @click="applyTheme(t.id)"
-          >{{ t.label }}</button>
+        <h3>个性化</h3>
+        <div class="settings-option-row">
+          <span>内容展示样式</span>
+          <button type="button" class="settings-choice" @click="openContentCardStyle">{{ contentCardStyleLabel(contentCardStyle) }}</button>
+        </div>
+        <div class="settings-option-row">
+          <span>主题</span>
+          <button type="button" class="settings-choice" @click="openTheme">{{ themeOptions.find(t => t.id === currentTheme)?.label || '默认' }}</button>
         </div>
       </section>
 
@@ -1625,14 +1640,43 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div
-      v-if="cardContextMenu"
-      class="content-card-context-menu"
-      :style="{ left: cardContextMenu.x + 'px', top: cardContextMenu.y + 'px' }"
-      role="menu"
-      @click.stop
-    >
-      <button type="button" role="menuitem" @click="deleteContextCard">删除</button>
+    <div v-if="deleteConfirmation" class="settings-overlay" @click.self="closeDeleteConfirmation">
+      <div class="settings-panel delete-confirmation" role="dialog" aria-modal="true" aria-labelledby="delete-confirmation-title">
+        <div class="settings-head">
+          <h2 id="delete-confirmation-title">确认删除</h2>
+          <button type="button" aria-label="关闭" @click="closeDeleteConfirmation">✕</button>
+        </div>
+        <p>{{ deleteConfirmation.kind === 'history' ? '确定删除这条观看记录吗？' : '确定删除这条收藏吗？' }}</p>
+        <div class="delete-confirmation-actions">
+          <button type="button" @click="closeDeleteConfirmation">取消</button>
+          <button type="button" class="danger" @click="confirmDeleteContextCard">删除</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showContentCardStyle" class="settings-overlay" @click.self="showContentCardStyle = false">
+      <div class="settings-panel settings-choice-panel">
+        <div class="settings-head">
+          <h2>内容展示样式</h2>
+          <button type="button" aria-label="关闭" @click="showContentCardStyle = false">✕</button>
+        </div>
+        <p class="settings-choice-hint">控制点播、首页记录和收藏页的内容展示方式</p>
+        <div class="settings-choice-options">
+          <button v-for="style in contentCardStyleOptions" :key="style.value" type="button" :class="{ active: contentCardStyle === style.value }" @click="applyContentCardStyle(style.value)">{{ style.label }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showTheme" class="settings-overlay" @click.self="showTheme = false">
+      <div class="settings-panel settings-choice-panel">
+        <div class="settings-head">
+          <h2>主题</h2>
+          <button type="button" aria-label="关闭" @click="showTheme = false">✕</button>
+        </div>
+        <div class="theme-grid">
+          <button v-for="t in themeOptions" :key="t.id" type="button" :class="{ active: currentTheme === t.id }" :data-theme="t.id" @click="applyTheme(t.id)">{{ t.label }}</button>
+        </div>
+      </div>
     </div>
 
     <div v-if="errMsg" class="error-box">

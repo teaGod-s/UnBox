@@ -6,6 +6,7 @@ import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import VodDetailHeader from './components/VodDetailHeader.vue'
 import { clampEpisodePage, episodePageRanges, paginateEpisodes } from './episodes'
 import { createLibraryThumbPipeline } from './libraryThumb'
+import { initializeHomeState } from './startup'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
 import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, pickResumeSeek, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodResumeView, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import DOMPurify from 'dompurify'
@@ -209,7 +210,7 @@ async function refresh() {
     currentVersion.value = await ShellService.CurrentVersion()
     internalVersion.value = await ShellService.InternalVersion()
     await refreshMpvStatus()
-    await refreshHome()
+    await initializeHomeState(loadLibrary, refreshHome)
   } catch (e) {
     handleError(e)
   }

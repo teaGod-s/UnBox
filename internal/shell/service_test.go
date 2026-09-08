@@ -142,6 +142,32 @@ func TestThemeEmptyService(t *testing.T) {
 	}
 }
 
+func TestContentCardStyleRoundTrip(t *testing.T) {
+	svc := newTestService(t)
+	style, err := svc.GetContentCardStyle()
+	if err != nil || style != "list" {
+		t.Fatalf("默认内容卡片样式应为 list, got %q, %v", style, err)
+	}
+	if err := svc.SetContentCardStyle("grid"); err != nil {
+		t.Fatal(err)
+	}
+	style, err = svc.GetContentCardStyle()
+	if err != nil || style != "grid" {
+		t.Fatalf("内容卡片样式回读失败, got %q, %v", style, err)
+	}
+}
+
+func TestContentCardStyleInvalidValueFallsBackToList(t *testing.T) {
+	svc := newTestService(t)
+	if err := svc.SetContentCardStyle("cards"); err != nil {
+		t.Fatal(err)
+	}
+	style, err := svc.GetContentCardStyle()
+	if err != nil || style != "list" {
+		t.Fatalf("非法内容卡片样式应回退 list, got %q, %v", style, err)
+	}
+}
+
 func TestImportSubscriptionPlaylist(t *testing.T) {
 	svc := newTestService(t)
 	path := t.TempDir() + "/ch.m3u"

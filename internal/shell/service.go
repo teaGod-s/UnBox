@@ -90,6 +90,8 @@ const subscriptionKey = "subscription"
 // searchThreadsKey 是 store.kv 里全站搜索并发线程数的键。
 const searchThreadsKey = "searchThreads"
 
+const contentCardStyleKey = "contentCardStyle"
+
 // appVersion 是当前应用版本（与 GitHub release tag 对齐）。
 // 本地/开发构建默认为 0.0.1；发布构建通过 -ldflags
 // "-X github.com/unbox/unbox/internal/shell.appVersion=<version>" 注入真实版本。
@@ -1633,6 +1635,32 @@ func (s *ShellService) GetTheme() (string, error) {
 	}
 	v, _, err := s.store.GetKV("theme")
 	return v, err
+}
+
+// SetContentCardStyle 持久化内容卡片样式；仅接受 list/grid，非法值回退列表。
+func (s *ShellService) SetContentCardStyle(style string) error {
+	if s.store == nil {
+		return nil
+	}
+	if style != "grid" {
+		style = "list"
+	}
+	return s.store.SetKV(contentCardStyleKey, style)
+}
+
+// GetContentCardStyle 返回内容卡片样式；未设置或非法值默认列表。
+func (s *ShellService) GetContentCardStyle() (string, error) {
+	if s.store == nil {
+		return "list", nil
+	}
+	v, _, err := s.store.GetKV(contentCardStyleKey)
+	if err != nil {
+		return "list", err
+	}
+	if v != "grid" {
+		return "list", nil
+	}
+	return v, nil
 }
 
 func (s *ShellService) InstallMPV() (mpvplugin.InstallResult, error) {

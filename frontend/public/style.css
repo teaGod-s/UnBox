@@ -917,7 +917,11 @@ body {
   display: block;
   min-width: 0;
   aspect-ratio: 2 / 3;
-  overflow: hidden;
+  /* 裁圆角用 clip 而不是 hidden：hidden 会把卡片变成滚动容器，浏览器就不拿
+     aspect-ratio 去撑它的自动网格行，行高只剩 168px 而海报有 255px，整列海报叠在一起。
+     clip 只裁到边框盒，不建滚动容器，行高回到海报真实高度，row-gap 才真的生效。
+     引擎不支持 clip 时退回 visible（行高同样正确），最多丢掉圆角裁切。 */
+  overflow: clip;
   padding: 0;
   background: var(--row-alt);
   border: 1px solid var(--panel-border);

@@ -39,6 +39,14 @@ describe('vod layout contract', () => {
     const px = (re: RegExp) => Number(stylesheet.match(re)![1])
     expect(px(/--vod-rail:\s*(\d+)px/)).toBeLessThan(px(/--content-col:\s*(\d+)px/))
   })
+
+  it('sizes each poster row to the full poster height', () => {
+    // 海报卡靠 aspect-ratio 定高，行高由自动网格行推出来。overflow: hidden 会把卡片变成
+    // 滚动容器，浏览器就不拿 aspect-ratio 去撑那一行：1280×800 下行只有 168px、海报有
+    // 255px，整列海报互相压在一起。overflow: clip 同样裁掉圆角外的溢出，但不是滚动
+    // 容器，行高回到海报的真实高度，row-gap 才真的生效。
+    expect(stylesheet).toMatch(/\.content-card-grid \.content-card\s*\{[^}]*overflow:\s*clip;/s)
+  })
 })
 
 describe('library playlist layout contract', () => {

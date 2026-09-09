@@ -47,6 +47,16 @@ describe('vod layout contract', () => {
     // 容器，行高回到海报的真实高度，row-gap 才真的生效。
     expect(stylesheet).toMatch(/\.content-card-grid \.content-card\s*\{[^}]*overflow:\s*clip;/s)
   })
+
+  it('leaves a gap between the progress mask and the title mask', () => {
+    // 两个蒙层都绝对钉在卡底：标题在 bottom:0.35rem，整高约 1.67rem（0.98rem×1.25 行高
+    // + 0.44rem 上下内边距），顶边离卡底约 2.02rem。进度蒙层的 bottom 必须比标题的 bottom
+    // 高出至少 2rem（标题整高 + 一点空隙），否则两块黑底蒙层会像素级黏在一起。
+    const rem = (sel: RegExp) => Number(stylesheet.match(sel)![1])
+    const titleBottom = rem(/\.content-card-title\s*\{[^}]*bottom:\s*([\d.]+)rem/s)
+    const progBottom = rem(/\.content-card-progress\s*\{[^}]*bottom:\s*([\d.]+)rem/s)
+    expect(progBottom - titleBottom).toBeGreaterThanOrEqual(2)
+  })
 })
 
 describe('library playlist layout contract', () => {

@@ -966,7 +966,8 @@ body {
 }
 
 .content-card-progress {
-  bottom: 2rem;
+  bottom: 2.4rem; /* 标题蒙层钉在卡底 0.35rem、整高约 1.67rem，顶边离卡底 ~2.02rem；
+                     留到 2.4rem 才不会和标题黑底黏在一起。改标题字号/内边距时一并复核。 */
   right: auto;
   max-width: calc(100% - 0.7rem);
   white-space: nowrap;

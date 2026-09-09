@@ -40,6 +40,11 @@ describe('vod layout contract', () => {
     expect(px(/--vod-rail:\s*(\d+)px/)).toBeLessThan(px(/--content-col:\s*(\d+)px/))
   })
 
+  it('keeps a single vod item at the configured card width', () => {
+    // auto-fit 折叠掉空列后会把唯一卡片拉伸到整行；auto-fill 保留固定列宽。
+    expect(stylesheet).toMatch(/\.vod-main ul\.content-card-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill, minmax\(min\(100%, var\(--content-col\)\), 1fr\)\);/s)
+  })
+
   it('sizes each poster row to the full poster height', () => {
     // 海报卡靠 aspect-ratio 定高，行高由自动网格行推出来。overflow: hidden 会把卡片变成
     // 滚动容器，浏览器就不拿 aspect-ratio 去撑那一行：1280×800 下行只有 168px、海报有

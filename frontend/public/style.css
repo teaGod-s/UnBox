@@ -1007,7 +1007,7 @@ body {
 .content-card-delete-action:hover { background: rgba(255, 123, 114, 0.16); }
 
 .vod-main ul.content-card-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--content-col)), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-col)), 1fr));
   align-content: start;
   /* 特异性高于 .vod-main ul 的零内边距，必须在此重新声明留白，
      否则卡片会贴住面板边框，和左侧类目栏的内边距对不上。 */

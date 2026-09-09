@@ -114,7 +114,7 @@ func (p *Spider) Browse(ctx context.Context, cat string, page int) (provider.Pag
 	if err != nil {
 		return provider.Page{}, err
 	}
-	return provider.Page{Items: spiderItems(items)}, nil
+	return provider.Page{Items: spiderItems(items), Page: page, HasMore: len(items) > 0}, nil
 }
 
 func (p *Spider) Search(ctx context.Context, q string) ([]provider.Item, error) {

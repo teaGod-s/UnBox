@@ -1894,6 +1894,47 @@ body[data-theme="8bit"],
 
 .vod-main ul.content-card-grid { overflow-y: auto; }
 
+.vod-list-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+  min-height: 2.8rem;
+  padding: 0.45rem 0.75rem 0.75rem;
+}
+
+.vod-list-more,
+.vod-list-top {
+  padding: 0.4rem 0.75rem;
+  color: var(--text);
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.vod-list-more:hover:not(:disabled),
+.vod-list-top:hover { background: var(--btn-hover); }
+
+.vod-list-more:disabled { opacity: 0.55; cursor: wait; }
+
+.vod-list-end {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.vod-list-end::before,
+.vod-list-end::after {
+  display: inline-block;
+  width: 2.25rem;
+  height: 1px;
+  margin: 0 0.55rem;
+  vertical-align: middle;
+  background: color-mix(in srgb, var(--text-dim) 45%, transparent);
+  content: '';
+}
+
 .vod-detail {
   flex: 1;
   min-height: 0;

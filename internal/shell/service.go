@@ -149,6 +149,15 @@ type VodItem struct {
 	Site  string // 所属站点 key（全站搜索时非空）
 }
 
+// VodListPage 是点播分类列表的一页，包含接口返回的分页信息。
+type VodListPage struct {
+	Items     []VodItem
+	Page      int
+	PageCount int
+	Total     int
+	HasMore   bool
+}
+
 // EpisodeInfo 是点播剧集（不向前端暴露 URL）。
 type EpisodeInfo struct {
 	ID     string
@@ -1190,16 +1199,22 @@ func (s *ShellService) clearVodCategoryCache() {
 	s.mu.Unlock()
 }
 
-func (s *ShellService) VodList(site, cat string, page int) ([]VodItem, error) {
+func (s *ShellService) VodList(site, cat string, page int) (VodListPage, error) {
 	pv, err := s.vodOf(site)
 	if err != nil {
-		return nil, err
+		return VodListPage{}, err
 	}
 	pg, err := pv.Browse(context.Background(), cat, page)
 	if err != nil {
-		return nil, err
+		return VodListPage{}, err
 	}
-	return toVodItems(pg.Items), nil
+	return VodListPage{
+		Items:     toVodItems(pg.Items),
+		Page:      pg.Page,
+		PageCount: pg.PageCount,
+		Total:     pg.Total,
+		HasMore:   pg.HasMore,
+	}, nil
 }
 
 func (s *ShellService) VodSearch(site, q string) ([]VodItem, error) {

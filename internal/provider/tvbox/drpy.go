@@ -159,7 +159,7 @@ func (p *Drpy) Browse(ctx context.Context, cat string, page int) (provider.Page,
 	if err != nil {
 		return provider.Page{}, err
 	}
-	return provider.Page{Items: toItems(items)}, nil
+	return provider.Page{Items: toItems(items), Page: page, HasMore: len(items) > 0}, nil
 }
 
 func (p *Drpy) Search(ctx context.Context, q string) ([]provider.Item, error) {

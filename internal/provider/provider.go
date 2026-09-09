@@ -24,7 +24,11 @@ type Item struct {
 
 // Page 是一页浏览结果。
 type Page struct {
-	Items []Item
+	Items     []Item
+	Page      int
+	PageCount int
+	Total     int
+	HasMore   bool
 }
 
 // Media 是详情（M1 直播仅含频道元信息；M2 点播扩展剧集等字段）。

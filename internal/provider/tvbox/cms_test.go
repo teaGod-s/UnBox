@@ -56,3 +56,21 @@ func TestClientDetail(t *testing.T) {
 		t.Fatalf("detail 解析错误: %+v", v)
 	}
 }
+
+func TestClientCategoriesUsesClassMetadata(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("ac") != "list" {
+			t.Errorf("ac = %q, want list", r.URL.Query().Get("ac"))
+		}
+		_, _ = w.Write([]byte(`{"code":1,"class":[{"type_id":1,"type_name":"国产剧"},{"type_id":2,"type_name":"韩国剧"}],"list":[{"vod_id":1,"vod_name":"当前页","type_id":1,"type_name":"国产剧"}]}`))
+	}))
+	defer srv.Close()
+
+	classes, err := newClient(srv.URL).categories(context.Background())
+	if err != nil {
+		t.Fatalf("categories 失败: %v", err)
+	}
+	if len(classes) != 2 || classes[1].TypeName != "韩国剧" {
+		t.Fatalf("分类解析错误: %+v", classes)
+	}
+}

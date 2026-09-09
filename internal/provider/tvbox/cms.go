@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -29,9 +30,30 @@ type cmsVideo struct {
 	VodPlayURL  string `json:"vod_play_url"`
 }
 
+type cmsClass struct {
+	TypeID   int64  `json:"type_id"`
+	TypeName string `json:"type_name"`
+}
+
 type cmsResp struct {
-	Code int        `json:"code"`
-	List []cmsVideo `json:"list"`
+	Code      int             `json:"code"`
+	List      []cmsVideo      `json:"list"`
+	Class     []cmsClass      `json:"class"`
+	Page      json.RawMessage `json:"page"`
+	PageCount json.RawMessage `json:"pagecount"`
+	Total     json.RawMessage `json:"total"`
+}
+
+func jsonInt(raw json.RawMessage) int {
+	var n int
+	if len(raw) > 0 && json.Unmarshal(raw, &n) == nil {
+		return n
+	}
+	var s string
+	if len(raw) > 0 && json.Unmarshal(raw, &s) == nil {
+		n, _ = strconv.Atoi(strings.TrimSpace(s))
+	}
+	return n
 }
 
 // client 是单个 CMS 站点的 JSON API 客户端。
@@ -48,6 +70,14 @@ func newClient(api string) *client {
 
 // videolist 请求列表/分类/搜索（t、wd 为可空过滤条件）。
 func (c *client) videolist(ctx context.Context, t, wd string, page int) ([]cmsVideo, error) {
+	resp, err := c.videolistPage(ctx, t, wd, page)
+	if err != nil {
+		return nil, err
+	}
+	return resp.List, nil
+}
+
+func (c *client) videolistPage(ctx context.Context, t, wd string, page int) (cmsResp, error) {
 	q := url.Values{"ac": {"videolist"}, "pg": {fmt.Sprintf("%d", page)}}
 	if t != "" {
 		q.Set("t", t)
@@ -57,16 +87,32 @@ func (c *client) videolist(ctx context.Context, t, wd string, page int) ([]cmsVi
 	}
 	raw, err := c.get(ctx, q)
 	if err != nil {
+		return cmsResp{}, err
+	}
+	var resp cmsResp
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return cmsResp{}, fmt.Errorf("解析列表响应失败: %w", err)
+	}
+	if resp.Code != 1 {
+		return cmsResp{}, fmt.Errorf("站点返回错误码 %d", resp.Code)
+	}
+	return resp, nil
+}
+
+func (c *client) categories(ctx context.Context) ([]cmsClass, error) {
+	q := url.Values{"ac": {"list"}, "pg": {"1"}}
+	raw, err := c.get(ctx, q)
+	if err != nil {
 		return nil, err
 	}
 	var resp cmsResp
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return nil, fmt.Errorf("解析列表响应失败: %w", err)
+		return nil, fmt.Errorf("解析分类响应失败: %w", err)
 	}
 	if resp.Code != 1 {
 		return nil, fmt.Errorf("站点返回错误码 %d", resp.Code)
 	}
-	return resp.List, nil
+	return resp.Class, nil
 }
 
 // detail 请求单部影片详情。

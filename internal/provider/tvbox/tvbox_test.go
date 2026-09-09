@@ -16,6 +16,8 @@ func newTestProvider(t *testing.T) *Provider {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ac := r.URL.Query().Get("ac")
 		switch ac {
+		case "list":
+			w.Write([]byte(`{"code":1,"class":[{"type_id":10,"type_name":"电影"},{"type_id":20,"type_name":"电视剧"}],"list":[]}`))
 		case "videolist":
 			w.Write([]byte(`{"code":1,"list":[
 				{"vod_id":1,"vod_name":"电影A","type_id":10,"type_name":"电影"},
@@ -38,6 +40,41 @@ func TestProviderHome(t *testing.T) {
 	}
 	if len(secs) != 2 || secs[0].ID != "10" || secs[0].Title != "电影" || secs[1].Title != "电视剧" {
 		t.Fatalf("分类派生错误: %+v", secs)
+	}
+}
+
+func TestProviderHomeUsesClassMetadata(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("ac") != "list" {
+			t.Errorf("ac = %q, want list", r.URL.Query().Get("ac"))
+		}
+		_, _ = w.Write([]byte(`{"code":1,"class":[{"type_id":10,"type_name":"国产剧"},{"type_id":20,"type_name":"韩国剧"}],"list":[{"vod_id":1,"vod_name":"当前页","type_id":10,"type_name":"国产剧"}]}`))
+	}))
+	defer srv.Close()
+
+	p := New(config.Site{Key: "test", Name: "测试站", Type: config.SiteTypeCMS, API: srv.URL})
+	secs, err := p.Home(context.Background())
+	if err != nil {
+		t.Fatalf("Home 失败: %v", err)
+	}
+	if len(secs) != 2 || secs[1].Title != "韩国剧" {
+		t.Fatalf("Home 未保留完整分类: %+v", secs)
+	}
+}
+
+func TestProviderBrowseReportsPagination(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"code":1,"page":"2","pagecount":5,"limit":"20","total":99,"list":[{"vod_id":1,"vod_name":"第二页"}]}`))
+	}))
+	defer srv.Close()
+
+	p := New(config.Site{Key: "test", Name: "测试站", Type: config.SiteTypeCMS, API: srv.URL})
+	page, err := p.Browse(context.Background(), "10", 2)
+	if err != nil {
+		t.Fatalf("Browse 失败: %v", err)
+	}
+	if page.Page != 2 || page.PageCount != 5 || page.Total != 99 || !page.HasMore {
+		t.Fatalf("分页元数据错误: %+v", page)
 	}
 }
 

@@ -35,7 +35,22 @@ func New(site config.Site) *Provider {
 func (p *Provider) ID() string { return p.site.Key }
 
 func (p *Provider) Home(ctx context.Context) ([]provider.Section, error) {
-	items, err := p.c.videolist(ctx, "", "", 0)
+	if classes, err := p.c.categories(ctx); err == nil && len(classes) > 0 {
+		sections := make([]provider.Section, 0, len(classes))
+		seen := make(map[int64]bool, len(classes))
+		for _, class := range classes {
+			name := strings.TrimSpace(class.TypeName)
+			if class.TypeID == 0 || name == "" || seen[class.TypeID] {
+				continue
+			}
+			seen[class.TypeID] = true
+			sections = append(sections, provider.Section{ID: strconv.FormatInt(class.TypeID, 10), Title: name})
+		}
+		if len(sections) > 0 {
+			return sections, nil
+		}
+	}
+	items, err := p.c.videolist(ctx, "", "", 1)
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +67,25 @@ func (p *Provider) Home(ctx context.Context) ([]provider.Section, error) {
 }
 
 func (p *Provider) Browse(ctx context.Context, cat string, page int) (provider.Page, error) {
-	items, err := p.c.videolist(ctx, cat, "", page)
+	resp, err := p.c.videolistPage(ctx, cat, "", page)
 	if err != nil {
 		return provider.Page{}, err
 	}
-	return provider.Page{Items: toItems(items)}, nil
+	current := jsonInt(resp.Page)
+	if current <= 0 {
+		current = page
+		if current <= 0 {
+			current = 1
+		}
+	}
+	pageCount := jsonInt(resp.PageCount)
+	return provider.Page{
+		Items:     toItems(resp.List),
+		Page:      current,
+		PageCount: pageCount,
+		Total:     jsonInt(resp.Total),
+		HasMore:   pageCount > current || (pageCount == 0 && len(resp.List) > 0),
+	}, nil
 }
 
 func (p *Provider) Search(ctx context.Context, q string) ([]provider.Item, error) {

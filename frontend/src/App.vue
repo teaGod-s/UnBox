@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Events, Browser, Dialogs } from '@wailsio/runtime'
-import { ShellService, type SourceInfo, type Section, type VodItem, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type VodFavoriteInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
+import { ShellService, type SourceInfo, type Section, type VodItem, type VodListPage, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type VodFavoriteInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
 import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
 import VodDetailHeader from './components/VodDetailHeader.vue'
 import { clampEpisodePage, episodePageRanges, paginateEpisodes } from './episodes'
@@ -10,6 +10,7 @@ import { contentCardStyleLabel, contentCardStyleOptions, normalizeContentCardSty
 import { initializeHomeState } from './startup'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
 import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, pickResumeSeek, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodResumeView, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
+import { appendVodItems, hasNextVodPage, nextVodPage } from './vodPagination'
 import DOMPurify from 'dompurify'
 
 // 爱发电赞助主页
@@ -64,7 +65,12 @@ const vodSearchHistory = ref<string[]>([])
 const vodFavorites = ref<VodFavoriteInfo[]>([])
 const vodFavorited = ref(false)
 const vodPage = ref(0)
+const vodHasMore = ref(false)
+const vodListEnd = ref(false)
+const vodListLoading = ref(false)
+const vodListRef = ref<HTMLElement | null>(null)
 let vodCategoryRequest = 0
+let vodListRequest = 0
 const vodCategoryLoading = ref(false)
 const vodCategoryError = ref('')
 const livePlaybackPlan = ref<PlaybackPlan | null>(null)
@@ -730,7 +736,7 @@ async function reloadVodCategories() {
   vodCategoryError.value = ''
   vodCategories.value = []
   vodActiveCat.value = ''
-  vodListItems.value = []
+  resetVodListState()
   try {
     const categories = (await ShellService.VodCategories(activeSite.value)) ?? []
     if (!isCurrentVodCategoryRequest(request, vodCategoryRequest)) return
@@ -747,8 +753,63 @@ async function reloadVodCategories() {
   }
 }
 
-async function reloadVodList() {
-  vodListItems.value = (await ShellService.VodList(activeSite.value, vodActiveCat.value, vodPage.value)) ?? []
+function resetVodListState() {
+  vodListRequest++
+  vodListLoading.value = false
+  vodPage.value = 0
+  vodListItems.value = []
+  vodHasMore.value = false
+  vodListEnd.value = false
+}
+
+async function reloadVodList(reset = true) {
+  if (!activeSite.value || !vodActiveCat.value) return
+  if (reset) resetVodListState()
+  else if (vodListLoading.value) return
+  const request = ++vodListRequest
+  const page = nextVodPage(vodPage.value)
+  vodListLoading.value = true
+  try {
+    const result = await ShellService.VodList(activeSite.value, vodActiveCat.value, page) as VodListPage
+    if (request !== vodListRequest) return
+    const items = result?.Items ?? []
+    const previousCount = vodListItems.value.length
+    vodListItems.value = reset ? items : appendVodItems(vodListItems.value, items)
+    const addedCount = reset ? items.length : vodListItems.value.length - previousCount
+    vodPage.value = result?.Page > 0 ? result.Page : page
+    vodHasMore.value = hasNextVodPage(result, addedCount)
+    vodListEnd.value = !vodHasMore.value
+  } catch (e) {
+    if (request === vodListRequest) {
+      vodListEnd.value = false
+      handleError(e)
+    }
+  } finally {
+    if (request === vodListRequest) vodListLoading.value = false
+  }
+}
+
+async function loadNextVodPage() {
+  if (!vodHasMore.value || vodListLoading.value) return
+  await reloadVodList(false)
+}
+
+function onVodListWheel(event: WheelEvent) {
+  if (event.deltaY <= 0 || !vodHasMore.value || vodListLoading.value) return
+  const list = event.currentTarget as HTMLElement
+  if (list.scrollTop + list.clientHeight < list.scrollHeight - 2) return
+  event.preventDefault()
+  void loadNextVodPage()
+}
+
+function scrollVodListTop() {
+  vodListRef.value?.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+async function selectVodCategory(id: string) {
+  if (id === vodActiveCat.value && vodListItems.value.length > 0) return
+  vodActiveCat.value = id
+  await reloadVodList()
 }
 
 async function vodSearch() {
@@ -1418,13 +1479,14 @@ onBeforeUnmount(() => {
           </div>
           <div class="cats-list">
             <button v-for="c in vodCategories" :key="c.ID" :class="{ active: c.ID === vodActiveCat }"
-                    @click="vodActiveCat = c.ID; vodPage = 0; reloadVodList()">{{ c.Title }}</button>
+                    @click="selectVodCategory(c.ID)">{{ c.Title }}</button>
           </div>
         </aside>
 
         <section class="vod-main">
           <VodDetailHeader v-if="vodView === 'detail'" :now-playing="vodNowPlaying" @back="backFromVodDetail" />
-          <ul v-if="vodView !== 'detail'" :class="{ 'content-card-grid': contentCardStyle === 'grid' }">
+          <template v-if="vodView !== 'detail'">
+          <ul ref="vodListRef" :class="{ 'content-card-grid': contentCardStyle === 'grid' }" @wheel="onVodListWheel">
             <li v-for="it in visibleVodItems" :key="it.ID + (it.Site || '')" class="channel" :class="{ 'content-card': contentCardStyle === 'grid' }" @click="openVodDetail(it)">
               <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
               <template v-if="contentCardStyle === 'grid'">
@@ -1436,6 +1498,12 @@ onBeforeUnmount(() => {
               </template>
             </li>
           </ul>
+          <div class="vod-list-footer">
+            <button v-if="vodHasMore" type="button" class="vod-list-more" :disabled="vodListLoading" @click="loadNextVodPage">{{ vodListLoading ? '正在加载…' : '继续加载' }}</button>
+            <span v-else-if="vodListEnd" class="vod-list-end">已经到达最底部</span>
+            <button v-if="vodListItems.length" type="button" class="vod-list-top" @click="scrollVodListTop">回到顶部</button>
+          </div>
+          </template>
           <div v-else-if="vodView === 'detail' && vodDetail" class="vod-detail">
             <div class="vod-detail-top" :class="{ 'info-collapsed': infoCollapsed }">
               <div class="vod-player">

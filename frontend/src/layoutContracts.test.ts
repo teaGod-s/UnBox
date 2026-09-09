@@ -71,3 +71,22 @@ describe('library playlist layout contract', () => {
     expect(stylesheet).toMatch(/\.library-side::?-webkit-scrollbar\s*\{[^}]*width:\s*6px;/s)
   })
 })
+
+describe('card badge theme contract', () => {
+  // 相对亮度（WCAG），用来断言字面量颜色是浅色
+  const relLum = (hex: string) => {
+    const expand = (h: string) => h.length === 3 ? h.split('').map(c => c + c) : h.match(/.{2}/g)!
+    const [r, g, b] = expand(hex).map(c => parseInt(c, 16))
+    const f = (c: number) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4) }
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+  }
+
+  it('keeps card badge text light under the wood theme', () => {
+    // 木纹主题把 --text-white 改成深棕 #1a1208（给浅色面板用的强字色）。
+    // 徽标底是半透明黑蒙层 rgba(0,0,0,0.58)，深棕字配深底看不清。
+    // 必须给徽标单独钉一个浅色字面量，不能继续吃 --text-white。
+    const m = stylesheet.match(/\[data-theme="wood"\] \.content-card-badge\s*\{[^}]*color:\s*#([0-9a-fA-F]{3,8});/s)
+    expect(m, '缺少 wood 主题 .content-card-badge 颜色覆盖').not.toBeNull()
+    expect(relLum(m![1])).toBeGreaterThan(0.5)
+  })
+})

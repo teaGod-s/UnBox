@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Hls, { type ErrorData, type Events } from 'hls.js'
 import mpegts from 'mpegts.js'
+import { loadSubtitleFile, removeSubtitleTrack } from '../subtitle'
+import { useHlsTracks, type TrackState } from '../useHlsTracks'
+import TrackMenu from './TrackMenu.vue'
 
 export interface PlaybackPlan {
   ID: string
@@ -14,18 +17,29 @@ export interface PlaybackPlan {
 const props = defineProps<{ plan: PlaybackPlan | null; seekTo?: number; emptyText?: string }>()
 const emit = defineEmits<{ fallback: [id: string, position: number]; progress: [time: number, duration: number] }>()
 const video = ref<HTMLVideoElement | null>(null)
+const trackState = ref<TrackState | null>(null)
+const menuOpen = ref(false)
+let externalTrackEl: HTMLTrackElement | null = null
 let hls: Hls | null = null
 let flv: ReturnType<typeof mpegts.createPlayer> | null = null
 let fallbackSent = false
 let networkRestarts = 0
 let mediaRecoveries = 0
+let attachGeneration = 0
+let subtitleGeneration = 0
 
 // 传输抖动（签名过期、CDN 限流）与「后端确实解不了」必须区别对待：前者原地重试，
 // 后者直接换 mpv。预算内的重试只影响这一条播放，不重置后端选择。
 const MAX_NETWORK_RESTARTS = 3
 const MAX_MEDIA_RECOVERIES = 2
+const isHls = computed(() => props.plan?.Backend === 'web' && props.plan?.Kind === 'hls' && Hls.isSupported())
 
 function cleanup() {
+  attachGeneration++
+  subtitleGeneration++
+  trackState.value?.detach(); trackState.value = null
+  removeSubtitleTrack(externalTrackEl); externalTrackEl = null
+  menuOpen.value = false
   hls?.destroy(); hls = null
   flv?.destroy(); flv = null
   if (video.value) { video.value.pause(); video.value.removeAttribute('src'); video.value.load() }
@@ -91,19 +105,51 @@ function onLoadedMetadata() {
   applySeek()
 }
 
+function onSelectSubtitle(index: number) {
+  subtitleGeneration++
+  if (index !== -1) {
+    removeSubtitleTrack(externalTrackEl)
+    externalTrackEl = null
+  }
+  trackState.value?.selectSubtitle(index)
+}
+
+async function onLoadSubtitle(file: File) {
+  const element = video.value
+  if (!element) return
+  const generation = ++subtitleGeneration
+  removeSubtitleTrack(externalTrackEl); externalTrackEl = null
+  const track = await loadSubtitleFile(element, file)
+  if (!track) return
+  if (generation !== subtitleGeneration || element !== video.value || !isHls.value) {
+    removeSubtitleTrack(track)
+    return
+  }
+  externalTrackEl = track
+  trackState.value?.selectSubtitle(-1)
+}
+
+function onDocumentClick(event: MouseEvent) {
+  if (menuOpen.value && !(event.target as HTMLElement).closest('.track-menu, .track-toggle')) menuOpen.value = false
+}
+
 async function attach(plan: PlaybackPlan | null) {
   cleanup()
+  const generation = attachGeneration
   fallbackSent = false
   networkRestarts = 0
   mediaRecoveries = 0
   if (!plan || plan.Backend !== 'web') return
   await nextTick()
+  if (generation !== attachGeneration || plan !== props.plan) return
   const element = video.value
   if (!element) return
   if (plan.Kind === 'hls' && Hls.isSupported()) {
     hls = new Hls({ enableWorker: false })
     hls.on(Hls.Events.ERROR, onHlsError)
-    hls.loadSource(plan.URL); hls.attachMedia(element); return
+    hls.loadSource(plan.URL); hls.attachMedia(element)
+    trackState.value = useHlsTracks(hls)
+    return
   }
   if ((plan.Kind === 'flv' || plan.Kind === 'ts') && mpegts.getFeatureList().mseLivePlayback) {
     flv = mpegts.createPlayer({ type: plan.Kind === 'flv' ? 'flv' : 'mpegts', url: plan.URL })
@@ -115,13 +161,24 @@ async function attach(plan: PlaybackPlan | null) {
 
 watch(() => props.plan, attach, { immediate: true })
 watch(() => props.seekTo, applySeek)
-onBeforeUnmount(cleanup)
+onMounted(() => document.addEventListener('click', onDocumentClick))
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick)
+  cleanup()
+})
 </script>
 
 <template>
   <div class="playback-view">
     <video v-if="plan?.Backend === 'web'" ref="video" controls playsinline preload="metadata" @timeupdate="onTimeUpdate" @loadedmetadata="onLoadedMetadata" />
-    <div v-else-if="plan?.Backend === 'mpv'" class="mpv-status">正在使用 mpv 播放</div>
-    <div v-else class="playback-empty">{{ emptyText || '选择频道或剧集开始播放' }}</div>
+    <button v-if="isHls" class="track-toggle" type="button" title="轨道设置" aria-label="轨道设置" @click.stop="menuOpen = !menuOpen">⚙</button>
+    <TrackMenu v-if="isHls && menuOpen && trackState"
+      :levels="trackState.levels" :current-level="trackState.currentLevel"
+      :audio-tracks="trackState.audioTracks" :current-audio="trackState.currentAudio"
+      :subtitle-tracks="trackState.subtitleTracks" :current-subtitle="trackState.currentSubtitle"
+      :select-level="trackState.selectLevel" :select-audio="trackState.selectAudio"
+      :select-subtitle="onSelectSubtitle" :on-load-subtitle="onLoadSubtitle" />
+    <div v-if="plan?.Backend === 'mpv'" class="mpv-status">正在使用 mpv 播放</div>
+    <div v-else-if="!plan" class="playback-empty">{{ emptyText || '选择频道或剧集开始播放' }}</div>
   </div>
 </template>

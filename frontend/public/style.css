@@ -581,6 +581,67 @@ body {
 .playback-view video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .mpv-status, .playback-empty { color: var(--text-dim); font-size: 0.9rem; }
 
+.track-toggle {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 3;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--text);
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.track-toggle:hover { background: var(--btn-hover); }
+
+.track-menu {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 3rem;
+  z-index: 3;
+  min-width: 11rem;
+  max-height: 70%;
+  padding: 0.5rem;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.track-menu .track-sec { margin-bottom: 0.4rem; }
+.track-menu h4 { margin: 0.2rem 0 0.3rem; color: var(--text-dim); font-size: 0.72rem; }
+.track-menu ul { margin: 0; padding: 0; list-style: none; }
+
+.track-menu li {
+  padding: 0.3rem 0.5rem;
+  color: var(--text-soft);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.track-menu li:hover { background: var(--btn-bg); }
+.track-menu li.active { color: var(--accent); background: var(--btn-active-bg); }
+
+.track-menu .load-subtitle {
+  width: 100%;
+  margin-top: 0.3rem;
+  padding: 0.35rem;
+  color: var(--text);
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+
+.track-menu .load-subtitle:hover { background: var(--btn-hover); }
+
 .playback-status,
 .playback-error {
   flex: 0 0 auto;

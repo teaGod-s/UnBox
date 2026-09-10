@@ -14,7 +14,15 @@ const instances = vi.hoisted(() => ({
 
 vi.mock('hls.js', () => {
   class MockHls {
-    static Events = { ERROR: 'hlsError' }
+    static Events = {
+      ERROR: 'hlsError',
+      MANIFEST_PARSED: 'hlsManifestParsed',
+      AUDIO_TRACKS_UPDATED: 'hlsAudioTracksUpdated',
+      SUBTITLE_TRACKS_UPDATED: 'hlsSubtitleTracksUpdated',
+      LEVEL_SWITCHED: 'hlsLevelSwitched',
+      AUDIO_TRACK_SWITCHED: 'hlsAudioTrackSwitched',
+      SUBTITLE_TRACK_SWITCH: 'hlsSubtitleTrackSwitch',
+    }
     static ErrorTypes = {
       NETWORK_ERROR: 'networkError',
       MEDIA_ERROR: 'mediaError',
@@ -22,9 +30,18 @@ vi.mock('hls.js', () => {
     }
     static ErrorDetails = { ATTACH_MEDIA_ERROR: 'attachMediaError' }
     static isSupported = () => true
-    on = vi.fn((event: string, cb: (event: string, data: unknown) => void) => {
+    handlers: Record<string, Function> = {}
+    levels: any[] = []
+    currentLevel = -1
+    audioTracks: any[] = []
+    audioTrack = -1
+    subtitleTracks: any[] = []
+    subtitleTrack = -1
+    on = vi.fn((event: string, cb: Function) => {
       if (event === MockHls.Events.ERROR) (this as any).error = cb
+      else this.handlers[event] = cb
     })
+    off = vi.fn((event: string) => { delete this.handlers[event] })
     loadSource = vi.fn()
     attachMedia = vi.fn()
     startLoad = vi.fn()
@@ -34,7 +51,7 @@ vi.mock('hls.js', () => {
       instances.hls.push(this)
     }
   }
-  return { default: MockHls }
+  return { default: MockHls, Events: MockHls.Events }
 })
 
 vi.mock('mpegts.js', () => {
@@ -216,5 +233,78 @@ describe('PlaybackView', () => {
     expect(wrapper.find('video').exists()).toBe(false)
     expect(wrapper.text()).toContain('点右侧视频开始播放')
     expect(wrapper.text()).not.toContain('选择频道或剧集开始播放')
+  })
+
+  it('hls 路径：manifest 后显示设置按钮，点开菜单含清晰度项', async () => {
+    const wrapper = await mountView()
+    const hls = instances.hls[instances.hls.length - 1]
+    hls.levels = [{ height: 720, bitrate: 2_800_000 }]
+    hls.handlers[Hls.Events.MANIFEST_PARSED]({})
+    await nextTick()
+    expect(wrapper.find('.track-toggle').exists()).toBe(true)
+    await wrapper.find('.track-toggle').trigger('click')
+    expect(wrapper.find('.track-menu').exists()).toBe(true)
+    expect(wrapper.text()).toContain('720p')
+  })
+
+  it('flv 路径不渲染设置按钮', async () => {
+    const wrapper = await mountView({ Kind: 'flv' })
+    await nextTick()
+    expect(wrapper.find('.track-toggle').exists()).toBe(false)
+  })
+
+  it('mpv 后端不渲染设置按钮', async () => {
+    const wrapper = await mountView({ Backend: 'mpv' })
+    await nextTick()
+    expect(wrapper.find('.track-toggle').exists()).toBe(false)
+  })
+
+  it('点击菜单外关闭轨道菜单', async () => {
+    const wrapper = await mountView()
+    const hls = instances.hls[instances.hls.length - 1]
+    hls.handlers[Hls.Events.MANIFEST_PARSED]({})
+    await nextTick()
+    await wrapper.find('.track-toggle').trigger('click')
+    expect(wrapper.find('.track-menu').exists()).toBe(true)
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await nextTick()
+    expect(wrapper.find('.track-menu').exists()).toBe(false)
+  })
+
+  it('快速切换播放计划时只挂载最新 HLS', async () => {
+    const wrapper = mount(PlaybackView, {
+      props: { plan: { ID: 'old', Backend: 'web', URL: '/old.m3u8', Kind: 'hls', CanFallback: true } },
+    })
+    await wrapper.setProps({ plan: { ID: 'new', Backend: 'web', URL: '/new.m3u8', Kind: 'hls', CanFallback: true } })
+    await nextTick()
+    await Promise.resolve()
+    expect(instances.hls).toHaveLength(2)
+    expect(instances.hls[0].destroy).toHaveBeenCalled()
+    expect(instances.hls[1].loadSource).toHaveBeenCalledWith('/new.m3u8')
+  })
+
+  it('播放计划变化后移除晚到的外挂字幕', async () => {
+    const createObjectURL = vi.fn(() => 'blob:late')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+    let resolveText!: (value: string) => void
+    const file = {
+      name: 'late.vtt',
+      text: () => new Promise<string>((resolve) => { resolveText = resolve }),
+    } as File
+    const wrapper = await mountView()
+    const hls = instances.hls[instances.hls.length - 1]
+    hls.handlers[Hls.Events.MANIFEST_PARSED]({})
+    await nextTick()
+    await wrapper.find('.track-toggle').trigger('click')
+    const input = wrapper.find('input[type="file"]')
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await wrapper.setProps({ plan: null })
+    resolveText('WEBVTT\n\n')
+    await Promise.resolve()
+    await nextTick()
+    expect(wrapper.find('track').exists()).toBe(false)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:late')
   })
 })

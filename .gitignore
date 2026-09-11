@@ -27,6 +27,7 @@ Thumbs.db
 # local
 *.local.json
 /tmp/
+.worktrees/
 
 # IDE
 .idea/

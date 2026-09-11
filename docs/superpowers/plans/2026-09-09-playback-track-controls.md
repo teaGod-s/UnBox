@@ -2,11 +2,15 @@
 
 里程碑：M4 增量（Web 播放器 UX：分辨率 / 音轨 / 字幕）
 
+> **实施状态（2026-09-11）**：Task 1–4 已完成并合入 `master`（`6c8c8d9b`）。当前产品
+> 仅向用户暴露 HLS 内置的清晰度、音轨和字幕轨选择；外挂 SRT/VTT 加载入口已隐藏，
+> `frontend/src/subtitle.ts` 工具暂保留但不由播放页调用，后续重新开放入口时可复用。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 `PlaybackView` 的 Web 播放路径（hls.js）上，把 hls.js 已有但未暴露的轨道 API——分辨率（`levels`/`currentLevel`）、音轨（`audioTracks`/`audioTrack`）、字幕轨（`subtitleTracks`/`subtitleTrack`）——做成播放器内的「设置」菜单，并支持加载外挂 srt/vtt 字幕文件。
+**Goal:** 在 `PlaybackView` 的 Web 播放路径（hls.js）上，把 hls.js 已有但未暴露的轨道 API——分辨率（`levels`/`currentLevel`）、音轨（`audioTracks`/`audioTrack`）、字幕轨（`subtitleTracks`/`subtitleTrack`）——做成播放器内的「设置」菜单。外挂 SRT/VTT 转换工具已实现但当前不暴露加载入口。
 
-**Architecture:** 三层拆解：纯逻辑 composable `useHlsTracks`（从 hls 实例提取轨道状态 + 选择方法，事件驱动刷新）→ 外挂字幕工具 `subtitle.ts`（`srtToVtt` 纯函数 + 用原生 `<track>` 注入 `attachSubtitleTrack`/`removeSubtitleTrack`/`loadSubtitleFile`）→ 菜单 UI `TrackMenu.vue`（纯展示，选择走 prop 回调）→ `PlaybackView.vue` 接线（齿轮按钮触发菜单、外挂字幕入口、与内嵌字幕互斥的联动、CSS）。零后端改动、零新依赖。
+**Architecture:** 三层拆解：纯逻辑 composable `useHlsTracks`（从 hls 实例提取轨道状态 + 选择方法，事件驱动刷新）→ 字幕工具 `subtitle.ts`（保留 `srtToVtt`/原生 `<track>` 能力，当前不接入 UI）→ 菜单 UI `TrackMenu.vue`（纯展示，选择走 prop 回调）→ `PlaybackView.vue` 接线（齿轮按钮触发内置轨道菜单、CSS）。零后端改动、零新依赖。
 
 **Tech Stack:** Vue 3 Composition API、hls.js 1.7.1（`frontend/node_modules/hls.js/dist/hls.d.ts`）、Vitest + @vue/test-utils（jsdom）。
 
@@ -65,7 +69,7 @@
   ```
   实现从 `hls.js` 引入：`import { Events } from 'hls.js'`（值枚举）+ `import type Hls from 'hls.js'`（类型）。事件名用 `Events.MANIFEST_PARSED` 等，不手写字符串。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `frontend/src/useHlsTracks.test.ts`。**不 mock hls.js 模块**（`Events` 直接从真包引入即可），只构造一个 fake hls 对象（`on`/`off` 用 `vi.fn` 存回调，getter/setter 用普通对象）。用例：
 
@@ -127,12 +131,12 @@ it('detach 后撤销三个事件监听', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd frontend && npm test -- useHlsTracks`
 Expected: FAIL（`useHlsTracks` 未实现 / 模块不存在）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `frontend/src/useHlsTracks.ts`：
 
@@ -195,12 +199,12 @@ export function useHlsTracks(hls: Hls): TrackState {
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `cd frontend && npm test -- useHlsTracks`
 Expected: PASS。
 
-- [ ] **Step 5: 暂存（提交待用户点头）**
+- [x] **Step 5: 暂存（提交待用户点头）**
 
 ```bash
 git add frontend/src/useHlsTracks.ts frontend/src/useHlsTracks.test.ts
@@ -209,7 +213,7 @@ git add frontend/src/useHlsTracks.ts frontend/src/useHlsTracks.test.ts
 
 ---
 
-### Task 2: 外挂字幕 srt→vtt 转换 + 原生 `<track>` 注入
+### Task 2: 外挂字幕 srt→vtt 转换 + 原生 `<track>` 注入（工具保留，入口隐藏）
 
 **Files:**
 - Create: `frontend/src/subtitle.ts`
@@ -228,7 +232,7 @@ git add frontend/src/useHlsTracks.ts frontend/src/useHlsTracks.test.ts
   ```
   锁定机制：**用原生 `<track>` 元素注入**（`URL.createObjectURL(new Blob([vtt], {type:'text/vtt'}))` → `document.createElement('track')` → `video.appendChild`）。不用 `addTextTrack`（它要求已经解析好的 VTT cue，超出本任务范围）。返回 `HTMLTrackElement`（调用方需要它来 `removeSubtitleTrack`，不是 TextTrack）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `frontend/src/subtitle.test.ts`。jsdom 没有 `URL.createObjectURL`/`revokeObjectURL`，测试里统一 stub：
 
@@ -278,12 +282,12 @@ it('loadSubtitleFile：.srt 转 vtt、.vtt 直用', async () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd frontend && npm test -- subtitle`
 Expected: FAIL（`subtitle.ts` 不存在）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `frontend/src/subtitle.ts`：
 
@@ -324,12 +328,12 @@ export async function loadSubtitleFile(video: HTMLVideoElement, file: File): Pro
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `cd frontend && npm test -- subtitle`
 Expected: PASS。
 
-- [ ] **Step 5: 暂存（提交待用户点头）**
+- [x] **Step 5: 暂存（提交待用户点头）**
 
 ```bash
 git add frontend/src/subtitle.ts frontend/src/subtitle.test.ts
@@ -338,7 +342,7 @@ git add frontend/src/subtitle.ts frontend/src/subtitle.test.ts
 
 ---
 
-### Task 3: TrackMenu.vue —— 轨道选择菜单
+### Task 3: TrackMenu.vue —— 轨道选择菜单（当前仅内置轨道）
 
 **Files:**
 - Create: `frontend/src/components/TrackMenu.vue`
@@ -354,13 +358,12 @@ git add frontend/src/subtitle.ts frontend/src/subtitle.test.ts
     selectLevel(i: number): void
     selectAudio(i: number): void
     selectSubtitle(i: number): void
-    onLoadSubtitle(file: File): void
   }>()
   ```
   `TrackItem` 从 `../useHlsTracks` 导入（`import type { TrackItem } from '../useHlsTracks'`）。
-- 无 emit；点击选择直接调 prop 的 select 方法；文件选择调 `onLoadSubtitle`。
+- 无 emit；点击选择直接调 prop 的 select 方法。外挂字幕文件入口当前隐藏，不向菜单传入文件选择回调。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `frontend/src/components/TrackMenu.test.ts`：mount `TrackMenu`，传 stub TrackState，断言：
 
@@ -377,7 +380,7 @@ function stubProps() {
     currentAudio: 0,
     subtitleTracks: [{ index: 0, label: '简体' }],
     currentSubtitle: -1,
-    selectLevel: vi.fn(), selectAudio: vi.fn(), selectSubtitle: vi.fn(), onLoadSubtitle: vi.fn(),
+    selectLevel: vi.fn(), selectAudio: vi.fn(), selectSubtitle: vi.fn(),
   }
 }
 
@@ -397,40 +400,30 @@ it('点击一项调用对应 select 方法', async () => {
 it('音轨/字幕区列表为空时不渲染整块', () => {
   const p = stubProps(); p.audioTracks = []; p.subtitleTracks = []
   const w = mount(TrackMenu, { props: p })
-  expect(w.text()).not.toContain('音轨')
-  expect(w.text()).not.toContain('字幕')
+  expect(w.findAll('.track-sec')).toHaveLength(1)
+  expect(w.findAll('h4').map((heading) => heading.text())).toEqual(['清晰度'])
 })
 
-it('「加载字幕」按钮触发隐藏 file input 的 click', async () => {
+it('不显示外挂字幕加载入口', () => {
   const w = mount(TrackMenu, { props: stubProps() })
-  const input = w.find('input[type="file"]')
-  const click = vi.spyOn(input.element, 'click').mockImplementation(() => {})
-  await w.find('.load-subtitle').trigger('click')
-  expect(click).toHaveBeenCalled()
+  expect(w.find('.load-subtitle').exists()).toBe(false)
+  expect(w.find('input[type="file"]').exists()).toBe(false)
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd frontend && npm test -- TrackMenu`
 Expected: FAIL（组件不存在）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `frontend/src/components/TrackMenu.vue`：
 
 ```vue
 <script setup lang="ts">
 import type { TrackItem } from '../useHlsTracks'
-const props = defineProps<{ /* 见 Interfaces */ }>()
-
-const fileInput = ref<HTMLInputElement | null>(null)
-function pickSubtitle() { fileInput.value?.click() }
-function onFileChange(e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0]
-  if (f) props.onLoadSubtitle(f)
-  ;(e.target as HTMLInputElement).value = ''  // 允许重复选同一文件
-}
+defineProps<{ /* 见 Interfaces */ }>()
 </script>
 
 <template>
@@ -456,18 +449,16 @@ function onFileChange(e: Event) {
             :class="{ active: t.index === currentSubtitle }" @click="selectSubtitle(t.index)">{{ t.label }}</li>
       </ul>
     </section>
-    <button class="load-subtitle" @click="pickSubtitle">加载字幕…</button>
-    <input ref="fileInput" type="file" accept=".srt,.vtt" hidden @change="onFileChange" />
   </div>
 </template>
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `cd frontend && npm test -- TrackMenu`
 Expected: PASS。
 
-- [ ] **Step 5: 暂存（提交待用户点头）**
+- [x] **Step 5: 暂存（提交待用户点头）**
 
 ```bash
 git add frontend/src/components/TrackMenu.vue frontend/src/components/TrackMenu.test.ts
@@ -476,7 +467,7 @@ git add frontend/src/components/TrackMenu.vue frontend/src/components/TrackMenu.
 
 ---
 
-### Task 4: PlaybackView 接线 + CSS + MockHls 扩展
+### Task 4: PlaybackView 接线 + CSS + MockHls 扩展（当前实现）
 
 **Files:**
 - Modify: `frontend/src/components/PlaybackView.vue`
@@ -484,10 +475,10 @@ git add frontend/src/components/TrackMenu.vue frontend/src/components/TrackMenu.
 - Modify: `frontend/public/style.css`（菜单样式）
 
 **Interfaces:**
-- Consumes: `useHlsTracks`（Task 1）、`TrackMenu`（Task 3）、`loadSubtitleFile`/`removeSubtitleTrack`（Task 2）。
-- Produces: PlaybackView 在 hls 路径新增「⚙」按钮 + `TrackMenu` 弹层；外挂字幕加载与内嵌字幕互斥联动。
+- Consumes: `useHlsTracks`（Task 1）、`TrackMenu`（Task 3）。`subtitle.ts`（Task 2）不在当前播放页接线。
+- Produces: PlaybackView 在 hls 路径新增「⚙」按钮 + `TrackMenu` 弹层，仅管理 HLS 内置轨道。
 
-- [ ] **Step 1: 扩展 MockHls（关键：保留既有 ERROR 通道）**
+- [x] **Step 1: 扩展 MockHls（关键：保留既有 ERROR 通道）**
 
 现状：`MockHls.on` 只对 ERROR 存回调（`if (event === ERROR) this.error = cb`），其他事件直接丢弃，也没有 `off`、没有 `handlers` map。**必须先让 `on` 能存非 ERROR 事件的回调，才能测 MANIFEST_PARSED 刷新**。改造（保持 `this.error = cb` 不动，14 个既有用例依赖它）：
 
@@ -525,7 +516,7 @@ vi.mock('hls.js', () => {
 
 `instances.hls` 数组已有（`instances` 是 `vi.hoisted` 的），新用例从中取最新实例，触发 `instances.hls[0].handlers['hlsManifestParsed']({ levels: [...] })` 之类。
 
-- [ ] **Step 2: 写失败测试（接线）**
+- [x] **Step 2: 写失败测试（接线）**
 
 `PlaybackView.test.ts` 新增用例（注意 `hls` 实例经 `vi.hoisted` 的 `instances.hls` 捕获，见文件头）：
 
@@ -560,7 +551,7 @@ it('mpv 后端不渲染设置按钮', async () => {
 })
 ```
 
-- [ ] **Step 3: 实现 PlaybackView 接线**
+- [x] **Step 3: 实现 PlaybackView 接线**
 
 `PlaybackView.vue`（`<script setup>` 内新增，不改动既有 `attach`/`cleanup` 的现有逻辑行）：
 
@@ -568,11 +559,9 @@ it('mpv 后端不渲染设置按钮', async () => {
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'   // 加 computed / onMounted
 import { useHlsTracks, type TrackState } from '../useHlsTracks'
 import TrackMenu from './TrackMenu.vue'
-import { loadSubtitleFile, removeSubtitleTrack } from '../subtitle'
 
 const trackState = ref<TrackState | null>(null)
 const menuOpen = ref(false)
-let externalTrackEl: HTMLTrackElement | null = null
 const isHls = computed(() => props.plan?.Backend === 'web' && props.plan?.Kind === 'hls' && Hls.isSupported())
 ```
 
@@ -584,7 +573,6 @@ trackState.value = useHlsTracks(hls)
 
 // cleanup() 开头（hls?.destroy() 之前）：
 trackState.value?.detach(); trackState.value = null
-removeSubtitleTrack(externalTrackEl); externalTrackEl = null
 menuOpen.value = false
 ```
 
@@ -597,21 +585,14 @@ menuOpen.value = false
   :audio-tracks="trackState.audioTracks" :current-audio="trackState.currentAudio"
   :subtitle-tracks="trackState.subtitleTracks" :current-subtitle="trackState.currentSubtitle"
   :select-level="trackState.selectLevel" :select-audio="trackState.selectAudio"
-  :select-subtitle="onSelectSubtitle" :on-load-subtitle="onLoadSubtitle" />
+  :select-subtitle="onSelectSubtitle" />
 ```
 
-外挂/内嵌字幕互斥联动（两个函数）：
+内置字幕选择：
 
 ```ts
 function onSelectSubtitle(i: number) {
-  if (i !== -1) { removeSubtitleTrack(externalTrackEl); externalTrackEl = null }
   trackState.value?.selectSubtitle(i)
-}
-async function onLoadSubtitle(file: File) {
-  const el = video.value; if (!el) return
-  removeSubtitleTrack(externalTrackEl); externalTrackEl = null
-  externalTrackEl = await loadSubtitleFile(el, file)
-  trackState.value?.selectSubtitle(-1)   // 挂外挂时关掉内嵌，避免双字幕
 }
 ```
 
@@ -625,9 +606,9 @@ onMounted(() => document.addEventListener('click', onClickDoc))
 onBeforeUnmount(() => document.removeEventListener('click', onClickDoc))
 ```
 
-> 说明：`cleanup()` 会先于每次 `attach()` 运行（`watch(() => props.plan, attach, { immediate: true })`），所以换集/换源时 `trackState` 先 detach 清空、再由 hls 分支重建；`onBeforeUnmount(cleanup)` 兜底卸载。`trackState.value` 为空时菜单按钮 `v-if="isHls"` 仍显示但 `TrackMenu` 因 `trackState` 为空不渲染——用 `isHls && trackState` 门控可避免 manifest 未到时空菜单。
+> 说明：`cleanup()` 会先于每次 `attach()` 运行（`watch(() => props.plan, attach, { immediate: true })`），所以换集/换源时 `trackState` 先 detach 清空、再由 hls 分支重建；`onBeforeUnmount(cleanup)` 兜底卸载。`trackState.value` 为空时菜单按钮 `v-if="isHls"` 仍显示但 `TrackMenu` 因 `trackState` 为空不渲染——用 `isHls && trackState` 门控可避免 manifest 未到时空菜单。外挂字幕入口当前隐藏，因此没有原生 `<track>` 的播放页生命周期。
 
-- [ ] **Step 4: CSS**
+- [x] **Step 4: CSS**
 
 `frontend/public/style.css`（`.playback-view` 已 `position: relative; overflow: hidden`，可直接绝对定位子元素）：
 
@@ -665,7 +646,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onClickDoc))
 
 用既有 CSS 变量（`--panel`/`--border`/`--text`/`--accent`/`--btn-bg` 等），暗/亮/木纹主题自动适配。
 
-- [ ] **Step 5: 运行确认通过 + 生产构建 + Go 门禁**
+- [x] **Step 5: 运行确认通过 + 生产构建 + Go 门禁**
 
 Run:
 ```bash
@@ -674,7 +655,7 @@ cd .. && gofmt -l . && go vet ./... && go test ./... -count=1 && CGO_ENABLED=1 g
 ```
 Expected: 全部用例（新增 + 既有 14 个）PASS；构建通过；Go 门禁全绿。
 
-- [ ] **Step 6: 暂存（提交待用户点头）**
+- [x] **Step 6: 暂存（提交待用户点头）**
 
 ```bash
 git add frontend/src/components/PlaybackView.vue frontend/src/components/PlaybackView.test.ts frontend/public/style.css
@@ -685,6 +666,8 @@ git add frontend/src/components/PlaybackView.vue frontend/src/components/Playbac
 
 ## 不做（YAGNI / 留待后续）
 
+- **外挂字幕 UI 入口**：当前版本隐藏“加载字幕”按钮和文件选择器；`subtitle.ts` 仅作为可复用工具保留，重新开放时需补回播放页接线与内置字幕互斥。
+
 - **原生 MP4 多音轨 / ass 字幕**：`<video>.audioTracks` 在 WebKitGTK 支持差、ass 原生不认；这俩靠 mpv 才可靠，属「mpv 内嵌」计划的范畴，不在本期。
 - **字幕样式自定义**（字号/颜色/描边）：原生 `<track>` + `::cue` 可做，v2 再议。
 - **菜单键盘导航**：首版鼠标点选；v2 补方向键与完整 `aria`。
@@ -694,5 +677,5 @@ git add frontend/src/components/PlaybackView.vue frontend/src/components/Playbac
 ## 风险
 
 - **WebkitGTK 的 `<track>` 渲染**：原生 `<video>` 外挂 vtt 在 WebView2/WKWebView 稳定；WebKitGTK 对 vtt 字幕支持需实测。若某平台不渲染，回退为「字幕菜单仅列 HLS 内嵌轨，外挂入口隐藏」。
-- **hls.js `subtitleTrack` 与原生 `<track>` 共存**：两条字幕通路（hls 内嵌 vs 原生外挂）同时启用会显示两套。本计划已做互斥：选内嵌字幕时移除外挂（`onSelectSubtitle`），挂外挂时关内嵌（`onLoadSubtitle` 里 `selectSubtitle(-1)`）。
+- **hls.js `subtitleTrack` 与原生 `<track>` 共存**：当前播放页不加载原生外挂 `<track>`，因此不存在双字幕并行；若后续重新开放入口，需要恢复互斥联动。
 - **`Hls.isSupported()` = false 时**：`isHls` 计算为 false，按钮不渲染；此时 `attach()` 走 `element.src = plan.URL` 原生回退，无轨道菜单（正确）。

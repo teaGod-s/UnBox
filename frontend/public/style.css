@@ -629,19 +629,6 @@ body {
 .track-menu li:hover { background: var(--btn-bg); }
 .track-menu li.active { color: var(--accent); background: var(--btn-active-bg); }
 
-.track-menu .load-subtitle {
-  width: 100%;
-  margin-top: 0.3rem;
-  padding: 0.35rem;
-  color: var(--text);
-  background: var(--btn-bg);
-  border: 1px solid var(--border);
-  border-radius: 0.3rem;
-  cursor: pointer;
-}
-
-.track-menu .load-subtitle:hover { background: var(--btn-hover); }
-
 .playback-status,
 .playback-error {
   flex: 0 0 auto;

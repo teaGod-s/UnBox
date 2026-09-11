@@ -283,28 +283,4 @@ describe('PlaybackView', () => {
     expect(instances.hls[1].loadSource).toHaveBeenCalledWith('/new.m3u8')
   })
 
-  it('播放计划变化后移除晚到的外挂字幕', async () => {
-    const createObjectURL = vi.fn(() => 'blob:late')
-    const revokeObjectURL = vi.fn()
-    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
-    let resolveText!: (value: string) => void
-    const file = {
-      name: 'late.vtt',
-      text: () => new Promise<string>((resolve) => { resolveText = resolve }),
-    } as File
-    const wrapper = await mountView()
-    const hls = instances.hls[instances.hls.length - 1]
-    hls.handlers[Hls.Events.MANIFEST_PARSED]({})
-    await nextTick()
-    await wrapper.find('.track-toggle').trigger('click')
-    const input = wrapper.find('input[type="file"]')
-    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
-    await input.trigger('change')
-    await wrapper.setProps({ plan: null })
-    resolveText('WEBVTT\n\n')
-    await Promise.resolve()
-    await nextTick()
-    expect(wrapper.find('track').exists()).toBe(false)
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:late')
-  })
 })

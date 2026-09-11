@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import type { TrackItem } from '../useHlsTracks'
 
-const props = defineProps<{
+defineProps<{
   levels: TrackItem[]
   currentLevel: number
   audioTracks: TrackItem[]
@@ -12,21 +11,7 @@ const props = defineProps<{
   selectLevel(i: number): void
   selectAudio(i: number): void
   selectSubtitle(i: number): void
-  onLoadSubtitle(file: File): void
 }>()
-
-const fileInput = ref<HTMLInputElement | null>(null)
-
-function pickSubtitle() {
-  fileInput.value?.click()
-}
-
-function onFileChange(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (file) props.onLoadSubtitle(file)
-  input.value = ''
-}
 </script>
 
 <template>
@@ -58,7 +43,5 @@ function onFileChange(e: Event) {
         </li>
       </ul>
     </section>
-    <button class="load-subtitle" type="button" @click="pickSubtitle">加载字幕…</button>
-    <input ref="fileInput" type="file" accept=".srt,.vtt" hidden @change="onFileChange" />
   </div>
 </template>

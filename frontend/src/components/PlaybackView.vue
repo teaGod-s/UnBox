@@ -2,7 +2,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Hls, { type ErrorData, type Events } from 'hls.js'
 import mpegts from 'mpegts.js'
-import { loadSubtitleFile, removeSubtitleTrack } from '../subtitle'
 import { useHlsTracks, type TrackState } from '../useHlsTracks'
 import TrackMenu from './TrackMenu.vue'
 
@@ -19,14 +18,12 @@ const emit = defineEmits<{ fallback: [id: string, position: number]; progress: [
 const video = ref<HTMLVideoElement | null>(null)
 const trackState = ref<TrackState | null>(null)
 const menuOpen = ref(false)
-let externalTrackEl: HTMLTrackElement | null = null
 let hls: Hls | null = null
 let flv: ReturnType<typeof mpegts.createPlayer> | null = null
 let fallbackSent = false
 let networkRestarts = 0
 let mediaRecoveries = 0
 let attachGeneration = 0
-let subtitleGeneration = 0
 
 // 传输抖动（签名过期、CDN 限流）与「后端确实解不了」必须区别对待：前者原地重试，
 // 后者直接换 mpv。预算内的重试只影响这一条播放，不重置后端选择。
@@ -36,9 +33,7 @@ const isHls = computed(() => props.plan?.Backend === 'web' && props.plan?.Kind =
 
 function cleanup() {
   attachGeneration++
-  subtitleGeneration++
   trackState.value?.detach(); trackState.value = null
-  removeSubtitleTrack(externalTrackEl); externalTrackEl = null
   menuOpen.value = false
   hls?.destroy(); hls = null
   flv?.destroy(); flv = null
@@ -106,27 +101,7 @@ function onLoadedMetadata() {
 }
 
 function onSelectSubtitle(index: number) {
-  subtitleGeneration++
-  if (index !== -1) {
-    removeSubtitleTrack(externalTrackEl)
-    externalTrackEl = null
-  }
   trackState.value?.selectSubtitle(index)
-}
-
-async function onLoadSubtitle(file: File) {
-  const element = video.value
-  if (!element) return
-  const generation = ++subtitleGeneration
-  removeSubtitleTrack(externalTrackEl); externalTrackEl = null
-  const track = await loadSubtitleFile(element, file)
-  if (!track) return
-  if (generation !== subtitleGeneration || element !== video.value || !isHls.value) {
-    removeSubtitleTrack(track)
-    return
-  }
-  externalTrackEl = track
-  trackState.value?.selectSubtitle(-1)
 }
 
 function onDocumentClick(event: MouseEvent) {
@@ -177,7 +152,7 @@ onBeforeUnmount(() => {
       :audio-tracks="trackState.audioTracks" :current-audio="trackState.currentAudio"
       :subtitle-tracks="trackState.subtitleTracks" :current-subtitle="trackState.currentSubtitle"
       :select-level="trackState.selectLevel" :select-audio="trackState.selectAudio"
-      :select-subtitle="onSelectSubtitle" :on-load-subtitle="onLoadSubtitle" />
+      :select-subtitle="onSelectSubtitle" />
     <div v-if="plan?.Backend === 'mpv'" class="mpv-status">正在使用 mpv 播放</div>
     <div v-else-if="!plan" class="playback-empty">{{ emptyText || '选择频道或剧集开始播放' }}</div>
   </div>

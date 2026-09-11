@@ -10,7 +10,7 @@ function stubProps() {
     currentAudio: 0,
     subtitleTracks: [{ index: 0, label: '简体' }],
     currentSubtitle: -1,
-    selectLevel: vi.fn(), selectAudio: vi.fn(), selectSubtitle: vi.fn(), onLoadSubtitle: vi.fn(),
+    selectLevel: vi.fn(), selectAudio: vi.fn(), selectSubtitle: vi.fn(),
   }
 }
 
@@ -35,11 +35,9 @@ describe('TrackMenu', () => {
     expect(w.findAll('h4').map((heading) => heading.text())).toEqual(['清晰度'])
   })
 
-  it('「加载字幕」按钮触发隐藏 file input 的 click', async () => {
+  it('不显示外挂字幕加载入口', () => {
     const w = mount(TrackMenu, { props: stubProps() })
-    const input = w.find('input[type="file"]')
-    const click = vi.spyOn(input.element as HTMLInputElement, 'click').mockImplementation(() => {})
-    await w.find('.load-subtitle').trigger('click')
-    expect(click).toHaveBeenCalled()
+    expect(w.find('.load-subtitle').exists()).toBe(false)
+    expect(w.find('input[type="file"]').exists()).toBe(false)
   })
 })

@@ -127,7 +127,7 @@ func (p *mpvProc) SetEmbedWindow(id uintptr) {
 }
 
 // buildArgs 构造 mpv 启动参数。wid != 0 时嵌入宿主窗口并开 OSC；
-// wid == 0 时独立开窗并关 OSC（前端控制）。
+// wid == 0 时独立开窗，但仍开启 OSC，让 mpv 窗口提供原生播放控件。
 func buildArgs(s player.Stream, ipcPath string, wid uintptr) []string {
 	args := []string{
 		"--idle=yes",
@@ -138,7 +138,7 @@ func buildArgs(s player.Stream, ipcPath string, wid uintptr) []string {
 	if wid != 0 {
 		args = append(args, "--wid="+strconv.FormatUint(uint64(wid), 10), "--osc=yes")
 	} else {
-		args = append(args, "--force-window=yes", "--osc=no")
+		args = append(args, "--force-window=yes", "--osc=yes")
 	}
 	for k, v := range s.Headers {
 		args = append(args, "--http-header-fields="+k+": "+v)

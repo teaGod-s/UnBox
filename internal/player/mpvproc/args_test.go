@@ -14,8 +14,8 @@ func TestBuildArgsForceWindowWhenNoWid(t *testing.T) {
 	if contains(args, "--wid=") {
 		t.Fatalf("无 wid 时不应有 --wid: %v", args)
 	}
-	if !contains(args, "--osc=no") {
-		t.Fatalf("无 wid 时应关 OSC: %v", args)
+	if !contains(args, "--osc=yes") {
+		t.Fatalf("独立窗口也应开启 OSC 控件: %v", args)
 	}
 }
 

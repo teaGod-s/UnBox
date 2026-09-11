@@ -690,10 +690,6 @@ async function toggleFav(c: ChannelInfo) {
 
 async function loadFavorites() { favorites.value = (await ShellService.ListFavorites()) ?? [] }
 
-async function pause() { await ShellService.Pause() }
-async function resume() { await ShellService.Resume() }
-async function setVolume(e: Event) { await ShellService.SetVolume(Number((e.target as HTMLInputElement).value)) }
-
 async function loadSources() {
   sources.value = (await ShellService.Sources()) ?? []
   const last = activeSite.value || await ShellService.LastVodSite()
@@ -1381,11 +1377,6 @@ onBeforeUnmount(() => {
         <p v-if="livePlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在切换频道…</p>
         <p v-if="livePlaybackStatus === 'error'" class="playback-error" aria-live="assertive">频道播放失败：{{ livePlaybackError }}</p>
         <PlaybackView :plan="livePagePlaybackPlan" @(fallback)="(id, position) => fallbackToMpv('live', id, livePlaybackToken, position)" />
-        <div class="controls" v-if="liveNowPlaying && livePagePlaybackPlan?.Backend === 'mpv'">
-          <button @click="pause">暂停</button>
-          <button @click="resume">继续</button>
-          <input type="range" min="0" max="100" @input="setVolume" />
-        </div>
         <p v-if="favorites.length" class="favhead">收藏</p>
         <ul class="favs">
           <li v-for="f in favorites" :key="f.ID" @click="play(f)">{{ f.Name }}</li>
@@ -1439,7 +1430,6 @@ onBeforeUnmount(() => {
           <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载本地视频…</p>
           <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">本地视频播放失败：{{ vodPlaybackError }}</p>
           <PlaybackView :plan="libraryPagePlaybackPlan" :seek-to="pendingSeek" empty-text="点右侧视频开始播放" @(fallback)="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @progress="(time, duration) => onLibraryProgress(vodPlaybackToken, time, duration)" />
-          <div class="controls" v-if="libraryPagePlaybackPlan?.Backend === 'mpv'"><button @click="pause">暂停</button><button @click="resume">继续</button><input type="range" min="0" max="100" @input="setVolume" /></div>
         </aside>
         <div class="library-side">
           <div v-if="libraryMessage" class="ok">{{ libraryMessage }}</div>
@@ -1510,11 +1500,6 @@ onBeforeUnmount(() => {
                 <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载剧集…</p>
                 <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">剧集播放失败：{{ vodPlaybackError }}</p>
                 <PlaybackView :plan="vodPagePlaybackPlan" :seek-to="pendingSeek" @(fallback)="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @progress="(time, duration) => onVodProgress(vodPlaybackToken, time, duration)" />
-                <div class="controls" v-if="vodNowPlaying && vodPagePlaybackPlan?.Backend === 'mpv'">
-                  <button @click="pause">暂停</button>
-                  <button @click="resume">继续</button>
-                  <input type="range" min="0" max="100" @input="setVolume" />
-                </div>
                 <div v-if="(vodDetail.Sources ?? []).length" class="ep-src-tabs">
                   <button v-for="src in vodDetail.Sources" :key="src" :class="{ active: src === activeSource }" @click="selectEpisodeSource(src)">{{ src }}</button>
                 </div>

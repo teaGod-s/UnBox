@@ -529,8 +529,7 @@ body {
 }
 
 .channel button,
-.import button,
-.controls button {
+.import button {
   padding: 0.35rem 0.7rem;
   font-size: 0.9rem;
   color: var(--text);
@@ -541,8 +540,7 @@ body {
 }
 
 .channel button:hover,
-.import button:hover:not(:disabled),
-.controls button:hover {
+.import button:hover:not(:disabled) {
   background: var(--btn-hover);
 }
 
@@ -1395,17 +1393,6 @@ body {
 .player .now {
   margin: 0;
   color: var(--accent);
-}
-
-.controls {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.controls input[type="range"] {
-  flex: 1;
-  accent-color: var(--accent);
 }
 
 .favhead {

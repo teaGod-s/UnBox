@@ -33,6 +33,74 @@ func newTestService(t *testing.T) *ShellService {
 	return svc
 }
 
+func newPlaybackSettingsService(t *testing.T, st *store.Store) *ShellService {
+	t.Helper()
+	svc := NewShellService(live.New(nil), nil, st)
+	t.Cleanup(func() { _ = svc.ServiceShutdown() })
+	return svc
+}
+
+func TestPlaybackSettingsRoundTripAndDefaults(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/playback-settings.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	svc := newPlaybackSettingsService(t, st)
+	if got := svc.GetPlaybackSettings(); got != (PlaybackSettings{}) {
+		t.Fatalf("missing keys = %#v, want all false", got)
+	}
+	want := PlaybackSettings{AutoNext: true, AutoSwitchSource: true, PreloadNext: false}
+	if err := svc.SetPlaybackSettings(want); err != nil {
+		t.Fatal(err)
+	}
+	svc2 := newPlaybackSettingsService(t, st)
+	if got := svc2.GetPlaybackSettings(); got != want {
+		t.Fatalf("round trip = %#v, want %#v", got, want)
+	}
+}
+
+func TestPlaybackSettingsInvalidValuesFallBackToFalse(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/playback-settings.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.SetKV(playbackAutoNextKey, "not-a-bool"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetKV(playbackAutoSwitchSourceKey, "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetKV(playbackPreloadNextKey, "false"); err != nil {
+		t.Fatal(err)
+	}
+
+	got := newPlaybackSettingsService(t, st).GetPlaybackSettings()
+	want := PlaybackSettings{AutoSwitchSource: true}
+	if got != want {
+		t.Fatalf("invalid values = %#v, want %#v", got, want)
+	}
+}
+
+func TestPlaybackSettingsStoreErrors(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/playback-settings.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := newPlaybackSettingsService(t, st)
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := svc.GetPlaybackSettings(); got != (PlaybackSettings{}) {
+		t.Fatalf("closed store read = %#v, want all false", got)
+	}
+	if err := svc.SetPlaybackSettings(PlaybackSettings{AutoNext: true}); err == nil {
+		t.Fatal("closed store write should return an error")
+	}
+}
+
 func TestLibraryDirRoundTrip(t *testing.T) {
 	svc := newTestService(t)
 	dir := t.TempDir()

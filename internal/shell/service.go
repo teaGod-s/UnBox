@@ -92,6 +92,19 @@ const searchThreadsKey = "searchThreads"
 
 const contentCardStyleKey = "contentCardStyle"
 
+const (
+	playbackAutoNextKey         = "playback.autoNext"
+	playbackAutoSwitchSourceKey = "playback.autoSwitchSource"
+	playbackPreloadNextKey      = "playback.preloadNext"
+)
+
+// PlaybackSettings 是点播播放自动化选项。
+type PlaybackSettings struct {
+	AutoNext         bool
+	AutoSwitchSource bool
+	PreloadNext      bool
+}
+
 // appVersion 是当前应用版本（与 GitHub release tag 对齐）。
 // 本地/开发构建默认为 0.0.1；发布构建通过 -ldflags
 // "-X github.com/unbox/unbox/internal/shell.appVersion=<version>" 注入真实版本。
@@ -1650,6 +1663,43 @@ func (s *ShellService) GetTheme() (string, error) {
 	}
 	v, _, err := s.store.GetKV("theme")
 	return v, err
+}
+
+// GetPlaybackSettings 返回点播播放自动化选项；缺失、非法或存储读取失败均按关闭处理。
+func (s *ShellService) GetPlaybackSettings() PlaybackSettings {
+	return PlaybackSettings{
+		AutoNext:         s.getPlaybackSetting(playbackAutoNextKey),
+		AutoSwitchSource: s.getPlaybackSetting(playbackAutoSwitchSourceKey),
+		PreloadNext:      s.getPlaybackSetting(playbackPreloadNextKey),
+	}
+}
+
+func (s *ShellService) getPlaybackSetting(key string) bool {
+	if s.store == nil {
+		return false
+	}
+	v, ok, err := s.store.GetKV(key)
+	return err == nil && ok && v == "true"
+}
+
+// SetPlaybackSettings 持久化点播播放自动化选项。
+func (s *ShellService) SetPlaybackSettings(settings PlaybackSettings) error {
+	if s.store == nil {
+		return nil
+	}
+	for _, setting := range []struct {
+		key   string
+		value bool
+	}{
+		{playbackAutoNextKey, settings.AutoNext},
+		{playbackAutoSwitchSourceKey, settings.AutoSwitchSource},
+		{playbackPreloadNextKey, settings.PreloadNext},
+	} {
+		if err := s.store.SetKV(setting.key, strconv.FormatBool(setting.value)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SetContentCardStyle 持久化内容卡片样式；仅接受 list/grid，非法值回退列表。

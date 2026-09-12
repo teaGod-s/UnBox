@@ -52,6 +52,9 @@ type mpvProc struct {
 
 	stateMu sync.Mutex
 	state   player.State
+	// paused 记录用户是否主动暂停：暂停期间屏蔽缓存状态事件，
+	// 避免把缓存回填/见底误报成恢复播放或缓冲。
+	paused bool
 }
 
 // New 以指定 mpv 可执行文件启动一个播放器实例。
@@ -108,13 +111,16 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	p.lifecycleMu.Unlock()
 	p.stateMu.Lock()
 	p.state = player.State{Playing: player.StatePlaying, Duration: -1, Volume: 80}
+	p.paused = false
 	p.stateMu.Unlock()
 
 	go p.readLoop(conn, sess)
 
-	// 观察 time-pos，让位置事件（EventPosition）可用。观察失败不影响播放，
-	// 故忽略错误。
+	// 观察位置、缓存暂停状态与用户暂停。观察失败不影响播放，故忽略错误。
+	// pause 只用来屏蔽暂停期间的缓存事件，不会自己映射成缓冲信号。
 	_ = p.send("observe_property", 0, "time-pos")
+	_ = p.send("observe_property", 1, "paused-for-cache")
+	_ = p.send("observe_property", 2, "pause")
 	return nil
 }
 
@@ -286,13 +292,45 @@ func (p *mpvProc) readLoop(conn io.ReadWriteCloser, sess int64) {
 		}
 		_ = json.Unmarshal(line, &probe)
 		if probe.Event != "" {
-			if evt, ok := parseEvent(line); ok {
-				if evt.Kind == player.EventPosition {
-					p.stateMu.Lock()
-					p.state.Position = evt.Position
-					p.stateMu.Unlock()
+			if paused, ok := parsePauseProperty(line); ok {
+				// 用户主动暂停：只更新状态，不产生任何播放信号。
+				p.stateMu.Lock()
+				p.paused = paused
+				if paused {
+					p.state.Playing = player.StatePaused
+				} else if p.state.Playing == player.StatePaused {
+					p.state.Playing = player.StatePlaying
 				}
-				sendEvent(p.events, evt)
+				p.stateMu.Unlock()
+				continue
+			}
+			if evt, ok := parseEvent(line); ok {
+				p.stateMu.Lock()
+				emit := true
+				switch evt.Kind {
+				case player.EventPosition:
+					p.state.Position = evt.Position
+				case player.EventBuffering:
+					// 暂停期间的缓存状态变化不对外播报，否则会被前端当成
+					// 「未起播/持续缓冲」而触发自动换源。
+					if p.paused {
+						emit = false
+					} else {
+						p.state.Playing = player.StateBuffering
+					}
+				case player.EventPlaying:
+					if p.paused {
+						emit = false
+					} else {
+						p.state.Playing = player.StatePlaying
+					}
+				case player.EventEOF, player.EventError:
+					p.state.Playing = player.StateStopped
+				}
+				p.stateMu.Unlock()
+				if emit {
+					sendEvent(p.events, evt)
+				}
 			}
 			continue
 		}

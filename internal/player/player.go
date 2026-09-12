@@ -130,6 +130,7 @@ const (
 	EventBuffering                  // 缓冲中
 	EventError                      // 播放出错，Err 非空
 	EventEOF                        // 播放自然结束
+	EventPlaying                    // 已开始或恢复播放
 )
 
 // Event 是播放器上报的异步事件。

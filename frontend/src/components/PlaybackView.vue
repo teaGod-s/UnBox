@@ -13,14 +13,28 @@ export interface PlaybackPlan {
   CanFallback: boolean
 }
 
-const props = defineProps<{ plan: PlaybackPlan | null; seekTo?: number; emptyText?: string }>()
-const emit = defineEmits<{ fallback: [id: string, position: number]; progress: [time: number, duration: number] }>()
+/** 标准播放信号：组件只上报，不决定切集或换源。 */
+export type PlaybackState = 'playing' | 'buffering' | 'ready' | 'error' | 'ended'
+
+const props = defineProps<{
+  plan: PlaybackPlan | null
+  seekTo?: number
+  emptyText?: string
+  /** 为真时播放错误只上报，不再自行降级到 mpv，由点播会话协调器决定换源。 */
+  suppressFallback?: boolean
+}>()
+const emit = defineEmits<{
+  fallback: [id: string, position: number]
+  progress: [time: number, duration: number]
+  playback: [state: PlaybackState, message?: string]
+}>()
 const video = ref<HTMLVideoElement | null>(null)
 const trackState = ref<TrackState | null>(null)
 const menuOpen = ref(false)
 let hls: Hls | null = null
 let flv: ReturnType<typeof mpegts.createPlayer> | null = null
 let fallbackSent = false
+let errorReported = false
 let networkRestarts = 0
 let mediaRecoveries = 0
 let attachGeneration = 0
@@ -48,6 +62,23 @@ function requestFallback() {
   }
 }
 
+// reportError 把播放失败上报给上层。suppressFallback 为真时不再自行降级，
+// 换源交给 App 的点播会话协调器；同一次播放只上报一次错误信号。
+function reportError(message?: string) {
+  if (!errorReported) {
+    errorReported = true
+    emit('playback', 'error', message)
+  }
+  if (!props.suppressFallback) requestFallback()
+}
+
+// 原生 <video> 的 error 事件在 hls.js/mpegts 路径下可能只是内部恢复过程中的
+// 中间态，这两条路径由各自的错误回调按重试预算处理，避免误判成致命错误。
+function onVideoError() {
+  if (hls || flv) return
+  reportError()
+}
+
 // hls.js 的 fatal 只表示它自己的重试策略用尽，不等于后端能力不足。
 // 1.7.1 里 attachMediaError 是 details 而非 type，挂载失败归入 MEDIA_ERROR。
 function onHlsError(_event: Events, data: ErrorData) {
@@ -56,17 +87,17 @@ function onHlsError(_event: Events, data: ErrorData) {
   if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
     mediaRecoveries++
     if (mediaRecoveries <= MAX_MEDIA_RECOVERIES && hls) hls.recoverMediaError()
-    else requestFallback()
+    else reportError(String(data.details ?? data.type))
     return
   }
   if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
     networkRestarts++
     // 无参调用：hls.js 会回到当前播放位置；传 undefined 会被算成 NaN。
     if (networkRestarts <= MAX_NETWORK_RESTARTS && hls) hls.startLoad()
-    else requestFallback()
+    else reportError(String(data.details ?? data.type))
     return
   }
-  requestFallback()
+  reportError(String(data.details ?? data.type))
 }
 
 // mpegts 没有内部重试，也没有 recoverMediaError：传输错误只能靠 unload()+load() 重连，
@@ -74,13 +105,13 @@ function onHlsError(_event: Events, data: ErrorData) {
 function onMpegtsError(errType: string, errDetail: string, info: unknown) {
   console.warn('[mpegts] error', errType, errDetail, info)
   if (errType === mpegts.ErrorTypes.MEDIA_ERROR) {
-    requestFallback()
+    reportError(errDetail)
     return
   }
   networkRestarts++
   if (networkRestarts <= MAX_NETWORK_RESTARTS && flv) {
     flv.unload(); flv.load()
-  } else requestFallback()
+  } else reportError(errDetail)
 }
 
 function onTimeUpdate() {
@@ -112,6 +143,7 @@ async function attach(plan: PlaybackPlan | null) {
   cleanup()
   const generation = attachGeneration
   fallbackSent = false
+  errorReported = false
   networkRestarts = 0
   mediaRecoveries = 0
   if (!plan || plan.Backend !== 'web') return
@@ -131,7 +163,6 @@ async function attach(plan: PlaybackPlan | null) {
     flv.on(mpegts.Events.ERROR, onMpegtsError); flv.attachMediaElement(element); flv.load(); return
   }
   element.src = plan.URL
-  element.addEventListener('error', requestFallback, { once: true })
 }
 
 watch(() => props.plan, attach, { immediate: true })
@@ -145,7 +176,14 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="playback-view">
-    <video v-if="plan?.Backend === 'web'" ref="video" controls playsinline preload="metadata" @timeupdate="onTimeUpdate" @loadedmetadata="onLoadedMetadata" />
+    <video v-if="plan?.Backend === 'web'" ref="video" controls playsinline preload="metadata"
+      @timeupdate="onTimeUpdate" @loadedmetadata="onLoadedMetadata"
+      @playing="emit('playback', 'playing')"
+      @waiting="emit('playback', 'buffering')"
+      @stalled="emit('playback', 'buffering')"
+      @canplay="emit('playback', 'ready')"
+      @ended="emit('playback', 'ended')"
+      @error="onVideoError" />
     <button v-if="isHls" class="track-toggle" type="button" title="轨道设置" aria-label="轨道设置" @click.stop="menuOpen = !menuOpen">⚙</button>
     <TrackMenu v-if="isHls && menuOpen && trackState"
       :levels="trackState.levels" :current-level="trackState.currentLevel"

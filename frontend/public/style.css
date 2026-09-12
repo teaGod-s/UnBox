@@ -578,6 +578,8 @@ body {
 .playback-view { position: relative; width: 100%; background: var(--deep); min-height: 180px; aspect-ratio: 16 / 9; display: grid; place-items: center; overflow: hidden; }
 .playback-view video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .mpv-status, .playback-empty { color: var(--text-dim); font-size: 0.9rem; }
+/* 下一集预载元素必须隐藏：它只负责拉取资源，不能接管当前播放画面。 */
+.preload-video { display: none; }
 
 .track-toggle {
   position: absolute;
@@ -756,6 +758,13 @@ body {
 }
 
 .settings-choice:hover { background: var(--btn-hover); }
+
+/* 播放设置：三个并列按钮，开启时用主题强调色，关闭时与普通设置按钮一致 */
+.settings-choice.active {
+  color: var(--accent);
+  background: var(--btn-active-bg);
+  border-color: var(--accent);
+}
 
 .settings-choice-panel { width: min(480px, 92vw); }
 

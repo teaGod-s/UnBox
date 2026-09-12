@@ -12,6 +12,7 @@ import (
 	"github.com/unbox/unbox/internal/config"
 	"github.com/unbox/unbox/internal/library"
 	"github.com/unbox/unbox/internal/library/thumb"
+	"github.com/unbox/unbox/internal/playback"
 	"github.com/unbox/unbox/internal/player"
 	"github.com/unbox/unbox/internal/provider"
 	"github.com/unbox/unbox/internal/provider/live"
@@ -31,6 +32,74 @@ func newTestService(t *testing.T) *ShellService {
 	svc := NewShellService(live.New(channels), nil, s)
 	t.Cleanup(func() { s.Close() })
 	return svc
+}
+
+func newPlaybackSettingsService(t *testing.T, st *store.Store) *ShellService {
+	t.Helper()
+	svc := NewShellService(live.New(nil), nil, st)
+	t.Cleanup(func() { _ = svc.ServiceShutdown() })
+	return svc
+}
+
+func TestPlaybackSettingsRoundTripAndDefaults(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/playback-settings.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	svc := newPlaybackSettingsService(t, st)
+	if got := svc.GetPlaybackSettings(); got != (PlaybackSettings{}) {
+		t.Fatalf("missing keys = %#v, want all false", got)
+	}
+	want := PlaybackSettings{AutoNext: true, AutoSwitchSource: true, PreloadNext: false}
+	if err := svc.SetPlaybackSettings(want); err != nil {
+		t.Fatal(err)
+	}
+	svc2 := newPlaybackSettingsService(t, st)
+	if got := svc2.GetPlaybackSettings(); got != want {
+		t.Fatalf("round trip = %#v, want %#v", got, want)
+	}
+}
+
+func TestPlaybackSettingsInvalidValuesFallBackToFalse(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/playback-settings.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.SetKV(playbackAutoNextKey, "not-a-bool"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetKV(playbackAutoSwitchSourceKey, "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetKV(playbackPreloadNextKey, "false"); err != nil {
+		t.Fatal(err)
+	}
+
+	got := newPlaybackSettingsService(t, st).GetPlaybackSettings()
+	want := PlaybackSettings{AutoSwitchSource: true}
+	if got != want {
+		t.Fatalf("invalid values = %#v, want %#v", got, want)
+	}
+}
+
+func TestPlaybackSettingsStoreErrors(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/playback-settings.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := newPlaybackSettingsService(t, st)
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := svc.GetPlaybackSettings(); got != (PlaybackSettings{}) {
+		t.Fatalf("closed store read = %#v, want all false", got)
+	}
+	if err := svc.SetPlaybackSettings(PlaybackSettings{AutoNext: true}); err == nil {
+		t.Fatal("closed store write should return an error")
+	}
 }
 
 func TestLibraryDirRoundTrip(t *testing.T) {
@@ -566,5 +635,188 @@ func TestStopPlaybackDoesNotInvalidateNewerToken(t *testing.T) {
 	}
 	if svc.playbackToken != 2 {
 		t.Fatalf("newer playback token was cleared: got %d", svc.playbackToken)
+	}
+}
+
+func TestPlaybackEventMapping(t *testing.T) {
+	cases := []struct {
+		name string
+		ev   player.Event
+		tok  uint64
+		want PlaybackEvent
+	}{
+		{"playing", player.Event{Kind: player.EventPlaying}, 1,
+			PlaybackEvent{Token: 1, Kind: "playing"}},
+		{"buffering", player.Event{Kind: player.EventBuffering}, 1,
+			PlaybackEvent{Token: 1, Kind: "buffering"}},
+		{"position", player.Event{Kind: player.EventPosition, Position: 8.25}, 17,
+			PlaybackEvent{Token: 17, Kind: "position", Position: 8.25}},
+		{"error", player.Event{Kind: player.EventError, Err: errors.New("boom")}, 3,
+			PlaybackEvent{Token: 3, Kind: "error", Error: "boom"}},
+		{"ended", player.Event{Kind: player.EventEOF}, 4,
+			PlaybackEvent{Token: 4, Kind: "ended"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := playbackEventFor(tc.ev, tc.tok)
+			if !ok {
+				t.Fatalf("%s: 期望事件被转发", tc.name)
+			}
+			if got != tc.want {
+				t.Fatalf("got %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+	if _, ok := playbackEventFor(player.Event{Kind: player.EventKind(99)}, 1); ok {
+		t.Fatal("未知事件类型不应转发给前端")
+	}
+}
+
+// bridgeTestPlayer 是桥接循环测试用的可编程 player：Events() 返回注入通道。
+type bridgeTestPlayer struct {
+	events chan player.Event
+}
+
+func (p *bridgeTestPlayer) Load(ctx context.Context, s player.Stream) error { return nil }
+func (p *bridgeTestPlayer) Play() error                                     { return nil }
+func (p *bridgeTestPlayer) Pause() error                                    { return nil }
+func (p *bridgeTestPlayer) Seek(float64) error                              { return nil }
+func (p *bridgeTestPlayer) SetVolume(int) error                             { return nil }
+func (p *bridgeTestPlayer) SelectTrack(player.TrackKind, int) error         { return nil }
+func (p *bridgeTestPlayer) State() player.State                             { return player.State{} }
+func (p *bridgeTestPlayer) Events() <-chan player.Event                     { return p.events }
+func (p *bridgeTestPlayer) Close() error                                    { return nil }
+
+func newBridgeTestPlayer() *bridgeTestPlayer {
+	return &bridgeTestPlayer{events: make(chan player.Event, 16)}
+}
+
+func TestPlaybackBridgeFiltersTokenAndStops(t *testing.T) {
+	inner := newBridgeTestPlayer()
+	// 先注入事件出口再启动桥接，避免与桥接 goroutine 并发写字段。
+	svc := newShellService(nil, inner, nil)
+
+	var mu sync.Mutex
+	var got []PlaybackEvent
+	svc.playbackEventEmitter = func(ev PlaybackEvent) {
+		mu.Lock()
+		got = append(got, ev)
+		mu.Unlock()
+	}
+	svc.startPlaybackBridge()
+	defer func() { _ = svc.ServiceShutdown() }()
+
+	// 无会话 token 时事件应被丢弃。
+	inner.events <- player.Event{Kind: player.EventPlaying}
+	time.Sleep(30 * time.Millisecond)
+	mu.Lock()
+	if n := len(got); n != 0 {
+		mu.Unlock()
+		t.Fatalf("无 token 时收到 %d 个事件，期望 0", n)
+	}
+	mu.Unlock()
+
+	// 建立会话后事件应带当前 token 发出。
+	if _, ok := svc.claimPlayback(7); !ok {
+		t.Fatal("claimPlayback 应接受首个 token")
+	}
+	inner.events <- player.Event{Kind: player.EventPosition, Position: 8.25}
+	waitForBridgeEvents(t, &mu, &got, 1)
+	mu.Lock()
+	if len(got) != 1 || got[0] != (PlaybackEvent{Token: 7, Kind: "position", Position: 8.25}) {
+		mu.Unlock()
+		t.Fatalf("got %#v，期望 {Token:7 Kind:position Position:8.25}", got)
+	}
+	mu.Unlock()
+
+	// shutdown 后桥接应停止：后续事件不再被转发。
+	if err := svc.ServiceShutdown(); err != nil {
+		t.Fatal(err)
+	}
+	inner.events <- player.Event{Kind: player.EventEOF}
+	time.Sleep(30 * time.Millisecond)
+	mu.Lock()
+	if n := len(got); n != 1 {
+		mu.Unlock()
+		t.Fatalf("shutdown 后仍收到事件（共 %d）", n)
+	}
+	mu.Unlock()
+}
+
+func waitForBridgeEvents(t *testing.T, mu *sync.Mutex, got *[]PlaybackEvent, n int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		if len(*got) >= n {
+			mu.Unlock()
+			return
+		}
+		mu.Unlock()
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("等待桥接事件超时")
+}
+
+// preloadTestProvider 是点播预载测试用的最小 Provider。
+type preloadTestProvider struct {
+	stream player.Stream
+	calls  int
+}
+
+func (p *preloadTestProvider) ID() string { return "preload-test" }
+func (p *preloadTestProvider) Home(context.Context) ([]provider.Section, error) {
+	return nil, nil
+}
+func (p *preloadTestProvider) Browse(context.Context, string, int) (provider.Page, error) {
+	return provider.Page{}, nil
+}
+func (p *preloadTestProvider) Search(context.Context, string) ([]provider.Item, error) {
+	return nil, nil
+}
+func (p *preloadTestProvider) Detail(context.Context, string) (provider.Media, error) {
+	return provider.Media{}, nil
+}
+func (p *preloadTestProvider) Resolve(context.Context, string) (player.Stream, error) {
+	p.calls++
+	return p.stream, nil
+}
+
+func TestPreloadVodRegistersPreloadWithoutTouchingPlayback(t *testing.T) {
+	svc := newTestService(t)
+	// 用本地文件流避免点播预载测试依赖网络：它走 mpv 分支，只登记可取消的预载任务。
+	pv := &preloadTestProvider{stream: player.Stream{URL: "file:///tmp/movie.mp4", Kind: player.StreamLocal}}
+	svc.vods["demo"] = pv
+	svc.playbackToken = 7
+	svc.playbackSeq = 3
+
+	plan, err := svc.PreloadVod("demo", "ep-2")
+	if err != nil {
+		t.Fatalf("PreloadVod: %v", err)
+	}
+	if plan.Backend != playback.BackendMPV || plan.ID == "" {
+		t.Fatalf("plan = %#v，期望可释放的 mpv 预载计划", plan)
+	}
+	if svc.playbackToken != 7 || svc.playbackSeq != 3 {
+		t.Fatalf("预载不应改动播放会话: token=%d seq=%d", svc.playbackToken, svc.playbackSeq)
+	}
+	if err := svc.ReleasePreload(plan.ID); err != nil {
+		t.Fatalf("ReleasePreload: %v", err)
+	}
+	if err := svc.ReleasePreload("unknown"); err != nil {
+		t.Fatalf("释放未知预载应幂等: %v", err)
+	}
+}
+
+func TestPreloadVodUnknownSiteDoesNotTouchPlayback(t *testing.T) {
+	svc := newTestService(t)
+	svc.playbackToken = 7
+	svc.playbackSeq = 3
+
+	if _, err := svc.PreloadVod("missing", "ep-1"); err == nil {
+		t.Fatal("未知站点应返回错误")
+	}
+	if svc.playbackToken != 7 || svc.playbackSeq != 3 {
+		t.Fatalf("预载失败不应改动播放会话: token=%d seq=%d", svc.playbackToken, svc.playbackSeq)
 	}
 }

@@ -108,6 +108,31 @@ func (p *Proxy) Register(_ context.Context, stream player.Stream) (string, error
 	return p.signedURLLocked(token, tokenBytes, target), nil
 }
 
+// Release 按注册时返回的代理 URL 立即释放会话，不等 TTL；重复释放是幂等的。
+func (p *Proxy) Release(proxyURL string) error {
+	token, ok := proxyToken(proxyURL)
+	if !ok {
+		return errors.New("无效的代理地址")
+	}
+	p.mu.Lock()
+	delete(p.streams, token)
+	p.mu.Unlock()
+	return nil
+}
+
+// proxyToken 从代理 URL 的路径中取出注册令牌。
+func proxyToken(rawURL string) (string, bool) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Path == "" {
+		return "", false
+	}
+	token := strings.TrimPrefix(parsed.Path, "/proxy/")
+	if token == "" || token == parsed.Path || strings.Contains(token, "/") {
+		return "", false
+	}
+	return token, true
+}
+
 func (p *Proxy) startLocked() error {
 	if p.listener != nil {
 		return nil

@@ -184,6 +184,37 @@ func TestProxyCloseIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestProxyReleaseDropsSessionWithoutTTL 释放不依赖 TTL：注册后立即释放，
+// 该 token 必须马上失效。
+func TestProxyReleaseDropsSessionWithoutTTL(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "secret")
+	}))
+	defer upstream.Close()
+
+	proxy := NewProxy(upstream.Client(), time.Hour)
+	t.Cleanup(func() { _ = proxy.Close() })
+	proxyURL, err := proxy.Register(context.Background(), player.Stream{URL: upstream.URL + "/a.ts"})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if status := getStatus(t, proxyURL); status != http.StatusOK {
+		t.Fatalf("注册后状态 = %d, want 200", status)
+	}
+	if err := proxy.Release(proxyURL); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if status := getStatus(t, proxyURL); status != http.StatusNotFound {
+		t.Fatalf("释放后状态 = %d, want 404", status)
+	}
+	if err := proxy.Release(proxyURL); err != nil {
+		t.Fatalf("重复 Release 应幂等: %v", err)
+	}
+	if err := proxy.Release("://bad"); err == nil {
+		t.Fatal("非法代理地址应返回错误")
+	}
+}
+
 func getBody(t *testing.T, rawURL string) string {
 	t.Helper()
 	resp, err := http.Get(rawURL)

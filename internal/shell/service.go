@@ -92,6 +92,19 @@ const searchThreadsKey = "searchThreads"
 
 const contentCardStyleKey = "contentCardStyle"
 
+const (
+	playbackAutoNextKey         = "playback.autoNext"
+	playbackAutoSwitchSourceKey = "playback.autoSwitchSource"
+	playbackPreloadNextKey      = "playback.preloadNext"
+)
+
+// PlaybackSettings 是点播播放自动化选项。
+type PlaybackSettings struct {
+	AutoNext         bool
+	AutoSwitchSource bool
+	PreloadNext      bool
+}
+
 // appVersion 是当前应用版本（与 GitHub release tag 对齐）。
 // 本地/开发构建默认为 0.0.1；发布构建通过 -ldflags
 // "-X github.com/unbox/unbox/internal/shell.appVersion=<version>" 注入真实版本。
@@ -213,8 +226,10 @@ type SearchResultEvent struct {
 	Items []VodItem
 }
 
-// NewShellService 组装壳层服务。pv 为直播 Provider（可为 nil）；p 可为 nil（播放器未就绪）。
-func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *ShellService {
+// newShellService 组装壳层服务但不启动播放器事件桥接。
+// 便于测试在桥接启动前注入事件出口，避免与桥接 goroutine 争用字段。
+// pv 为直播 Provider（可为 nil）；p 可为 nil（播放器未就绪）。
+func newShellService(pv provider.Provider, p player.Player, st *store.Store) *ShellService {
 	root, _ := os.UserConfigDir()
 	manager := mpvplugin.New(runtime.GOOS, root)
 	controller := playback.NewController(playback.NewResolver(nil), playback.NewProxy(nil, 0), p)
@@ -223,7 +238,7 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 	if runtime.GOOS == "linux" {
 		controller.SetWebMSE(false)
 	}
-	return &ShellService{
+	svc := &ShellService{
 		live:             pv,
 		player:           p,
 		store:            st,
@@ -235,10 +250,21 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 		vodCategoryCache: make(map[string]vodCategoryCacheEntry),
 		vodCategoryNow:   time.Now,
 	}
+	return svc
+}
+
+// NewShellService 组装壳层服务并启动播放器事件桥接。
+// pv 为直播 Provider（可为 nil）；p 可为 nil（播放器未就绪）。
+func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *ShellService {
+	svc := newShellService(pv, p, st)
+	svc.playbackEventEmitter = svc.emitPlaybackEvent
+	svc.startPlaybackBridge()
+	return svc
 }
 
 // ServiceShutdown 在 Wails 退出服务阶段释放媒体库 HTTP 服务和播放资源。
 func (s *ShellService) ServiceShutdown() error {
+	s.stopPlaybackBridge()
 	var firstErr error
 	if s.library != nil {
 		firstErr = s.library.Close()
@@ -1505,6 +1531,31 @@ func (s *ShellService) PrepareVod(site, epID string) (playback.Plan, error) {
 	return s.prepareVod(site, epID, 0)
 }
 
+// PreloadVod 为点播下一集准备资源：Web 流注册独立代理会话，其余流只做轻量
+// 网络预热。它不触碰当前播放 token、播放器或播放状态，失败只返回预载错误。
+func (s *ShellService) PreloadVod(site, epID string) (playback.Plan, error) {
+	pv, err := s.vodOf(site)
+	if err != nil {
+		return playback.Plan{}, err
+	}
+	stream, err := pv.Resolve(context.Background(), epID)
+	if err != nil {
+		return playback.Plan{}, err
+	}
+	if s.playback == nil {
+		return playback.Plan{}, errors.New("播放控制器未就绪")
+	}
+	return s.playback.Preload(context.Background(), stream)
+}
+
+// ReleasePreload 取消并释放一次预载任务；未知 id 视为已释放。
+func (s *ShellService) ReleasePreload(id string) error {
+	if s.playback == nil {
+		return nil
+	}
+	return s.playback.Release(id)
+}
+
 // PrepareVodWithToken 准备点播播放，并让后端丢弃已过期的前端请求。
 func (s *ShellService) PrepareVodWithToken(site, epID string, token uint64) (playback.Plan, error) {
 	return s.prepareVod(site, epID, token)
@@ -1652,6 +1703,43 @@ func (s *ShellService) GetTheme() (string, error) {
 	return v, err
 }
 
+// GetPlaybackSettings 返回点播播放自动化选项；缺失、非法或存储读取失败均按关闭处理。
+func (s *ShellService) GetPlaybackSettings() PlaybackSettings {
+	return PlaybackSettings{
+		AutoNext:         s.getPlaybackSetting(playbackAutoNextKey),
+		AutoSwitchSource: s.getPlaybackSetting(playbackAutoSwitchSourceKey),
+		PreloadNext:      s.getPlaybackSetting(playbackPreloadNextKey),
+	}
+}
+
+func (s *ShellService) getPlaybackSetting(key string) bool {
+	if s.store == nil {
+		return false
+	}
+	v, ok, err := s.store.GetKV(key)
+	return err == nil && ok && v == "true"
+}
+
+// SetPlaybackSettings 持久化点播播放自动化选项。
+func (s *ShellService) SetPlaybackSettings(settings PlaybackSettings) error {
+	if s.store == nil {
+		return nil
+	}
+	for _, setting := range []struct {
+		key   string
+		value bool
+	}{
+		{playbackAutoNextKey, settings.AutoNext},
+		{playbackAutoSwitchSourceKey, settings.AutoSwitchSource},
+		{playbackPreloadNextKey, settings.PreloadNext},
+	} {
+		if err := s.store.SetKV(setting.key, strconv.FormatBool(setting.value)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // SetContentCardStyle 持久化内容卡片样式；仅接受 list/grid，非法值回退列表。
 func (s *ShellService) SetContentCardStyle(style string) error {
 	if s.store == nil {
@@ -1704,4 +1792,103 @@ func toVodItems(items []provider.Item) []VodItem {
 		out[i] = VodItem{ID: it.ID, Title: it.Title, Logo: it.Logo, Group: it.Group}
 	}
 	return out
+}
+
+// PlaybackEvent 是 mpv 播放器事件经 Wails 事件 "playback:event" 桥接给前端的载荷。
+// Token 是发起本次播放的会话 token；前端只处理与当前点播会话 token 一致的事件。
+type PlaybackEvent struct {
+	Token    uint64
+	Kind     string
+	Position float64
+	Error    string
+}
+
+// playbackEventFor 把播放器事件映射为带会话 token 的桥接载荷；纯函数，便于单测。
+// 第二个返回值为 false 表示该事件类型不向前端转发。
+func playbackEventFor(ev player.Event, token uint64) (PlaybackEvent, bool) {
+	var kind string
+	switch ev.Kind {
+	case player.EventPlaying:
+		kind = "playing"
+	case player.EventBuffering:
+		kind = "buffering"
+	case player.EventPosition:
+		kind = "position"
+	case player.EventError:
+		kind = "error"
+	case player.EventEOF:
+		kind = "ended"
+	default:
+		return PlaybackEvent{}, false
+	}
+	errMsg := ""
+	if ev.Err != nil {
+		errMsg = ev.Err.Error()
+	}
+	return PlaybackEvent{Token: token, Kind: kind, Position: ev.Position, Error: errMsg}, true
+}
+
+// currentPlaybackToken 返回当前点播会话 token；0 表示无会话。
+// playbackToken 与 claimPlayback/playbackCurrent 一样由 s.mu 保护。
+func (s *ShellService) currentPlaybackToken() uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.playbackToken
+}
+
+// emitPlaybackEvent 是播放器事件桥接的默认出口：经 Wails "playback:event" 推给前端。
+// application 尚未就绪时静默丢弃（服务可能在 app 初始化前启动，或测试环境无全局 app）。
+func (s *ShellService) emitPlaybackEvent(ev PlaybackEvent) {
+	app := application.Get()
+	if app == nil {
+		return
+	}
+	app.Event.Emit("playback:event", ev)
+}
+
+// startPlaybackBridge 启动播放器事件桥接 goroutine：消费 player.Events()，
+// 读取当前会话 token 后经 Wails "playback:event" 推给前端；无当前 token 时丢弃。
+// 桥接异常不应影响手动播放，因此事件循环错误只记日志并继续。
+func (s *ShellService) startPlaybackBridge() {
+	if s.player == nil {
+		return
+	}
+	emit := s.playbackEventEmitter
+	if emit == nil {
+		emit = s.emitPlaybackEvent
+	}
+	// 信号 channel 与出口都先取到局部变量再交给 goroutine，
+	// 避免 goroutine 与 stop/注入方并发读写 ShellService 字段。
+	stop := make(chan struct{})
+	s.playbackBridgeMu.Lock()
+	s.playbackBridgeStop = stop
+	s.playbackBridgeMu.Unlock()
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case ev, ok := <-s.player.Events():
+				if !ok {
+					return
+				}
+				payload, ok := playbackEventFor(ev, s.currentPlaybackToken())
+				if !ok || payload.Token == 0 {
+					continue
+				}
+				emit(payload)
+			}
+		}
+	}()
+}
+
+// stopPlaybackBridge 关闭播放器事件桥接 goroutine；未启动或已停止时为空操作。
+func (s *ShellService) stopPlaybackBridge() {
+	s.playbackBridgeMu.Lock()
+	stop := s.playbackBridgeStop
+	s.playbackBridgeStop = nil
+	s.playbackBridgeMu.Unlock()
+	if stop != nil {
+		close(stop)
+	}
 }

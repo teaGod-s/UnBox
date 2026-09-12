@@ -84,10 +84,11 @@ vi.mock('mpegts.js', () => {
   }
 })
 
-async function mountView(plan?: Partial<PlaybackPlan>) {
+async function mountView(plan?: Partial<PlaybackPlan>, extraProps: Record<string, unknown> = {}) {
   const wrapper = mount(PlaybackView, {
     props: {
       plan: { ID: 'p1', Backend: 'web', URL: '/x.m3u8', Kind: 'hls', CanFallback: true, ...plan },
+      ...extraProps,
     },
   })
   await nextTick()
@@ -281,6 +282,55 @@ describe('PlaybackView', () => {
     expect(instances.hls).toHaveLength(2)
     expect(instances.hls[0].destroy).toHaveBeenCalled()
     expect(instances.hls[1].loadSource).toHaveBeenCalledWith('/new.m3u8')
+  })
+
+  it('把原生 video 事件统一上报为标准播放信号', async () => {
+    const wrapper = await mountView()
+    const video = wrapper.find('video')
+    await video.trigger('playing')
+    await video.trigger('waiting')
+    await video.trigger('stalled')
+    await video.trigger('canplay')
+    await video.trigger('ended')
+    expect(wrapper.emitted('playback')).toEqual([
+      ['playing'],
+      ['buffering'],
+      ['buffering'],
+      ['ready'],
+      ['ended'],
+    ])
+  })
+
+  it('suppressFallback 为真时只上报错误，不发旧 fallback', async () => {
+    const wrapper = await mountView({ Kind: 'flv', URL: '/x.flv' }, { suppressFallback: true })
+    const flv = instances.flv[0]
+    flv.handlers[mpegts.Events.ERROR](mpegts.ErrorTypes.MEDIA_ERROR, 'MediaMSEError', {})
+    expect(wrapper.emitted('fallback')).toBeUndefined()
+    expect(wrapper.emitted('playback')).toEqual([['error', 'MediaMSEError']])
+  })
+
+  it('suppressFallback 关闭时保留原有 fallback 行为', async () => {
+    const wrapper = await mountView({ Kind: 'flv', URL: '/x.flv' })
+    const flv = instances.flv[0]
+    setVideoTime(wrapper, 42)
+    flv.handlers[mpegts.Events.ERROR](mpegts.ErrorTypes.MEDIA_ERROR, 'MediaMSEError', {})
+    expect(wrapper.emitted('fallback')).toEqual([['p1', 42]])
+  })
+
+  it('每次播放计划只上报一次错误信号', async () => {
+    const wrapper = await mountView({ Kind: 'flv', URL: '/x.flv' }, { suppressFallback: true })
+    const flv = instances.flv[0]
+    const fire = () => flv.handlers[mpegts.Events.ERROR](mpegts.ErrorTypes.MEDIA_ERROR, 'MediaMSEError', {})
+    fire()
+    fire()
+    fire()
+    expect(wrapper.emitted('playback')).toEqual([['error', 'MediaMSEError']])
+  })
+
+  it('原生 video error 事件上报错误信号', async () => {
+    const wrapper = await mountView({ Kind: 'mp4', URL: '/x.mp4' }, { suppressFallback: true })
+    await wrapper.find('video').trigger('error')
+    expect(wrapper.emitted('playback')).toEqual([['error', undefined]])
   })
 
 })

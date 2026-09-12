@@ -64,4 +64,37 @@ func TestParseEvent(t *testing.T) {
 	if _, ok := parseEvent([]byte(`{"event":"idle"}`)); ok {
 		t.Fatal("idle 事件不应被当作位置/播放状态事件")
 	}
+	// stop/quit/redirect 不是播放失败，报成错误会误触发自动换源。
+	for _, reason := range []string{"stop", "quit", "redirect", ""} {
+		input := `{"event":"end-file","reason":"` + reason + `"}`
+		if _, ok := parseEvent([]byte(input)); ok {
+			t.Fatalf("end-file reason=%q 不应被当作播放失败", reason)
+		}
+	}
+}
+
+func TestParsePauseProperty(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		paused bool
+		ok     bool
+	}{
+		{name: "paused", input: `{"event":"property-change","name":"pause","data":true}`, paused: true, ok: true},
+		{name: "resumed", input: `{"event":"property-change","name":"pause","data":false}`, paused: false, ok: true},
+		{name: "other property", input: `{"event":"property-change","name":"time-pos","data":1}`, ok: false},
+		{name: "null data", input: `{"event":"property-change","name":"pause","data":null}`, ok: false},
+		{name: "non property event", input: `{"event":"end-file","reason":"eof"}`, ok: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paused, ok := parsePauseProperty([]byte(tt.input))
+			if ok != tt.ok {
+				t.Fatalf("ok = %v, want %v", ok, tt.ok)
+			}
+			if ok && paused != tt.paused {
+				t.Fatalf("paused = %v, want %v", paused, tt.paused)
+			}
+		})
+	}
 }

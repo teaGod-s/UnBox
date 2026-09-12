@@ -32,17 +32,19 @@ func parseEvent(line []byte) (player.Event, bool) {
 	}
 	switch {
 	case raw.Event == "end-file":
-		if raw.Reason == "eof" {
+		switch raw.Reason {
+		case "eof":
 			return player.Event{Kind: player.EventEOF}, true
+		case "error":
+			return player.Event{
+				Kind: player.EventError,
+				Err:  fmt.Errorf("mpv 播放出错: %s", raw.Reason),
+			}, true
 		}
-		reason := raw.Reason
-		if reason == "" {
-			reason = "未知原因"
-		}
-		return player.Event{
-			Kind: player.EventError,
-			Err:  fmt.Errorf("mpv 播放异常结束: %s", reason),
-		}, true
+		// stop/quit/redirect 等不是播放失败：前者出现在停止播放或换文件时，
+		// quit 是进程退出，redirect 是播放列表条目被重定向替换。把它们当成
+		// 故障会误触发自动换源，因此直接忽略。
+		return player.Event{}, false
 	case raw.Event == "property-change" && raw.Name == "time-pos":
 		f, err := strconv.ParseFloat(string(raw.Data), 64)
 		if err != nil {
@@ -60,4 +62,26 @@ func parseEvent(line []byte) (player.Event, bool) {
 		return player.Event{Kind: player.EventPlaying}, true
 	}
 	return player.Event{}, false
+}
+
+// parsePauseProperty 解析 mpv 的 pause 属性变化。pause 本身不映射为缓冲或
+// 播放信号（用户主动暂停不是缓冲），只用于在暂停期间屏蔽缓存状态事件，
+// 避免把「缓存回填」误报成恢复播放、把「缓存见底」误报成缓冲。
+func parsePauseProperty(line []byte) (paused bool, ok bool) {
+	var raw struct {
+		Event string          `json:"event"`
+		Name  string          `json:"name"`
+		Data  json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(line, &raw); err != nil {
+		return false, false
+	}
+	if raw.Event != "property-change" || raw.Name != "pause" {
+		return false, false
+	}
+	var value *bool
+	if err := json.Unmarshal(raw.Data, &value); err != nil || value == nil {
+		return false, false
+	}
+	return *value, true
 }

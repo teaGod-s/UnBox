@@ -96,6 +96,63 @@ func TestFailoverFansOutEvents(t *testing.T) {
 			t.Fatalf("事件 %d = %v，want %v", i, ev.Kind, want[i])
 		}
 	}
+	if got[0].Position != 12.5 {
+		t.Fatalf("位置事件载荷丢失: %#v", got[0])
+	}
+	if got[3].Err != context.Canceled {
+		t.Fatalf("错误事件载荷丢失: %#v", got[3])
+	}
+}
+
+func TestFailoverDropsNonTerminalEventsWhenUnconsumed(t *testing.T) {
+	inner := newFakePlayer()
+	fp := New(inner, nil)
+	defer fp.Close()
+
+	// 不消费 fp.Events()：非终端事件应被丢弃，而不是反压回内层播放器。
+	producerDone := make(chan struct{})
+	go func() {
+		defer close(producerDone)
+		for i := 0; i < 500; i++ {
+			inner.events <- player.Event{Kind: player.EventPosition, Position: float64(i)}
+		}
+	}()
+	select {
+	case <-producerDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("非终端事件不应反压到内层播放器")
+	}
+}
+
+func TestFailoverKeepsTerminalEventsWhenUnconsumed(t *testing.T) {
+	inner := newFakePlayer()
+	fp := New(inner, nil)
+	defer fp.Close()
+
+	// 灌入超过扇出缓冲的事件后再补一条终端事件：位置事件会被丢弃，
+	// 终端事件必须一直等到消费者读到为止。
+	go func() {
+		for i := 0; i < 200; i++ {
+			inner.events <- player.Event{Kind: player.EventPosition, Position: float64(i)}
+		}
+		inner.events <- player.Event{Kind: player.EventError, Err: context.Canceled}
+	}()
+
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case ev := <-fp.Events():
+			if ev.Kind != player.EventError {
+				continue
+			}
+			if ev.Err != context.Canceled {
+				t.Fatalf("终端事件载荷丢失: %#v", ev)
+			}
+			return
+		case <-deadline:
+			t.Fatal("未能在超时前读到终端事件")
+		}
+	}
 }
 
 func TestFailoverClosesFanoutChannel(t *testing.T) {

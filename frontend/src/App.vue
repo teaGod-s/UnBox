@@ -136,6 +136,7 @@ const searchThreads = ref(1)
 const showThreads = ref(false)
 const showContentCardStyle = ref(false)
 const showTheme = ref(false)
+const showPlaybackSettings = ref(false)
 const searching = ref(false)
 const searchRequest = ref(0)
 const activeSearchQuery = ref('')
@@ -168,6 +169,12 @@ const playbackSettingsStore = createPlaybackSettings(
   (e) => handleError(e),
 )
 const playbackSettings = playbackSettingsStore.settings
+
+// 播放设置按钮上的摘要：没开任何开关时显示「全部关闭」。
+const playbackSettingsSummary = computed(() => {
+  const on = PLAYBACK_SETTING_ITEMS.filter(item => playbackSettings.value[item.key]).map(item => item.label)
+  return on.length ? on.join(' · ') : '全部关闭'
+})
 
 function togglePlaybackSetting(key: PlaybackSettingKey, value: boolean) {
   void playbackSettingsStore.set(key, value)
@@ -1363,6 +1370,12 @@ function openTheme() {
   showTheme.value = true
 }
 
+// openPlaybackSettings 打开弹窗前重新读取一次，保证显示的是当前值。
+function openPlaybackSettings() {
+  showPlaybackSettings.value = true
+  void playbackSettingsStore.load()
+}
+
 onMounted(() => {
   refresh()
   loadTheme()
@@ -1737,19 +1750,8 @@ onBeforeUnmount(() => {
 
       <section class="src-section">
         <h3>播放设置</h3>
-        <div class="settings-switches">
-          <label v-for="item in PLAYBACK_SETTING_ITEMS" :key="item.key" class="settings-switch">
-            <span class="settings-switch-text">
-              <span class="settings-switch-label">{{ item.label }}</span>
-              <span class="settings-switch-hint">{{ item.hint }}</span>
-            </span>
-            <span class="settings-switch-state">{{ playbackSettings[item.key] ? '开' : '关' }}</span>
-            <input
-              type="checkbox"
-              class="settings-switch-input"
-              :checked="playbackSettings[item.key]"
-              @change="togglePlaybackSetting(item.key, ($event.target as HTMLInputElement).checked)" />
-          </label>
+        <div class="settings-personalize">
+          <button type="button" class="settings-choice" @click="openPlaybackSettings">播放设置：{{ playbackSettingsSummary }}</button>
         </div>
       </section>
 
@@ -1890,6 +1892,30 @@ onBeforeUnmount(() => {
         </div>
         <div class="theme-grid">
           <button v-for="t in themeOptions" :key="t.id" type="button" :class="{ active: currentTheme === t.id }" :data-theme="t.id" @click="applyTheme(t.id)">{{ t.label }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showPlaybackSettings" class="settings-overlay" @click.self="showPlaybackSettings = false">
+      <div class="settings-panel settings-choice-panel">
+        <div class="settings-head">
+          <h2>播放设置</h2>
+          <button type="button" aria-label="关闭" @click="showPlaybackSettings = false">✕</button>
+        </div>
+        <p class="settings-choice-hint">点播播放的自动化行为，三个开关默认关闭</p>
+        <div class="settings-switches">
+          <label v-for="item in PLAYBACK_SETTING_ITEMS" :key="item.key" class="settings-switch">
+            <span class="settings-switch-text">
+              <span class="settings-switch-label">{{ item.label }}</span>
+              <span class="settings-switch-hint">{{ item.hint }}</span>
+            </span>
+            <span class="settings-switch-state">{{ playbackSettings[item.key] ? '开' : '关' }}</span>
+            <input
+              type="checkbox"
+              class="settings-switch-input"
+              :checked="playbackSettings[item.key]"
+              @change="togglePlaybackSetting(item.key, ($event.target as HTMLInputElement).checked)" />
+          </label>
         </div>
       </div>
     </div>

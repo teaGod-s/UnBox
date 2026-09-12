@@ -69,10 +69,15 @@ describe('createPlaybackSettings', () => {
 })
 
 describe('播放设置页接线', () => {
-  it('设置页有播放设置分类与三行开关', () => {
+  it('设置页用按钮打开弹窗，弹窗里是三行开关', () => {
     expect(app).toContain('播放设置')
     expect(app).toContain('PLAYBACK_SETTING_ITEMS')
     expect(app).toContain('togglePlaybackSetting(item.key')
+    // 与「个性化」一致：入口按钮 + settings-overlay / settings-choice-panel 弹窗。
+    expect(app).toContain('class="settings-choice" @click="openPlaybackSettings"')
+    expect(app).toContain('v-if="showPlaybackSettings" class="settings-overlay"')
+    expect(app).toContain('settings-panel settings-choice-panel')
+    expect(app).not.toMatch(/<section class="src-section">\s*<h3>播放设置<\/h3>\s*<div class="settings-switches">/)
     expect(PLAYBACK_SETTING_ITEMS.map((item) => item.label)).toEqual(['自动切集', '自动换源', '预载下一集'])
   })
 
@@ -80,6 +85,8 @@ describe('播放设置页接线', () => {
     expect(app).toContain('createPlaybackSettings')
     expect(app).toContain('playbackSettingsStore.load()')
     expect(app).toContain('playbackSettingsStore.set(')
+    // 打开弹窗时也重新读取一次当前值。
+    expect(app).toContain('openPlaybackSettings')
   })
 
   it('点播播放器按自动换源开关决定是否自行降级', () => {

@@ -63,7 +63,9 @@
   展示暂停、继续和音量控制，保留选集、换源、收藏和播放记录等业务操作。
 
 - **播放设置与点播自动化**（`2026-09-12`，分支 `feat/playback-settings`，尚未合入 master）：
-  设置页新增「播放设置」分类，三个开关默认关闭，KV 键为 `playback.autoNext`、
+  设置页新增「播放设置」分类，入口按钮打开弹窗（与「个性化」的内容样式/主题同款
+  `settings-overlay` + `settings-choice-panel`，沿用主题变量），弹窗内是三个开关，
+  默认关闭，KV 键为 `playback.autoNext`、
   `playback.autoSwitchSource`、`playback.preloadNext`（缺失/非法值按关闭处理）。
   - **自动切集**：只取当前线路剧集数组里的下一集，没有下一集就停下，不跨线路找。
   - **自动换源**：明确错误立即触发，未起播/持续缓冲 30 秒触发；按详情页线路顺序尝试，

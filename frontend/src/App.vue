@@ -2,12 +2,14 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Events, Browser, Dialogs } from '@wailsio/runtime'
 import { ShellService, type SourceInfo, type Section, type VodItem, type VodListPage, type EpisodeInfo, type VodMedia, type SourceRecord, type VodHistoryInfo, type VodFavoriteInfo, type UpdateInfo } from '../bindings/github.com/unbox/unbox/internal/shell'
-import PlaybackView, { type PlaybackPlan } from './components/PlaybackView.vue'
+import PlaybackView, { type PlaybackPlan, type PlaybackState } from './components/PlaybackView.vue'
+import PreloadView from './components/PreloadView.vue'
 import VodDetailHeader from './components/VodDetailHeader.vue'
-import { clampEpisodePage, episodePageRanges, paginateEpisodes } from './episodes'
+import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
 import { createLibraryThumbPipeline } from './libraryThumb'
 import { contentCardStyleLabel, contentCardStyleOptions, normalizeContentCardStyle, type ContentCardStyle } from './contentCardStyle'
 import { createPlaybackSettings, PLAYBACK_SETTING_ITEMS, type PlaybackSettingKey, type PlaybackSettingsApi } from './playbackSettings'
+import { VodAutomation, nextEpisodeInSource, sameNameEpisodeOnSource, type VodAutomationHost } from './playbackAutomation'
 import { initializeHomeState } from './startup'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
 import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, pickResumeSeek, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodResumeView, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
@@ -84,6 +86,10 @@ const livePlaybackStatus = ref<PlaybackStatus>('idle')
 const vodPlaybackStatus = ref<PlaybackStatus>('idle')
 const livePlaybackError = ref('')
 const vodPlaybackError = ref('')
+// 当前点播进度（秒）：换源续播与预载判断都用它，Web 由 progress 事件更新、mpv 由 playback:event 更新。
+const vodPlaybackPosition = ref(0)
+const preloadPlan = ref<PlaybackPlan | null>(null)
+let preloadGeneration = 0
 let nextPlaybackToken = 0
 const mpvReady = ref(false)
 const mpvFallbackRequested = ref(false)
@@ -202,9 +208,34 @@ function selectEpisodePage(page: number) {
   episodePage.value = clampEpisodePage(page, activeEpisodes.value.length)
 }
 
-function selectEpisodeSource(source: string) {
-  activeSource.value = source
-  resetEpisodePage()
+// selectEpisodeSource 切换线路。正在播放时走与自动换源一致的流程：立即播放
+// 目标线路的同名当前集并续接进度；没有同名剧集就只提示、不改动当前播放。
+async function selectEpisodeSource(source: string) {
+  if (source === activeSource.value) return
+  const playing = isCurrentPlayback('vod', vodPlaybackToken.value) && currentEpisodeID.value !== ''
+  if (!playing) {
+    activeSource.value = source
+    resetEpisodePage()
+    return
+  }
+  const same = sameNameEpisodeOnSource(vodDetail.value?.Episodes ?? [], source, vodNowPlaying.value)
+  if (!same) {
+    errMsg.value = `线路「${source}」没有同名剧集，未切换`
+    return
+  }
+  errMsg.value = ''
+  try {
+    const played = await doPlayEpisode(
+      detailSite.value || activeSite.value,
+      same.ID,
+      same.Name,
+      source,
+      vodPlaybackPosition.value,
+    )
+    if (played) await applyPendingSeek()
+  } catch (e) {
+    if (isCurrentPlayback('vod', vodPlaybackToken.value)) handleError(e)
+  }
 }
 
 function scrollEpisodePages(direction: number) {
@@ -572,7 +603,7 @@ async function applyVodResume(h: VodHistoryInfo) {
   episodePage.value = view.page
   if (h.EpID) {
     pendingSeek.value = h.Progress
-    const played = await doPlayEpisode(h.Site, h.EpID, h.EpName, view.source)
+    const played = await doPlayEpisode(h.Site, h.EpID, h.EpName, view.source, h.Progress)
     if (played) await applyPendingSeek()
   }
 }
@@ -945,14 +976,20 @@ async function backFromVodSearch() {
   await switchMode('vod')
 }
 
-async function doPlayEpisode(site: string, epID: string, epName: string, source: string) {
+async function doPlayEpisode(site: string, epID: string, epName: string, source: string, seekSeconds = 0) {
   await stopPlayback('live')
+  // 新一次点播播放：重置自动任务代际、已尝试线路与健康计时，并取消旧预载。
+  vodAutomation.beginSession()
+  void releasePreload()
   const token = beginPlayback('vod')
   vodPlaybackPlan.value = null
   vodPlaybackToken.value = 0
   vodPlaybackStatus.value = 'preparing'
   vodPlaybackError.value = ''
   vodNowPlaying.value = epName
+  vodPlaybackPosition.value = seekSeconds
+  pendingSeek.value = seekSeconds
+  activeSource.value = source
   let plan: PlaybackPlan
   try {
     plan = await ShellService.PrepareVodWithToken(site, epID, token) as unknown as PlaybackPlan
@@ -971,10 +1008,13 @@ async function doPlayEpisode(site: string, epID: string, epName: string, source:
   vodPlaybackToken.value = token
   vodPlaybackStatus.value = 'playing'
   currentEpisodeID.value = epID
+  episodePage.value = episodePageIndex(activeEpisodes.value, epID)
   if (vodDetail.value) {
     currentVod.value = { site, vodID: vodDetail.value.ID }
     await ShellService.RecordVodHistory(site, vodDetail.value.ID, vodDetail.value.Title, vodDetail.value.Logo, epID, epName, source)
   }
+  vodAutomation.armHealth(token)
+  void schedulePreload(token, site, epID, source)
   return true
 }
 
@@ -984,7 +1024,7 @@ async function playEpisode(ep: EpisodeInfo) {
   if (seekTo > 0) vodResume.value = null
   pendingSeek.value = seekTo
   try {
-    const played = await doPlayEpisode(detailSite.value || activeSite.value, ep.ID, ep.Name, ep.Source)
+    const played = await doPlayEpisode(detailSite.value || activeSite.value, ep.ID, ep.Name, ep.Source, seekTo)
     if (played) await applyPendingSeek()
   } catch (e) {
     if (isCurrentPlayback('vod', vodPlaybackToken.value)) handleError(e)
@@ -1052,11 +1092,15 @@ async function stopPlayback(scope: PlaybackScope) {
     livePlaybackStatus.value = 'idle'
     livePlaybackError.value = ''
   } else {
+    // 切页/停止：让自动任务失效并取消下一集预载。
+    vodAutomation.stop()
+    void releasePreload()
     vodPlaybackPlan.value = null
     vodPlaybackToken.value = 0
     vodNowPlaying.value = ''
     currentVod.value = null
     currentLibraryPath.value = ''
+    vodPlaybackPosition.value = 0
     vodPlaybackStatus.value = 'idle'
     vodPlaybackError.value = ''
   }
@@ -1079,13 +1123,98 @@ function beginPlayback(scope: PlaybackScope): number {
   return token
 }
 
+// vodAutomation 是点播自动切集/自动换源的唯一协调器：它只做决策与编排，
+// 实际播放仍走 doPlayEpisode，两边的 token/代际互相校验。
+const vodAutomation = new VodAutomation({
+  isCurrent: (token) => isCurrentPlayback('vod', token),
+  settings: () => playbackSettings.value,
+  currentEpisodeID: () => currentEpisodeID.value,
+  currentEpisodeName: () => vodNowPlaying.value,
+  activeSource: () => activeSource.value,
+  currentSourceEpisodes: () => activeEpisodes.value,
+  allEpisodes: () => vodDetail.value?.Episodes ?? [],
+  sources: () => vodDetail.value?.Sources ?? [],
+  position: () => vodPlaybackPosition.value,
+  playEpisode: async (episode, seek) => {
+    const site = detailSite.value || activeSite.value
+    const played = await doPlayEpisode(site, episode.ID, episode.Name, episode.Source, seek)
+    if (played) await applyPendingSeek()
+    return played
+  },
+  onAllSourcesFailed: () => {
+    vodPlaybackStatus.value = 'error'
+    vodPlaybackError.value = '所有线路均无法播放当前剧集'
+  },
+} satisfies VodAutomationHost)
+
+// onVodPlaybackSignal 接收 PlaybackView 的标准化信号；组件只上报，决策在这里。
+function onVodPlaybackSignal(token: number, state: PlaybackState, message?: string) {
+  if (!isCurrentPlayback('vod', token)) return
+  if (state === 'ended') {
+    void vodAutomation.ended(token)
+    return
+  }
+  if (state === 'error' && message) vodPlaybackError.value = message
+  vodAutomation.signal(token, state)
+}
+
+// onPlaybackEvent 消费后端桥接的 mpv 事件：只接受与当前点播 token 一致的事件，
+// 旧会话的事件一律丢弃。
+function onPlaybackEvent(payload: unknown) {
+  const data = payload as { Token?: number; Kind?: string; Position?: number } | null | undefined
+  const token = data?.Token
+  if (!token || token !== vodPlaybackToken.value || !isCurrentPlayback('vod', token)) return
+  switch (data?.Kind) {
+    case 'position':
+      vodPlaybackPosition.value = data.Position ?? vodPlaybackPosition.value
+      break
+    case 'playing':
+    case 'buffering':
+    case 'error':
+      vodAutomation.signal(token, data.Kind)
+      break
+    case 'ended':
+      void vodAutomation.ended(token)
+      break
+  }
+}
+
+// releasePreload 释放当前下一集预载；切集、换源、停止与卸载都会调用。
+async function releasePreload() {
+  preloadGeneration++
+  const plan = preloadPlan.value
+  preloadPlan.value = null
+  if (!plan?.ID) return
+  try { await ShellService.ReleasePreload(plan.ID) } catch { /* 预载释放失败不影响当前播放 */ }
+}
+
+// schedulePreload 在开启预载且当前线路存在下一集时后台预载下一集。
+// 预载的任何失败、超时或取消都只影响预载本身。
+async function schedulePreload(token: number, site: string, epID: string, source: string) {
+  if (!playbackSettings.value.PreloadNext) return
+  const next = nextEpisodeInSource(activeEpisodes.value, source, epID)
+  if (!next) return
+  const generation = ++preloadGeneration
+  try {
+    const plan = await ShellService.PreloadVod(site, next.ID) as unknown as PlaybackPlan
+    if (generation !== preloadGeneration || !isCurrentPlayback('vod', token)) {
+      if (plan?.ID) { try { await ShellService.ReleasePreload(plan.ID) } catch { /* 过期预载已无意义 */ } }
+      return
+    }
+    preloadPlan.value = plan
+  } catch { /* 预载失败不影响当前播放 */ }
+}
+
 function isCurrentPlayback(scope: PlaybackScope, token: number): boolean {
   const active = activePlayback.value
   return !!active && active.scope === scope && active.token === token
 }
 
 async function onVodProgress(token: number, time: number, duration: number) {
-  if (!isCurrentPlayback('vod', token) || !shouldRecordVodProgress(mode.value, vodView.value) || !currentVod.value) return
+  if (!isCurrentPlayback('vod', token)) return
+  // 进度始终记录到运行时状态，供换源续播使用；持久化仍按 10 秒节流。
+  vodPlaybackPosition.value = time
+  if (!shouldRecordVodProgress(mode.value, vodView.value) || !currentVod.value) return
   const now = Date.now()
   if (now - lastProgressSave < 10000) return
   lastProgressSave = now
@@ -1262,12 +1391,16 @@ onMounted(() => {
       vodSearchCache.value = createVodSearchCache(activeSearchQuery.value, vodSearchItems.value)
     }
   })
+  // mpv 播放事件由后端带 token 桥接过来；onPlaybackEvent 只接受当前点播会话的事件。
+  Events.On('playback:event', (ev: any) => onPlaybackEvent(ev?.data))
   setInterval(pollMpvProgress, 10000)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeCardContextMenu)
   document.removeEventListener('keydown', handleCardContextMenuKeydown)
+  vodAutomation.stop()
+  void releasePreload()
 })
 
 </script>
@@ -1390,7 +1523,7 @@ onBeforeUnmount(() => {
         <p v-if="liveNowPlaying" class="now">正在播放：{{ liveNowPlaying }}</p>
         <p v-if="livePlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在切换频道…</p>
         <p v-if="livePlaybackStatus === 'error'" class="playback-error" aria-live="assertive">频道播放失败：{{ livePlaybackError }}</p>
-        <PlaybackView :plan="livePagePlaybackPlan" @(fallback)="(id, position) => fallbackToMpv('live', id, livePlaybackToken, position)" />
+        <PlaybackView :plan="livePagePlaybackPlan" @fallback="(id, position) => fallbackToMpv('live', id, livePlaybackToken, position)" />
         <p v-if="favorites.length" class="favhead">收藏</p>
         <ul class="favs">
           <li v-for="f in favorites" :key="f.ID" @click="play(f)">{{ f.Name }}</li>
@@ -1443,7 +1576,7 @@ onBeforeUnmount(() => {
           <p v-if="vodNowPlaying" class="now">正在播放：{{ vodNowPlaying }}</p>
           <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载本地视频…</p>
           <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">本地视频播放失败：{{ vodPlaybackError }}</p>
-          <PlaybackView :plan="libraryPagePlaybackPlan" :seek-to="pendingSeek" empty-text="点右侧视频开始播放" @(fallback)="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @progress="(time, duration) => onLibraryProgress(vodPlaybackToken, time, duration)" />
+          <PlaybackView :plan="libraryPagePlaybackPlan" :seek-to="pendingSeek" empty-text="点右侧视频开始播放" @fallback="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @progress="(time, duration) => onLibraryProgress(vodPlaybackToken, time, duration)" />
         </aside>
         <div class="library-side">
           <div v-if="libraryMessage" class="ok">{{ libraryMessage }}</div>
@@ -1513,7 +1646,8 @@ onBeforeUnmount(() => {
               <div class="vod-player">
                 <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载剧集…</p>
                 <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">剧集播放失败：{{ vodPlaybackError }}</p>
-                <PlaybackView :plan="vodPagePlaybackPlan" :seek-to="pendingSeek" :suppress-fallback="playbackSettings.AutoSwitchSource" @(fallback)="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @progress="(time, duration) => onVodProgress(vodPlaybackToken, time, duration)" />
+                <PlaybackView :plan="vodPagePlaybackPlan" :seek-to="pendingSeek" :suppress-fallback="playbackSettings.AutoSwitchSource" @fallback="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @playback="(state, message) => onVodPlaybackSignal(vodPlaybackToken, state, message)" @progress="(time, duration) => onVodProgress(vodPlaybackToken, time, duration)" />
+                <PreloadView :plan="preloadPlan" />
                 <div v-if="(vodDetail.Sources ?? []).length" class="ep-src-tabs">
                   <button v-for="src in vodDetail.Sources" :key="src" :class="{ active: src === activeSource }" @click="selectEpisodeSource(src)">{{ src }}</button>
                 </div>

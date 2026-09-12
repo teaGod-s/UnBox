@@ -49,6 +49,7 @@ type ShellService struct {
 	playbackSeq          uint64              // 最近一次前端播放请求 token
 	playbackToken        uint64              // 当前前端播放会话 token，0 表示无会话
 	playbackFloor        uint64              // 已失效 token 的上限
+	playbackBridgeMu     sync.Mutex          // 守护桥接信号与事件出口字段
 	playbackBridgeStop   chan struct{}       // 关闭桥接 goroutine 的信号
 	playbackEventEmitter func(PlaybackEvent) // 桥接事件出口（测试可注入）
 	mpvPlugin            *mpvplugin.Manager

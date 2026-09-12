@@ -657,10 +657,17 @@ func TestPlaybackEventMapping(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := playbackEventFor(tc.ev, tc.tok); got != tc.want {
+			got, ok := playbackEventFor(tc.ev, tc.tok)
+			if !ok {
+				t.Fatalf("%s: 期望事件被转发", tc.name)
+			}
+			if got != tc.want {
 				t.Fatalf("got %#v, want %#v", got, tc.want)
 			}
 		})
+	}
+	if _, ok := playbackEventFor(player.Event{Kind: player.EventKind(99)}, 1); ok {
+		t.Fatal("未知事件类型不应转发给前端")
 	}
 }
 
@@ -685,8 +692,8 @@ func newBridgeTestPlayer() *bridgeTestPlayer {
 
 func TestPlaybackBridgeFiltersTokenAndStops(t *testing.T) {
 	inner := newBridgeTestPlayer()
-	svc := NewShellService(nil, inner, nil)
-	defer func() { _ = svc.ServiceShutdown() }()
+	// 先注入事件出口再启动桥接，避免与桥接 goroutine 并发写字段。
+	svc := newShellService(nil, inner, nil)
 
 	var mu sync.Mutex
 	var got []PlaybackEvent
@@ -695,6 +702,8 @@ func TestPlaybackBridgeFiltersTokenAndStops(t *testing.T) {
 		got = append(got, ev)
 		mu.Unlock()
 	}
+	svc.startPlaybackBridge()
+	defer func() { _ = svc.ServiceShutdown() }()
 
 	// 无会话 token 时事件应被丢弃。
 	inner.events <- player.Event{Kind: player.EventPlaying}
@@ -707,9 +716,9 @@ func TestPlaybackBridgeFiltersTokenAndStops(t *testing.T) {
 	mu.Unlock()
 
 	// 建立会话后事件应带当前 token 发出。
-	svc.playbackMu.Lock()
-	svc.playbackToken = 7
-	svc.playbackMu.Unlock()
+	if _, ok := svc.claimPlayback(7); !ok {
+		t.Fatal("claimPlayback 应接受首个 token")
+	}
 	inner.events <- player.Event{Kind: player.EventPosition, Position: 8.25}
 	waitForBridgeEvents(t, &mu, &got, 1)
 	mu.Lock()

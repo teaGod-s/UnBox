@@ -226,8 +226,10 @@ type SearchResultEvent struct {
 	Items []VodItem
 }
 
-// NewShellService 组装壳层服务。pv 为直播 Provider（可为 nil）；p 可为 nil（播放器未就绪）。
-func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *ShellService {
+// newShellService 组装壳层服务但不启动播放器事件桥接。
+// 便于测试在桥接启动前注入事件出口，避免与桥接 goroutine 争用字段。
+// pv 为直播 Provider（可为 nil）；p 可为 nil（播放器未就绪）。
+func newShellService(pv provider.Provider, p player.Player, st *store.Store) *ShellService {
 	root, _ := os.UserConfigDir()
 	manager := mpvplugin.New(runtime.GOOS, root)
 	controller := playback.NewController(playback.NewResolver(nil), playback.NewProxy(nil, 0), p)
@@ -248,6 +250,13 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 		vodCategoryCache: make(map[string]vodCategoryCacheEntry),
 		vodCategoryNow:   time.Now,
 	}
+	return svc
+}
+
+// NewShellService 组装壳层服务并启动播放器事件桥接。
+// pv 为直播 Provider（可为 nil）；p 可为 nil（播放器未就绪）。
+func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *ShellService {
+	svc := newShellService(pv, p, st)
 	svc.playbackEventEmitter = svc.emitPlaybackEvent
 	svc.startPlaybackBridge()
 	return svc
@@ -1770,8 +1779,9 @@ type PlaybackEvent struct {
 }
 
 // playbackEventFor 把播放器事件映射为带会话 token 的桥接载荷；纯函数，便于单测。
-func playbackEventFor(ev player.Event, token uint64) PlaybackEvent {
-	kind := ""
+// 第二个返回值为 false 表示该事件类型不向前端转发。
+func playbackEventFor(ev player.Event, token uint64) (PlaybackEvent, bool) {
+	var kind string
 	switch ev.Kind {
 	case player.EventPlaying:
 		kind = "playing"
@@ -1783,12 +1793,22 @@ func playbackEventFor(ev player.Event, token uint64) PlaybackEvent {
 		kind = "error"
 	case player.EventEOF:
 		kind = "ended"
+	default:
+		return PlaybackEvent{}, false
 	}
 	errMsg := ""
 	if ev.Err != nil {
 		errMsg = ev.Err.Error()
 	}
-	return PlaybackEvent{Token: token, Kind: kind, Position: ev.Position, Error: errMsg}
+	return PlaybackEvent{Token: token, Kind: kind, Position: ev.Position, Error: errMsg}, true
+}
+
+// currentPlaybackToken 返回当前点播会话 token；0 表示无会话。
+// playbackToken 与 claimPlayback/playbackCurrent 一样由 s.mu 保护。
+func (s *ShellService) currentPlaybackToken() uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.playbackToken
 }
 
 // emitPlaybackEvent 是播放器事件桥接的默认出口：经 Wails "playback:event" 推给前端。
@@ -1808,33 +1828,42 @@ func (s *ShellService) startPlaybackBridge() {
 	if s.player == nil {
 		return
 	}
-	s.playbackBridgeStop = make(chan struct{})
+	emit := s.playbackEventEmitter
+	if emit == nil {
+		emit = s.emitPlaybackEvent
+	}
+	// 信号 channel 与出口都先取到局部变量再交给 goroutine，
+	// 避免 goroutine 与 stop/注入方并发读写 ShellService 字段。
+	stop := make(chan struct{})
+	s.playbackBridgeMu.Lock()
+	s.playbackBridgeStop = stop
+	s.playbackBridgeMu.Unlock()
 	go func() {
 		for {
 			select {
-			case <-s.playbackBridgeStop:
+			case <-stop:
 				return
 			case ev, ok := <-s.player.Events():
 				if !ok {
 					return
 				}
-				s.playbackMu.Lock()
-				token := s.playbackToken
-				s.playbackMu.Unlock()
-				if token == 0 {
+				payload, ok := playbackEventFor(ev, s.currentPlaybackToken())
+				if !ok || payload.Token == 0 {
 					continue
 				}
-				s.playbackEventEmitter(playbackEventFor(ev, token))
+				emit(payload)
 			}
 		}
 	}()
 }
 
-// stopPlaybackBridge 关闭播放器事件桥接 goroutine；未启动时为空操作。
+// stopPlaybackBridge 关闭播放器事件桥接 goroutine；未启动或已停止时为空操作。
 func (s *ShellService) stopPlaybackBridge() {
-	if s.playbackBridgeStop == nil {
-		return
-	}
-	close(s.playbackBridgeStop)
+	s.playbackBridgeMu.Lock()
+	stop := s.playbackBridgeStop
 	s.playbackBridgeStop = nil
+	s.playbackBridgeMu.Unlock()
+	if stop != nil {
+		close(stop)
+	}
 }

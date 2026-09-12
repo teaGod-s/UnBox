@@ -12,6 +12,7 @@ import (
 	"github.com/unbox/unbox/internal/config"
 	"github.com/unbox/unbox/internal/library"
 	"github.com/unbox/unbox/internal/library/thumb"
+	"github.com/unbox/unbox/internal/playback"
 	"github.com/unbox/unbox/internal/player"
 	"github.com/unbox/unbox/internal/provider"
 	"github.com/unbox/unbox/internal/provider/live"
@@ -755,4 +756,67 @@ func waitForBridgeEvents(t *testing.T, mu *sync.Mutex, got *[]PlaybackEvent, n i
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("等待桥接事件超时")
+}
+
+// preloadTestProvider 是点播预载测试用的最小 Provider。
+type preloadTestProvider struct {
+	stream player.Stream
+	calls  int
+}
+
+func (p *preloadTestProvider) ID() string { return "preload-test" }
+func (p *preloadTestProvider) Home(context.Context) ([]provider.Section, error) {
+	return nil, nil
+}
+func (p *preloadTestProvider) Browse(context.Context, string, int) (provider.Page, error) {
+	return provider.Page{}, nil
+}
+func (p *preloadTestProvider) Search(context.Context, string) ([]provider.Item, error) {
+	return nil, nil
+}
+func (p *preloadTestProvider) Detail(context.Context, string) (provider.Media, error) {
+	return provider.Media{}, nil
+}
+func (p *preloadTestProvider) Resolve(context.Context, string) (player.Stream, error) {
+	p.calls++
+	return p.stream, nil
+}
+
+func TestPreloadVodRegistersPreloadWithoutTouchingPlayback(t *testing.T) {
+	svc := newTestService(t)
+	// 用本地文件流避免点播预载测试依赖网络：它走 mpv 分支，只登记可取消的预载任务。
+	pv := &preloadTestProvider{stream: player.Stream{URL: "file:///tmp/movie.mp4", Kind: player.StreamLocal}}
+	svc.vods["demo"] = pv
+	svc.playbackToken = 7
+	svc.playbackSeq = 3
+
+	plan, err := svc.PreloadVod("demo", "ep-2")
+	if err != nil {
+		t.Fatalf("PreloadVod: %v", err)
+	}
+	if plan.Backend != playback.BackendMPV || plan.ID == "" {
+		t.Fatalf("plan = %#v，期望可释放的 mpv 预载计划", plan)
+	}
+	if svc.playbackToken != 7 || svc.playbackSeq != 3 {
+		t.Fatalf("预载不应改动播放会话: token=%d seq=%d", svc.playbackToken, svc.playbackSeq)
+	}
+	if err := svc.ReleasePreload(plan.ID); err != nil {
+		t.Fatalf("ReleasePreload: %v", err)
+	}
+	if err := svc.ReleasePreload("unknown"); err != nil {
+		t.Fatalf("释放未知预载应幂等: %v", err)
+	}
+}
+
+func TestPreloadVodUnknownSiteDoesNotTouchPlayback(t *testing.T) {
+	svc := newTestService(t)
+	svc.playbackToken = 7
+	svc.playbackSeq = 3
+
+	if _, err := svc.PreloadVod("missing", "ep-1"); err == nil {
+		t.Fatal("未知站点应返回错误")
+	}
+	if svc.playbackToken != 7 || svc.playbackSeq != 3 {
+		t.Fatalf("预载失败不应改动播放会话: token=%d seq=%d", svc.playbackToken, svc.playbackSeq)
+	}
 }

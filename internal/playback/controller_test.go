@@ -3,7 +3,12 @@ package playback
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/unbox/unbox/internal/player"
 )
@@ -17,11 +22,18 @@ func (f fakeResolver) Resolve(context.Context, player.Stream) (player.Stream, er
 	return f.stream, nil
 }
 
-type fakeProxy struct{ next int }
+type fakeProxy struct {
+	next     int
+	released []string
+}
 
 func (f *fakeProxy) Register(context.Context, player.Stream) (string, error) {
 	f.next++
-	return "http://127.0.0.1/proxy/test", nil
+	return fmt.Sprintf("http://127.0.0.1/proxy/test-%d", f.next), nil
+}
+func (f *fakeProxy) Release(proxyURL string) error {
+	f.released = append(f.released, proxyURL)
+	return nil
 }
 func (f *fakeProxy) Close() error { return nil }
 
@@ -164,5 +176,124 @@ func TestControllerRequiresMPVForRTMP(t *testing.T) {
 	_, err := c.Prepare(context.Background(), player.Stream{URL: "rtmp://x/live", Kind: player.StreamRTMP})
 	if err == nil || !errors.Is(err, ErrMPVUnavailable) {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+// TestControllerPreloadWebUsesIsolatedSession 预载 Web 流应注册独立代理会话：
+// 不进入正常播放会话表，也不触碰共享播放器。
+func TestControllerPreloadWebUsesIsolatedSession(t *testing.T) {
+	mpv := &fakePlayer{}
+	web := &fakeProxy{}
+	c := NewController(nil, web, mpv)
+
+	plan, err := c.Preload(context.Background(), player.Stream{URL: "https://x/a.mp4", Kind: player.StreamMP4})
+	if err != nil {
+		t.Fatalf("Preload: %v", err)
+	}
+	if plan.Backend != BackendWeb || plan.URL == "" || plan.ID == "" {
+		t.Fatalf("plan = %#v，期望带代理地址的 Web 预载计划", plan)
+	}
+	if len(mpv.loaded) != 0 || mpv.played != 0 {
+		t.Fatalf("预载不得触碰共享播放器: loaded=%d played=%d", len(mpv.loaded), mpv.played)
+	}
+	if _, err := c.Fallback(context.Background(), plan.ID, 0); err == nil {
+		t.Fatal("预载会话不应进入正常播放会话表")
+	}
+	if err := c.Release(plan.ID); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if len(web.released) != 1 || web.released[0] != plan.URL {
+		t.Fatalf("released = %v，期望释放预载代理地址 %s", web.released, plan.URL)
+	}
+	if err := c.Release(plan.ID); err != nil {
+		t.Fatalf("重复 Release 应幂等: %v", err)
+	}
+	if len(web.released) != 1 {
+		t.Fatalf("重复 Release 不应重复释放: %v", web.released)
+	}
+}
+
+// TestControllerPreloadMPVOnlyWarmsUpWithoutPlayer 只能走 mpv 的流，
+// 预载只做 Range 网络预热，绝不调用共享播放器的 Load/Play。
+func TestControllerPreloadMPVOnlyWarmsUpWithoutPlayer(t *testing.T) {
+	var mu sync.Mutex
+	var ranges []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		ranges = append(ranges, r.Header.Get("Range"))
+		mu.Unlock()
+		w.WriteHeader(http.StatusPartialContent)
+	}))
+	defer upstream.Close()
+
+	mpv := &fakePlayer{}
+	proxy := &fakeProxy{}
+	c := NewController(nil, proxy, mpv)
+	c.SetWebMSE(false) // 无 MSE：TS 只能走 mpv
+	plan, err := c.Preload(context.Background(), player.Stream{URL: upstream.URL + "/v.ts", Kind: player.StreamTS})
+	if err != nil {
+		t.Fatalf("Preload: %v", err)
+	}
+	if plan.Backend != BackendMPV {
+		t.Fatalf("backend = %v，期望 mpv", plan.Backend)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		n := len(ranges)
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("预载未发起 Range 预热请求")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	mu.Lock()
+	got := ranges[0]
+	mu.Unlock()
+	if got != "bytes=0-1" {
+		t.Fatalf("Range = %q, want bytes=0-1", got)
+	}
+	if len(mpv.loaded) != 0 || mpv.played != 0 {
+		t.Fatalf("mpv 预载不得调用共享播放器: loaded=%d played=%d", len(mpv.loaded), mpv.played)
+	}
+	if len(proxy.released) != 0 {
+		t.Fatalf("mpv 预载不应注册代理会话: %v", proxy.released)
+	}
+	if err := c.Release(plan.ID); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+}
+
+// TestControllerPreloadReleaseCancelsWarmup 释放预载应取消仍在进行的预热。
+func TestControllerPreloadReleaseCancelsWarmup(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-release
+	}))
+	defer upstream.Close()
+	defer close(release)
+
+	mpv := &fakePlayer{}
+	c := NewController(nil, &fakeProxy{}, mpv)
+	c.SetWebMSE(false)
+	plan, err := c.Preload(context.Background(), player.Stream{URL: upstream.URL + "/v.ts", Kind: player.StreamTS})
+	if err != nil {
+		t.Fatalf("Preload: %v", err)
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("预热未启动")
+	}
+	if err := c.Release(plan.ID); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if len(mpv.loaded) != 0 {
+		t.Fatal("预载不得调用共享播放器")
 	}
 }

@@ -1531,6 +1531,31 @@ func (s *ShellService) PrepareVod(site, epID string) (playback.Plan, error) {
 	return s.prepareVod(site, epID, 0)
 }
 
+// PreloadVod 为点播下一集准备资源：Web 流注册独立代理会话，其余流只做轻量
+// 网络预热。它不触碰当前播放 token、播放器或播放状态，失败只返回预载错误。
+func (s *ShellService) PreloadVod(site, epID string) (playback.Plan, error) {
+	pv, err := s.vodOf(site)
+	if err != nil {
+		return playback.Plan{}, err
+	}
+	stream, err := pv.Resolve(context.Background(), epID)
+	if err != nil {
+		return playback.Plan{}, err
+	}
+	if s.playback == nil {
+		return playback.Plan{}, errors.New("播放控制器未就绪")
+	}
+	return s.playback.Preload(context.Background(), stream)
+}
+
+// ReleasePreload 取消并释放一次预载任务；未知 id 视为已释放。
+func (s *ShellService) ReleasePreload(id string) error {
+	if s.playback == nil {
+		return nil
+	}
+	return s.playback.Release(id)
+}
+
 // PrepareVodWithToken 准备点播播放，并让后端丢弃已过期的前端请求。
 func (s *ShellService) PrepareVodWithToken(site, epID string, token uint64) (playback.Plan, error) {
 	return s.prepareVod(site, epID, token)

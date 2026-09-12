@@ -6,22 +6,35 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/unbox/unbox/internal/player"
 )
 
 var ErrMPVUnavailable = errors.New("mpv 插件未安装")
 
+// preloadWarmupTimeout 限制 mpv-only 流后台网络预热的时长。
+const preloadWarmupTimeout = 20 * time.Second
+
 type streamResolver interface {
 	Resolve(context.Context, player.Stream) (player.Stream, error)
 }
 type streamProxy interface {
 	Register(context.Context, player.Stream) (string, error)
+	Release(string) error
 	Close() error
+}
+
+// preloadSession 记录一次预载任务，供 Release 清理代理会话或取消后台预热。
+type preloadSession struct {
+	proxyURL string
+	cancel   context.CancelFunc
 }
 
 // Controller 负责一次播放计划的解析、路由和 Web→mpv 降级。
@@ -37,6 +50,7 @@ type Controller struct {
 	mu       sync.Mutex
 	mpv      player.Player
 	sessions map[string]player.Stream
+	preloads map[string]preloadSession
 	webMSE   bool
 	probe    func(context.Context, player.Stream) (string, error)
 }
@@ -48,6 +62,7 @@ func NewController(resolver streamResolver, proxy streamProxy, mpv player.Player
 		client:   &http.Client{Timeout: probeTimeout},
 		mpv:      mpv,
 		sessions: make(map[string]player.Stream),
+		preloads: make(map[string]preloadSession),
 		webMSE:   true,
 	}
 }
@@ -82,27 +97,8 @@ func (c *Controller) Prepare(ctx context.Context, input player.Stream) (Plan, er
 		}
 	}
 
-	// RTMP / 本地文件：Web 永远播不了，只能 mpv。
-	if resolved.Kind == player.StreamRTMP || resolved.Kind == player.StreamLocal {
+	if c.needsMPV(ctx, resolved) {
 		return c.loadMPV(ctx, resolved, 0)
-	}
-
-	// WebView 无 MSE 时，HLS/FLV/TS 依赖 hls.js/mpegts.js 均不可用，只有
-	// MP4 能走原生 <video>；其余一律 mpv。
-	if !c.webMSEEnabled() && resolved.Kind != player.StreamMP4 {
-		return c.loadMPV(ctx, resolved, 0)
-	}
-
-	// HLS 编码探测：HEVC 浏览器解不了，走 mpv。探测失败按非 HEVC 处理（fail-open 到 Web）。
-	if resolved.Kind == player.StreamHLS {
-		probe := c.probeHLSCodec
-		if c.probe != nil {
-			probe = c.probe
-		}
-		codec, err := probe(ctx, resolved)
-		if err == nil && isHEVC(codec) {
-			return c.loadMPV(ctx, resolved, 0)
-		}
 	}
 
 	if c.proxy == nil {
@@ -117,6 +113,118 @@ func (c *Controller) Prepare(ctx context.Context, input player.Stream) (Plan, er
 	c.sessions[id] = cloneStream(resolved)
 	c.mu.Unlock()
 	return Plan{ID: id, Backend: BackendWeb, URL: proxyURL, Kind: resolved.Kind.String(), CanFallback: c.MPVReady()}, nil
+}
+
+// needsMPV 判断一条已解析的流是否只能交给 mpv 播放。
+func (c *Controller) needsMPV(ctx context.Context, resolved player.Stream) bool {
+	// RTMP / 本地文件：Web 永远播不了，只能 mpv。
+	if resolved.Kind == player.StreamRTMP || resolved.Kind == player.StreamLocal {
+		return true
+	}
+	// WebView 无 MSE 时，HLS/FLV/TS 依赖 hls.js/mpegts.js 均不可用，只有
+	// MP4 能走原生 <video>；其余一律 mpv。
+	if !c.webMSEEnabled() && resolved.Kind != player.StreamMP4 {
+		return true
+	}
+	// HLS 编码探测：HEVC 浏览器解不了，走 mpv。探测失败按非 HEVC 处理（fail-open 到 Web）。
+	if resolved.Kind == player.StreamHLS {
+		probe := c.probeHLSCodec
+		if c.probe != nil {
+			probe = c.probe
+		}
+		codec, err := probe(ctx, resolved)
+		if err == nil && isHEVC(codec) {
+			return true
+		}
+	}
+	return false
+}
+
+// Preload 为下一集准备资源：Web 可播流注册独立代理会话，其余流只做轻量
+// 网络预热。整个过程不接触共享播放器，也不改动当前播放会话。
+// 返回的 Plan.ID 交给 Release 清理。
+func (c *Controller) Preload(ctx context.Context, input player.Stream) (Plan, error) {
+	resolved := input
+	if c.resolver != nil {
+		var err error
+		resolved, err = c.resolver.Resolve(ctx, input)
+		if err != nil {
+			return Plan{}, err
+		}
+	}
+	id := sessionID()
+	if c.needsMPV(ctx, resolved) {
+		cancel := c.warmup(resolved)
+		c.mu.Lock()
+		c.preloads[id] = preloadSession{cancel: cancel}
+		c.mu.Unlock()
+		return Plan{ID: id, Backend: BackendMPV, Kind: resolved.Kind.String()}, nil
+	}
+	if c.proxy == nil {
+		return Plan{}, errors.New("Web 播放代理未就绪")
+	}
+	proxyURL, err := c.proxy.Register(ctx, resolved)
+	if err != nil {
+		return Plan{}, err
+	}
+	c.mu.Lock()
+	c.preloads[id] = preloadSession{proxyURL: proxyURL}
+	c.mu.Unlock()
+	return Plan{ID: id, Backend: BackendWeb, URL: proxyURL, Kind: resolved.Kind.String()}, nil
+}
+
+// Release 清理一次预载：代理会话立即失效，后台预热被取消。未知 id 视为已清理。
+func (c *Controller) Release(id string) error {
+	c.mu.Lock()
+	session, ok := c.preloads[id]
+	delete(c.preloads, id)
+	c.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	if session.cancel != nil {
+		session.cancel()
+	}
+	if session.proxyURL != "" && c.proxy != nil {
+		return c.proxy.Release(session.proxyURL)
+	}
+	return nil
+}
+
+// warmup 在后台对 mpv-only 流做轻量网络预热：只发一个 Range 请求建连并读少量
+// 字节，绝不调用共享播放器的 Load/Play。失败不冒泡，只记日志。
+// 返回的 cancel 由 Release 调用。
+func (c *Controller) warmup(stream player.Stream) context.CancelFunc {
+	// 本地文件没有网络预热可言，直接返回空操作的取消函数。
+	if stream.Kind == player.StreamLocal || !isHTTPURL(stream.URL) {
+		return func() {}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), preloadWarmupTimeout)
+	go func() {
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, stream.URL, nil)
+		if err != nil {
+			return
+		}
+		req.Header.Set("Range", "bytes=0-1")
+		applyHeaders(req.Header, stream.Headers)
+		resp, err := c.client.Do(req)
+		if err != nil {
+			// 取消/超时是预载的正常结局，不当错误记录。
+			if ctx.Err() == nil {
+				log.Printf("预载预热失败 url=%s: %v", stream.URL, err)
+			}
+			return
+		}
+		defer resp.Body.Close()
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	}()
+	return cancel
+}
+
+// isHTTPURL 判断地址是否可做 HTTP 预热。
+func isHTTPURL(raw string) bool {
+	return strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://")
 }
 
 // loadMPV 把 stream 真正加载进 mpv 并开始播放。直接路由到 mpv 的流（RTMP/
@@ -160,9 +268,16 @@ func (c *Controller) Fallback(ctx context.Context, id string, position float64) 
 func (c *Controller) Close() error {
 	c.mu.Lock()
 	c.sessions = make(map[string]player.Stream)
+	preloads := c.preloads
+	c.preloads = make(map[string]preloadSession)
 	mpv := c.mpv
 	c.mpv = nil
 	c.mu.Unlock()
+	for _, preload := range preloads {
+		if preload.cancel != nil {
+			preload.cancel()
+		}
+	}
 	var first error
 	if c.proxy != nil {
 		first = c.proxy.Close()

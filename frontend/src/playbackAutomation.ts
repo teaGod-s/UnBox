@@ -50,6 +50,8 @@ export function sameNameEpisodeOnSource(
   name: string,
 ): EpisodeLike | null {
   const want = name.trim()
+  // 空白名不构成「同一集」的身份，宁可当作该线路不可用。
+  if (want === '') return null
   return episodes.find((e) => e.Source === source && e.Name.trim() === want) ?? null
 }
 
@@ -79,7 +81,8 @@ export type PlaybackSignal = 'playing' | 'ready' | 'buffering' | 'error'
  * 每次换源前必须重新创建或重置 monitor。
  *  - start(): 开始未起播计时。
  *  - signal('playing' | 'ready'): 进入可播放状态，清除计时。
- *  - signal('buffering'): 开始/继续缓冲计时（每次到达 30 秒触发一次）。
+ *  - signal('buffering'): 开始或继续缓冲计时；重复信号不重置，
+ *    这样「连续缓冲 30 秒」才会真正到点。
  *  - signal('error'): 立即触发回调。
  *  - stop(): 清理所有 timer，之后不再触发。
  */
@@ -95,13 +98,15 @@ export class PlaybackHealthMonitor {
 
   start(): void {
     if (this.stopped || this.fired) return
-    this.schedule()
+    // 已在计时则继续，避免重复 start 无限延后窗口。
+    if (this.timeout === null) this.schedule()
   }
 
   signal(sig: PlaybackSignal): void {
     if (this.stopped || this.fired) return
     if (sig === 'error') {
       this.fired = true
+      this.clear()
       this.onStall()
       return
     }
@@ -109,8 +114,8 @@ export class PlaybackHealthMonitor {
       this.clear()
       return
     }
-    // buffering：重启缓冲计时。
-    this.schedule()
+    // buffering：已在计时则继续，不重置到 30 秒。
+    if (this.timeout === null) this.schedule()
   }
 
   stop(): void {

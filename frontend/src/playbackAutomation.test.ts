@@ -61,6 +61,12 @@ describe('sameNameEpisodeOnSource', () => {
     expect(sameNameEpisodeOnSource(eps, '线路B', '第三集')).toBeNull()
     expect(sameNameEpisodeOnSource(eps, '线路B', ' 不存在 ')).toBeNull()
   })
+
+  it('treats a blank episode name as unmatchable', () => {
+    const unnamed = [{ ID: 'x-1', Source: '线路C', Name: '   ' }]
+    expect(sameNameEpisodeOnSource(unnamed, '线路C', '')).toBeNull()
+    expect(sameNameEpisodeOnSource(unnamed, '线路C', '   ')).toBeNull()
+  })
 })
 
 describe('sourceCandidates', () => {
@@ -96,13 +102,28 @@ describe('PlaybackHealthMonitor', () => {
     m.stop()
   })
 
-  it('restarts buffering timer while buffering and cancels on ready', () => {
+  it('keeps the buffering timer running across repeated buffering signals', () => {
     const cb = vi.fn()
     const m = new PlaybackHealthMonitor(30_000, cb)
     m.start()
     m.signal('playing')
     m.signal('buffering')
     vi.advanceTimersByTime(15_000)
+    m.signal('buffering') // 重复缓冲信号不得重置计时
+    vi.advanceTimersByTime(14_999)
+    expect(cb).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1) // 距首次 buffering 恰好 30 秒
+    expect(cb).toHaveBeenCalledTimes(1)
+    m.stop()
+  })
+
+  it('starts a fresh buffering window after playback recovers', () => {
+    const cb = vi.fn()
+    const m = new PlaybackHealthMonitor(30_000, cb)
+    m.start()
+    m.signal('playing')
+    vi.advanceTimersByTime(60_000)
+    expect(cb).not.toHaveBeenCalled()
     m.signal('buffering')
     vi.advanceTimersByTime(29_999)
     expect(cb).not.toHaveBeenCalled()

@@ -7,6 +7,7 @@ import VodDetailHeader from './components/VodDetailHeader.vue'
 import { clampEpisodePage, episodePageRanges, paginateEpisodes } from './episodes'
 import { createLibraryThumbPipeline } from './libraryThumb'
 import { contentCardStyleLabel, contentCardStyleOptions, normalizeContentCardStyle, type ContentCardStyle } from './contentCardStyle'
+import { createPlaybackSettings, PLAYBACK_SETTING_ITEMS, type PlaybackSettingKey, type PlaybackSettingsApi } from './playbackSettings'
 import { initializeHomeState } from './startup'
 import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
 import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, pickResumeSeek, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodResumeView, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
@@ -154,6 +155,18 @@ const themeOptions = [
 ]
 const currentTheme = ref('default')
 const contentCardStyle = ref<ContentCardStyle>('list')
+
+// 播放设置：设置页展示的三个开关，点播会话协调器后续读取同一份运行时状态。
+const playbackSettingsStore = createPlaybackSettings(
+  ShellService as unknown as PlaybackSettingsApi,
+  (e) => handleError(e),
+)
+const playbackSettings = playbackSettingsStore.settings
+
+function togglePlaybackSetting(key: PlaybackSettingKey, value: boolean) {
+  void playbackSettingsStore.set(key, value)
+}
+
 const cardContextMenu = ref<{
   kind: 'history' | 'favorite'
   item: VodHistoryInfo | VodFavoriteInfo
@@ -299,7 +312,7 @@ async function switchMode(m: 'home' | 'vod' | 'live' | 'library' | 'search' | 'f
   }
   else if (m === 'home') await refreshHome()
   else if (m === 'library') { await loadLibrary(); await refreshHome() }
-  else if (m === 'settings') { await reloadSourceHistory(); await refreshLogs(); await loadSearchThreads() }
+  else if (m === 'settings') { await reloadSourceHistory(); await refreshLogs(); await loadSearchThreads(); await playbackSettingsStore.load() }
 }
 
 async function refreshHome() {
@@ -1225,6 +1238,7 @@ onMounted(() => {
   refresh()
   loadTheme()
   loadContentCardStyle()
+  void playbackSettingsStore.load()
   document.addEventListener('click', closeCardContextMenu)
   document.addEventListener('keydown', handleCardContextMenuKeydown)
   Events.On('import:progress', (ev: any) => { importProgress.value = ev.data as Progress })
@@ -1499,7 +1513,7 @@ onBeforeUnmount(() => {
               <div class="vod-player">
                 <p v-if="vodPlaybackStatus === 'preparing'" class="playback-status" aria-live="polite">正在加载剧集…</p>
                 <p v-if="vodPlaybackStatus === 'error'" class="playback-error" aria-live="assertive">剧集播放失败：{{ vodPlaybackError }}</p>
-                <PlaybackView :plan="vodPagePlaybackPlan" :seek-to="pendingSeek" @(fallback)="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @progress="(time, duration) => onVodProgress(vodPlaybackToken, time, duration)" />
+                <PlaybackView :plan="vodPagePlaybackPlan" :seek-to="pendingSeek" :suppress-fallback="playbackSettings.AutoSwitchSource" @(fallback)="(id, position) => fallbackToMpv('vod', id, vodPlaybackToken, position)" @progress="(time, duration) => onVodProgress(vodPlaybackToken, time, duration)" />
                 <div v-if="(vodDetail.Sources ?? []).length" class="ep-src-tabs">
                   <button v-for="src in vodDetail.Sources" :key="src" :class="{ active: src === activeSource }" @click="selectEpisodeSource(src)">{{ src }}</button>
                 </div>
@@ -1584,6 +1598,24 @@ onBeforeUnmount(() => {
         <div class="settings-personalize">
           <button type="button" class="settings-choice" @click="openContentCardStyle">内容展示样式：{{ contentCardStyleLabel(contentCardStyle) }}</button>
           <button type="button" class="settings-choice" @click="openTheme">主题：{{ themeOptions.find(t => t.id === currentTheme)?.label || '默认' }}</button>
+        </div>
+      </section>
+
+      <section class="src-section">
+        <h3>播放设置</h3>
+        <div class="settings-switches">
+          <label v-for="item in PLAYBACK_SETTING_ITEMS" :key="item.key" class="settings-switch">
+            <span class="settings-switch-text">
+              <span class="settings-switch-label">{{ item.label }}</span>
+              <span class="settings-switch-hint">{{ item.hint }}</span>
+            </span>
+            <span class="settings-switch-state">{{ playbackSettings[item.key] ? '开' : '关' }}</span>
+            <input
+              type="checkbox"
+              class="settings-switch-input"
+              :checked="playbackSettings[item.key]"
+              @change="togglePlaybackSetting(item.key, ($event.target as HTMLInputElement).checked)" />
+          </label>
         </div>
       </section>
 

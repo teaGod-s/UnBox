@@ -636,3 +636,114 @@ func TestStopPlaybackDoesNotInvalidateNewerToken(t *testing.T) {
 		t.Fatalf("newer playback token was cleared: got %d", svc.playbackToken)
 	}
 }
+
+func TestPlaybackEventMapping(t *testing.T) {
+	cases := []struct {
+		name string
+		ev   player.Event
+		tok  uint64
+		want PlaybackEvent
+	}{
+		{"playing", player.Event{Kind: player.EventPlaying}, 1,
+			PlaybackEvent{Token: 1, Kind: "playing"}},
+		{"buffering", player.Event{Kind: player.EventBuffering}, 1,
+			PlaybackEvent{Token: 1, Kind: "buffering"}},
+		{"position", player.Event{Kind: player.EventPosition, Position: 8.25}, 17,
+			PlaybackEvent{Token: 17, Kind: "position", Position: 8.25}},
+		{"error", player.Event{Kind: player.EventError, Err: errors.New("boom")}, 3,
+			PlaybackEvent{Token: 3, Kind: "error", Error: "boom"}},
+		{"ended", player.Event{Kind: player.EventEOF}, 4,
+			PlaybackEvent{Token: 4, Kind: "ended"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := playbackEventFor(tc.ev, tc.tok); got != tc.want {
+				t.Fatalf("got %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
+// bridgeTestPlayer 是桥接循环测试用的可编程 player：Events() 返回注入通道。
+type bridgeTestPlayer struct {
+	events chan player.Event
+}
+
+func (p *bridgeTestPlayer) Load(ctx context.Context, s player.Stream) error { return nil }
+func (p *bridgeTestPlayer) Play() error                                     { return nil }
+func (p *bridgeTestPlayer) Pause() error                                    { return nil }
+func (p *bridgeTestPlayer) Seek(float64) error                              { return nil }
+func (p *bridgeTestPlayer) SetVolume(int) error                             { return nil }
+func (p *bridgeTestPlayer) SelectTrack(player.TrackKind, int) error         { return nil }
+func (p *bridgeTestPlayer) State() player.State                             { return player.State{} }
+func (p *bridgeTestPlayer) Events() <-chan player.Event                     { return p.events }
+func (p *bridgeTestPlayer) Close() error                                    { return nil }
+
+func newBridgeTestPlayer() *bridgeTestPlayer {
+	return &bridgeTestPlayer{events: make(chan player.Event, 16)}
+}
+
+func TestPlaybackBridgeFiltersTokenAndStops(t *testing.T) {
+	inner := newBridgeTestPlayer()
+	svc := NewShellService(nil, inner, nil)
+	defer func() { _ = svc.ServiceShutdown() }()
+
+	var mu sync.Mutex
+	var got []PlaybackEvent
+	svc.playbackEventEmitter = func(ev PlaybackEvent) {
+		mu.Lock()
+		got = append(got, ev)
+		mu.Unlock()
+	}
+
+	// 无会话 token 时事件应被丢弃。
+	inner.events <- player.Event{Kind: player.EventPlaying}
+	time.Sleep(30 * time.Millisecond)
+	mu.Lock()
+	if n := len(got); n != 0 {
+		mu.Unlock()
+		t.Fatalf("无 token 时收到 %d 个事件，期望 0", n)
+	}
+	mu.Unlock()
+
+	// 建立会话后事件应带当前 token 发出。
+	svc.playbackMu.Lock()
+	svc.playbackToken = 7
+	svc.playbackMu.Unlock()
+	inner.events <- player.Event{Kind: player.EventPosition, Position: 8.25}
+	waitForBridgeEvents(t, &mu, &got, 1)
+	mu.Lock()
+	if len(got) != 1 || got[0] != (PlaybackEvent{Token: 7, Kind: "position", Position: 8.25}) {
+		mu.Unlock()
+		t.Fatalf("got %#v，期望 {Token:7 Kind:position Position:8.25}", got)
+	}
+	mu.Unlock()
+
+	// shutdown 后桥接应停止：后续事件不再被转发。
+	if err := svc.ServiceShutdown(); err != nil {
+		t.Fatal(err)
+	}
+	inner.events <- player.Event{Kind: player.EventEOF}
+	time.Sleep(30 * time.Millisecond)
+	mu.Lock()
+	if n := len(got); n != 1 {
+		mu.Unlock()
+		t.Fatalf("shutdown 后仍收到事件（共 %d）", n)
+	}
+	mu.Unlock()
+}
+
+func waitForBridgeEvents(t *testing.T, mu *sync.Mutex, got *[]PlaybackEvent, n int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		if len(*got) >= n {
+			mu.Unlock()
+			return
+		}
+		mu.Unlock()
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("等待桥接事件超时")
+}

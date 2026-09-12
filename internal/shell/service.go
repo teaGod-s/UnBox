@@ -236,7 +236,7 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 	if runtime.GOOS == "linux" {
 		controller.SetWebMSE(false)
 	}
-	return &ShellService{
+	svc := &ShellService{
 		live:             pv,
 		player:           p,
 		store:            st,
@@ -248,10 +248,14 @@ func NewShellService(pv provider.Provider, p player.Player, st *store.Store) *Sh
 		vodCategoryCache: make(map[string]vodCategoryCacheEntry),
 		vodCategoryNow:   time.Now,
 	}
+	svc.playbackEventEmitter = svc.emitPlaybackEvent
+	svc.startPlaybackBridge()
+	return svc
 }
 
 // ServiceShutdown 在 Wails 退出服务阶段释放媒体库 HTTP 服务和播放资源。
 func (s *ShellService) ServiceShutdown() error {
+	s.stopPlaybackBridge()
 	var firstErr error
 	if s.library != nil {
 		firstErr = s.library.Close()
@@ -1754,4 +1758,83 @@ func toVodItems(items []provider.Item) []VodItem {
 		out[i] = VodItem{ID: it.ID, Title: it.Title, Logo: it.Logo, Group: it.Group}
 	}
 	return out
+}
+
+// PlaybackEvent 是 mpv 播放器事件经 Wails 事件 "playback:event" 桥接给前端的载荷。
+// Token 是发起本次播放的会话 token；前端只处理与当前点播会话 token 一致的事件。
+type PlaybackEvent struct {
+	Token    uint64
+	Kind     string
+	Position float64
+	Error    string
+}
+
+// playbackEventFor 把播放器事件映射为带会话 token 的桥接载荷；纯函数，便于单测。
+func playbackEventFor(ev player.Event, token uint64) PlaybackEvent {
+	kind := ""
+	switch ev.Kind {
+	case player.EventPlaying:
+		kind = "playing"
+	case player.EventBuffering:
+		kind = "buffering"
+	case player.EventPosition:
+		kind = "position"
+	case player.EventError:
+		kind = "error"
+	case player.EventEOF:
+		kind = "ended"
+	}
+	errMsg := ""
+	if ev.Err != nil {
+		errMsg = ev.Err.Error()
+	}
+	return PlaybackEvent{Token: token, Kind: kind, Position: ev.Position, Error: errMsg}
+}
+
+// emitPlaybackEvent 是播放器事件桥接的默认出口：经 Wails "playback:event" 推给前端。
+// application 尚未就绪时静默丢弃（服务可能在 app 初始化前启动，或测试环境无全局 app）。
+func (s *ShellService) emitPlaybackEvent(ev PlaybackEvent) {
+	app := application.Get()
+	if app == nil {
+		return
+	}
+	app.Event.Emit("playback:event", ev)
+}
+
+// startPlaybackBridge 启动播放器事件桥接 goroutine：消费 player.Events()，
+// 读取当前会话 token 后经 Wails "playback:event" 推给前端；无当前 token 时丢弃。
+// 桥接异常不应影响手动播放，因此事件循环错误只记日志并继续。
+func (s *ShellService) startPlaybackBridge() {
+	if s.player == nil {
+		return
+	}
+	s.playbackBridgeStop = make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-s.playbackBridgeStop:
+				return
+			case ev, ok := <-s.player.Events():
+				if !ok {
+					return
+				}
+				s.playbackMu.Lock()
+				token := s.playbackToken
+				s.playbackMu.Unlock()
+				if token == 0 {
+					continue
+				}
+				s.playbackEventEmitter(playbackEventFor(ev, token))
+			}
+		}
+	}()
+}
+
+// stopPlaybackBridge 关闭播放器事件桥接 goroutine；未启动时为空操作。
+func (s *ShellService) stopPlaybackBridge() {
+	if s.playbackBridgeStop == nil {
+		return
+	}
+	close(s.playbackBridgeStop)
+	s.playbackBridgeStop = nil
 }

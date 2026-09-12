@@ -2,6 +2,7 @@ package mpvproc
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 
 	"github.com/unbox/unbox/internal/player"
@@ -17,8 +18,8 @@ func encodeCommand(args []any) string {
 	return string(b) + "\n"
 }
 
-// parseEvent 解析 mpv 上报的事件行，只返回播放器关心的位置/缓冲/EOF 事件。
-// 其余事件（idle、pause、start-file 等）返回 ok=false。
+// parseEvent 解析 mpv 上报的事件行，只返回播放器关心的位置、播放状态和
+// 结束事件。其余事件（idle、pause、start-file 等）返回 ok=false。
 func parseEvent(line []byte) (player.Event, bool) {
 	var raw struct {
 		Event  string          `json:"event"`
@@ -30,14 +31,33 @@ func parseEvent(line []byte) (player.Event, bool) {
 		return player.Event{}, false
 	}
 	switch {
-	case raw.Event == "end-file" && raw.Reason == "eof":
-		return player.Event{Kind: player.EventEOF}, true
+	case raw.Event == "end-file":
+		if raw.Reason == "eof" {
+			return player.Event{Kind: player.EventEOF}, true
+		}
+		reason := raw.Reason
+		if reason == "" {
+			reason = "未知原因"
+		}
+		return player.Event{
+			Kind: player.EventError,
+			Err:  fmt.Errorf("mpv 播放异常结束: %s", reason),
+		}, true
 	case raw.Event == "property-change" && raw.Name == "time-pos":
 		f, err := strconv.ParseFloat(string(raw.Data), 64)
 		if err != nil {
 			return player.Event{}, false
 		}
 		return player.Event{Kind: player.EventPosition, Position: f}, true
+	case raw.Event == "property-change" && raw.Name == "paused-for-cache":
+		var paused *bool
+		if err := json.Unmarshal(raw.Data, &paused); err != nil || paused == nil {
+			return player.Event{}, false
+		}
+		if *paused {
+			return player.Event{Kind: player.EventBuffering}, true
+		}
+		return player.Event{Kind: player.EventPlaying}, true
 	}
 	return player.Event{}, false
 }

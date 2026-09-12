@@ -14,9 +14,11 @@ import (
 // Player 包装底层 Player，实现自动切换。控制方法透传 inner；单一后台事件
 // 循环消费 inner.Events() 的 EOF/Error，按当前会话的候选列表切换到下一条。
 type Player struct {
-	inner  player.Player
-	prober *probe.Prober
-	done   chan struct{}
+	inner    player.Player
+	prober   *probe.Prober
+	done     chan struct{}
+	loopDone chan struct{}
+	events   chan player.Event
 
 	mu         sync.Mutex
 	candidates []string      // 当前会话候选（主源在前）
@@ -27,13 +29,22 @@ type Player struct {
 
 // New 返回自动切换包装器，并启动单一事件循环。prober 为 nil 时按原始顺序切换。
 func New(inner player.Player, prober *probe.Prober) player.Player {
-	p := &Player{inner: inner, prober: prober, done: make(chan struct{})}
+	p := &Player{
+		inner:    inner,
+		prober:   prober,
+		done:     make(chan struct{}),
+		loopDone: make(chan struct{}),
+		events:   make(chan player.Event, 64),
+	}
 	go p.loop()
 	return p
 }
 
-// loop 是唯一的 Events() 消费者，避免多个监听 goroutine 抢同一事件流的串扰。
+// loop 是 inner.Events() 的唯一消费者：先处理故障切换，再把同一事件转发给
+// 上层，避免故障切换与 Shell 事件桥接抢同一通道。
 func (p *Player) loop() {
+	defer close(p.loopDone)
+	defer close(p.events)
 	for {
 		select {
 		case <-p.done:
@@ -42,21 +53,29 @@ func (p *Player) loop() {
 			if !ok {
 				return
 			}
-			if ev.Kind != player.EventEOF && ev.Kind != player.EventError {
-				continue
+			if ev.Kind == player.EventEOF || ev.Kind == player.EventError {
+				p.switchToNext()
 			}
-			p.mu.Lock()
-			if p.index+1 >= len(p.candidates) {
-				p.mu.Unlock()
-				continue // 候选耗尽，放弃
+			select {
+			case p.events <- ev:
+			case <-p.done:
+				return
 			}
-			p.index++
-			next := p.candidates[p.index]
-			s := p.stream
-			p.mu.Unlock()
-			_ = p.inner.Load(context.Background(), streamWith(s, next))
 		}
 	}
+}
+
+func (p *Player) switchToNext() {
+	p.mu.Lock()
+	if p.index+1 >= len(p.candidates) {
+		p.mu.Unlock()
+		return
+	}
+	p.index++
+	next := p.candidates[p.index]
+	s := p.stream
+	p.mu.Unlock()
+	_ = p.inner.Load(context.Background(), streamWith(s, next))
 }
 
 func (p *Player) Load(ctx context.Context, s player.Stream) error {
@@ -85,8 +104,13 @@ func (p *Player) SelectTrack(k player.TrackKind, id int) error {
 	return p.inner.SelectTrack(k, id)
 }
 func (p *Player) State() player.State         { return p.inner.State() }
-func (p *Player) Events() <-chan player.Event { return p.inner.Events() }
+func (p *Player) Events() <-chan player.Event { return p.events }
 func (p *Player) Close() error {
-	p.closeOnce.Do(func() { close(p.done) })
-	return p.inner.Close()
+	var err error
+	p.closeOnce.Do(func() {
+		close(p.done)
+		err = p.inner.Close()
+		<-p.loopDone
+	})
+	return err
 }

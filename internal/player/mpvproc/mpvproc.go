@@ -112,9 +112,10 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 
 	go p.readLoop(conn, sess)
 
-	// 观察 time-pos，让位置事件（EventPosition）可用。观察失败不影响播放，
-	// 故忽略错误。
+	// 观察位置与缓存暂停状态。观察失败不影响播放，故忽略错误。普通 pause
+	// 不参与状态映射，避免把用户主动暂停误判为缓冲。
 	_ = p.send("observe_property", 0, "time-pos")
+	_ = p.send("observe_property", 1, "paused-for-cache")
 	return nil
 }
 
@@ -287,11 +288,18 @@ func (p *mpvProc) readLoop(conn io.ReadWriteCloser, sess int64) {
 		_ = json.Unmarshal(line, &probe)
 		if probe.Event != "" {
 			if evt, ok := parseEvent(line); ok {
-				if evt.Kind == player.EventPosition {
-					p.stateMu.Lock()
+				p.stateMu.Lock()
+				switch evt.Kind {
+				case player.EventPosition:
 					p.state.Position = evt.Position
-					p.stateMu.Unlock()
+				case player.EventBuffering:
+					p.state.Playing = player.StateBuffering
+				case player.EventPlaying:
+					p.state.Playing = player.StatePlaying
+				case player.EventEOF, player.EventError:
+					p.state.Playing = player.StateStopped
 				}
+				p.stateMu.Unlock()
 				sendEvent(p.events, evt)
 			}
 			continue

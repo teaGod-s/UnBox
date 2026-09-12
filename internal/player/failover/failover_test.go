@@ -60,6 +60,60 @@ func TestFailoverSwitchesOnError(t *testing.T) {
 	}
 }
 
+func TestFailoverFansOutEvents(t *testing.T) {
+	inner := newFakePlayer()
+	fp := New(inner, nil)
+	defer fp.Close()
+
+	if err := fp.Load(context.Background(), player.Stream{URL: "http://primary"}); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	inner.events <- player.Event{Kind: player.EventPosition, Position: 12.5}
+	inner.events <- player.Event{Kind: player.EventPlaying}
+	inner.events <- player.Event{Kind: player.EventBuffering}
+	inner.events <- player.Event{Kind: player.EventError, Err: context.Canceled}
+	inner.events <- player.Event{Kind: player.EventEOF}
+
+	got := make([]player.Event, 0, 5)
+	for len(got) < 5 {
+		select {
+		case ev := <-fp.Events():
+			got = append(got, ev)
+		case <-time.After(time.Second):
+			t.Fatalf("超时等待扇出事件，已收到 %d 个", len(got))
+		}
+	}
+	want := []player.EventKind{
+		player.EventPosition,
+		player.EventPlaying,
+		player.EventBuffering,
+		player.EventError,
+		player.EventEOF,
+	}
+	for i, ev := range got {
+		if ev.Kind != want[i] {
+			t.Fatalf("事件 %d = %v，want %v", i, ev.Kind, want[i])
+		}
+	}
+}
+
+func TestFailoverClosesFanoutChannel(t *testing.T) {
+	inner := newFakePlayer()
+	fp := New(inner, nil)
+	if err := fp.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	select {
+	case _, ok := <-fp.Events():
+		if ok {
+			t.Fatal("Close 后 Events 通道应关闭")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Close 后 Events 通道未关闭")
+	}
+}
+
 func TestFailoverStopsWhenExhausted(t *testing.T) {
 	inner := newFakePlayer()
 	fp := New(inner, nil)

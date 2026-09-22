@@ -1,14 +1,14 @@
-<p style="text-align: center;">
+<p align="center">
   <img src="build/appicon.png" width="128" height="128" alt="UnBox logo" />
 </p>
 
-<h1 style="text-align: center;">UnBox</h1>
+<h1 align="center">UnBox</h1>
 
-<p style="text-align: center;">
+<p align="center">
   跨平台 <b>TVBox 兼容</b>桌面播放器 —— 直播 + 点播，一个安装包装好即用。
 </p>
 
-<p style="text-align: center;">
+<p align="center">
   <a href="https://github.com/teaGod-s/UnBox/releases"><img src="https://img.shields.io/badge/下载-Releases-2ea44f" alt="下载" /></a>
   <img src="https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white" alt="Go" />
   <img src="https://img.shields.io/badge/Wails-v3.0.0--beta.9-red" alt="Wails" />
@@ -152,7 +152,7 @@ UnBox 是个人「用爱发电」、完全免费的开源项目。如果你觉�
 
 或者你也可你通过微信赞赏码捐助。
 
-<p style="text-align: center;">
+<p align="center">
   <img src="build/wechat_sponsor_qrcode.jpg" width="512" height="512" alt="UnBox logo" />
 </p>
 

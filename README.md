@@ -1,14 +1,14 @@
-<p align="center">
+<p style="text-align: center;">
   <img src="build/appicon.png" width="128" height="128" alt="UnBox logo" />
 </p>
 
-<h1 align="center">UnBox</h1>
+<h1 style="text-align: center;">UnBox</h1>
 
-<p align="center">
+<p style="text-align: center;">
   跨平台 <b>TVBox 兼容</b>桌面播放器 —— 直播 + 点播，一个安装包装好即用。
 </p>
 
-<p align="center">
+<p style="text-align: center;">
   <a href="https://github.com/teaGod-s/UnBox/releases"><img src="https://img.shields.io/badge/下载-Releases-2ea44f" alt="下载" /></a>
   <img src="https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white" alt="Go" />
   <img src="https://img.shields.io/badge/Wails-v3.0.0--beta.9-red" alt="Wails" />
@@ -42,10 +42,10 @@ FongMi 多线路源（CMS JSON、drpy 服务、FongMi js0 爬虫）与 M3U / TXT
 
 UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可）：
 
-| 类型 | 结构 | 支持的站点 |
-|------|------|-----------|
-| **TVBox 单线路源** | 顶层直接含 `sites` 数组 | type=1 CMS JSON、type=3 爬虫（`http` drpy 服务 / `.js` FongMi js0） |
-| **FongMi 多线路源** | `storeHouse` → `urls[]` → 配置 三层 | 点播页可切换线路；每条线路内部与单线路源同构 |
+| 类型                | 结构                                | 支持的站点                                                          |
+|---------------------|-------------------------------------|---------------------------------------------------------------------|
+| **TVBox 单线路源**  | 顶层直接含 `sites` 数组             | type=1 CMS JSON、type=3 爬虫（`http` drpy 服务 / `.js` FongMi js0） |
+| **FongMi 多线路源** | `storeHouse` → `urls[]` → 配置 三层 | 点播页可切换线路；每条线路内部与单线路源同构                        |
 
 > `csp_` JAR 站点与 xpath（type=0）暂不支持，详见「已知限制」。
 
@@ -53,11 +53,11 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 
 前往 [Releases](https://github.com/teaGod-s/UnBox/releases) 下载对应平台的安装包：
 
-| 平台 | 安装包 | 说明 |
-|------|--------|------|
-| Windows | `.exe`（NSIS 安装程序或便携版）· **amd64 / arm64** | NSIS 安装包内嵌 mpv，安装后可直接播放 HEVC / RTMP |
-| macOS | `.zip`（内含 `.app`，**arm64 + amd64 通用**） | 解压拖入「应用程序」；HEVC 需 `brew install mpv` |
-| Linux | `.deb`（Ubuntu / Debian）或 `.AppImage` | `.deb` 双击安装并自动依赖 mpv，AppImage 加执行权限直接运行；AppImage 播放 HEVC / MKV / RTMP 等需 `sudo apt install mpv` |
+| 平台    | 安装包                                             | 说明                                                                                                                    |
+|---------|----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| Windows | `.exe`（NSIS 安装程序或便携版）· **amd64 / arm64** | NSIS 安装包内嵌 mpv，安装后可直接播放 HEVC / RTMP                                                                       |
+| macOS   | `.zip`（内含 `.app`，**arm64 + amd64 通用**）      | 解压拖入「应用程序」；HEVC 需 `brew install mpv`                                                                        |
+| Linux   | `.deb`（Ubuntu / Debian）或 `.AppImage`            | `.deb` 双击安装并自动依赖 mpv，AppImage 加执行权限直接运行；AppImage 播放 HEVC / MKV / RTMP 等需 `sudo apt install mpv` |
 
 > ⚠️ **Windows 首次运行提示**：安装包暂未做代码签名，首次双击 `.exe`（安装程序或便携版）时
 > SmartScreen 会弹出「Windows 已保护你的电脑 / 发布者未知」。点「**更多信息**」→「**仍要运行**」
@@ -67,15 +67,15 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 > 💡 **关于 mpv**：mpv 用于 HEVC / RTMP 以及 MKV、AVI、RMVB、TS 等本地容器，也用于
 > WebView 无法解码的视频首帧海报兜底。Windows NSIS 安装包内嵌未修改的便携版 mpv，Linux
 > `.deb` 声明发行版 `mpv` 依赖；macOS 和 Linux `.AppImage` 仍需自行安装 mpv。MP4 / M4V /
-> WebM 使用内置 Web 播放和首帧抓取。mpv 项目源码见 https://mpv.io/。
+> WebM 使用内置 Web 播放和首帧抓取。mpv 项目源码见 https://mpv.io/ 。
 
 ## 🖥️ 系统要求
 
-| 平台 | 架构 | 最低版本 | 运行依赖 |
-|------|------|----------|----------|
-| Windows | amd64 / arm64 | Windows 10 1809+ | WebView2（安装包内置引导安装）；NSIS 安装包内嵌 mpv |
-| macOS | amd64 + arm64（通用二进制） | macOS 12 Monterey+ | 系统内置 WKWebView；HEVC 需 `brew install mpv` |
-| Linux | amd64 | Ubuntu 24.04+ / Debian 13+（需 GTK4 ≥ 4.14 + WebKitGTK 6.0） | `libgtk-4-1`、`libwebkitgtk-6.0-4`、`gstreamer1.0-libav`、`gstreamer1.0-plugins-bad`、`mpv`（`.deb` 自动声明依赖） |
+| 平台    | 架构                        | 最低版本                                                     | 运行依赖                                                                                                           |
+|---------|-----------------------------|--------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| Windows | amd64 / arm64               | Windows 10 1809+                                             | WebView2（安装包内置引导安装）；NSIS 安装包内嵌 mpv                                                                |
+| macOS   | amd64 + arm64（通用二进制） | macOS 12 Monterey+                                           | 系统内置 WKWebView；HEVC 需 `brew install mpv`                                                                     |
+| Linux   | amd64                       | Ubuntu 24.04+ / Debian 13+（需 GTK4 ≥ 4.14 + WebKitGTK 6.0） | `libgtk-4-1`、`libwebkitgtk-6.0-4`、`gstreamer1.0-libav`、`gstreamer1.0-plugins-bad`、`mpv`（`.deb` 自动声明依赖） |
 
 > WebView2 Runtime 支持 Windows 10 1809+ 的 arm64 构建版本，故 Windows 两架构最低版本一致。
 
@@ -146,9 +146,15 @@ Release 挂载产物。
 
 ## 💝 捐助
 
-UnBox 是个人「用爱发电」、完全免费的开源项目。如果你觉得它好用，愿意支持后续的开发和维护，欢迎通过[爱发电](https://afdian.com/a/teaGod)请我喝杯咖啡 ☕。
+UnBox 是个人「用爱发电」、完全免费的开源项目。如果你觉得它好用，愿意支持后续的开发和维护，欢迎通过 [爱发电](https://afdian.com/a/teaGod) 请我喝杯咖啡 ☕。
 
-应用内「捐助榜单」展示支持者（设置页 → 关于 → 捐助榜单）。
+应用内「捐助榜单」展示 「爱发电」 支持者（设置页 → 关于 → 捐助榜单）。
+
+或者你也可你通过微信赞赏码捐助。
+
+<p style="text-align: center;">
+  <img src="build/wechat_sponsor_qrcode.jpg" width="512" height="512" alt="UnBox logo" />
+</p>
 
 每一份支持我都非常感激。当然，不捐助也完全没有关系——软件会一直免费开源下去，你使用它、反馈问题，就已经是最好的支持了。感谢每一位使用 UnBox 的朋友。🙏
 

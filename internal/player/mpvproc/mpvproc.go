@@ -104,8 +104,12 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	conn, err := waitForIPC(dialIPC, ipcPath, ipcConnectTimeout, w)
 	if err != nil {
 		_ = cmd.Process.Kill()
-		_ = w.wait() // 等收尸完成，此后 stderr 不再有写入
+		waitErr := w.wait() // 等收尸完成，此后 stderr 不再有写入
 		cleanupIPC(ipcPath)
+		if errors.Is(err, errMPVExitedEarly) {
+			// 附上退出码：静默秒退时它是唯一能区分缺 DLL / 崩溃 / 架构不匹配的证据。
+			err = mpvExitError(waitErr)
+		}
 		return mpvLoadError(err, stderr.String())
 	}
 

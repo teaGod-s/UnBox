@@ -95,11 +95,18 @@ mise run scan          # go run ./cmd/unbox-scan
 - **mpv JSON IPC**：`set` 命令拒绝 bool/数字（用 `set_property`）；终端事件
   （EOF/Error）须阻塞发送。**`exec.Cmd.Wait` 只允许调用一次**：Close / 命令应答
   超时 / Load 失败清理三处共用 `waiter`（`mpvproc/waiter.go`）收尸，别改回各自 Wait。
-- **mpv 起不来时错误必须能定位**：`mpvplugin.NewPlayer()` 先跑 `mpv --version` 预检
-  （`mpvplugin/version.go`）——跑不起来（缺 DLL / 被杀软拦截）或版本低于
-  `minMPVVersion` 都当场报错；`mpvproc` 保留子进程 stderr 末尾 4KB（`stderr.go`），
-  并在等 IPC 期间监视进程是否提前退出（`ipc.go` 的 `waitForIPC`）。这三层是配套的：
-  拿掉任何一层，用户又会退回到无从下手的「连接 mpv IPC 失败: 找不到管道」。
+- **mpv 起不来时错误必须能定位**：四层配套，拿掉任何一层，用户就会退回
+  「连接 mpv IPC 失败: 找不到管道」这种无从下手的报错。
+  1. `shell.PickPlayer()`（`internal/shell/pick.go`）是**启动路径**，必须委托给
+     `mpvplugin.Manager`：不要自己 `lookPath("mpv")`——那样既会反转「内嵌优先」
+     的顺序（PATH 上残留的旧 mpv 会盖掉应用自带的），又会绕过预检。
+  2. `mpvplugin.NewPlayer()` 先跑 `mpv --version` 预检（`version.go`）：跑不起来
+     （缺 DLL / 被杀软拦截）或低于 `minMPVVersion` 都当场报错。它不在 `Status()` 里，
+     因为后者被前端高频轮询。
+  3. `mpvproc` 保留子进程 stderr 末尾 4KB（`stderr.go`）。
+  4. 等 IPC 期间监视进程是否提前退出（`ipc.go` 的 `waitForIPC`），并把**退出码**
+     带进报错（`exitcode.go`）——缺 DLL / 架构不匹配 / 崩溃都是零输出秒退，退出码
+     是唯一能区分它们的证据。
 - **`wails3 generate bindings` 在 beta.26 起默认输出 `.js` + JSDoc，必须带 `-ts`**：
   漏掉时前端静默丢类型（model 塌成 `any`），`vue-tsc` 报 `TS18047`/`TS18046`，
   看着像代码回归实为命令问题。`build/Taskfile.yml` 的 `generate:bindings` 已带

@@ -315,6 +315,14 @@ function handleError(e: unknown) {
   ShellService.LogError(msg).catch(() => {})
 }
 
+// setVodPlaybackError 记下播放失败原因，界面回显之外再写入后端日志。
+// 播放失败（尤其是 mpv 报错）此前只活在界面提示里，用户没法把「查看日志」
+// 发给我们，只能截图——而这恰恰是排查播放问题时最需要的信息。
+function setVodPlaybackError(message: string) {
+  vodPlaybackError.value = message
+  if (message) ShellService.LogError(message).catch(() => {})
+}
+
 async function openAbout() {
   try { internalVersion.value = await ShellService.InternalVersion() } catch { /* 忽略 */ }
   showAbout.value = true
@@ -1245,7 +1253,7 @@ const vodAutomation = new VodAutomation({
   },
   onAllSourcesFailed: () => {
     vodPlaybackStatus.value = 'error'
-    vodPlaybackError.value = '所有线路均无法播放当前剧集'
+    setVodPlaybackError('所有线路均无法播放当前剧集')
   },
 } satisfies VodAutomationHost)
 
@@ -1256,7 +1264,7 @@ function onVodPlaybackSignal(token: number, state: PlaybackState, message?: stri
     void vodAutomation.ended(token)
     return
   }
-  if (state === 'error' && message) vodPlaybackError.value = message
+  if (state === 'error' && message) setVodPlaybackError(message)
   if (state === 'playing' || state === 'error') vodPlayerLoading.value = false
   if (state === 'ready') applySkip(token)
   vodAutomation.signal(token, state)

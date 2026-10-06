@@ -55,6 +55,25 @@
 > 09-01 快照之后合入 master 的更新。下方「M4 之后新增的功能（本次会话）」为当时的
 > 冻结快照，保留作历史记录，不再更新。
 
+- **mpv 诊断补漏**（2026-10-06）：v0.8.1 发出后用户回报「mpv 启动后立即退出」，
+  且**没有 stderr 内容**——正是上一轮在 `HANDOFF` 里预判的分支。排查发现上一轮的
+  修复本身有三处缺陷：
+  - **预检没跑在主路径上**：启动走 `shell.PickPlayer()`（`cmd/unbox/main.go:26`），
+    它直接 `mpvproc.New()`；而预检写在 `mpvplugin.NewPlayer()`，只有设置页
+    「重新检测」(`RefreshMPV`) 会调。等于预检对绝大多数用户是死代码。
+  - **探测顺序被反转**：`PickPlayer` 先 `lookPath("mpv")` 再回退 `pluginStatus()`，
+    与 `mpvplugin.Status()` 文档化的「内嵌 → 插件目录 → PATH」相反。Windows 装了
+    NSIS 包但 PATH 上另有 mpv 时，坏的那个赢。**已改为全部委托 manager**（内嵌优先
+    是产品决定）。
+  - **静默退出时没有判据**：`waitForIPC` 丢掉了 `cmd.Wait()` 的错误，也就是退出码。
+    缺 DLL (0xC0000135) 与崩溃 (0xC0000005) 都是零输出秒退，退出码是唯一能区分
+    它们的证据。**已带进报错**（`mpvproc/exitcode.go`，含 Windows 常见 NTSTATUS 中文翻译）。
+  - 顺带：`PickPlayer` 选中哪个 mpv 会写进日志缓冲；播放失败原因改走
+    `setVodPlaybackError` 一并写入「查看日志」（此前 `vodPlaybackError` 是直接赋值，
+    错误只活在界面上，用户没法把日志发给我们，只能截图）。
+  - **仍未定位 mpv 本身的根因**——只补齐了证据链。需回访该用户拿新的报错：退出码
+    出来即可分辨缺 DLL / 架构不匹配 / 崩溃。用户反馈该错误出现在**播放点播**时
+    （即 HEVC 的 HLS 或 Web 失败后的降级，非本地文件）。
 - **Wails beta.9 → beta.26 升级**（`6d083c15`，2026-10-01）：Wails v3 落后 17 个 beta
   后跟上。版本是**四处锁**，必须同步：`go.mod`、`mise.toml`、`.github/workflows/release.yml`
   的 `wails3@`、`frontend/package.json` 的 `@wailsio/runtime`（npm 与 Go 版本严格一一对应），
@@ -277,9 +296,11 @@
 - **M3 本地媒体库**：✅ 已完成（基础 merge `adcc8f3e`，首帧海报与布局修复已合入 master，
   2026-09-07），详见上方「近期更新」。
 - **Windows/macOS 实测**：打包已由 GH Actions 自动化；Windows NSIS 内嵌 mpv 的下载、解压、安装包执行和无系统 mpv 播放仍需 Windows 宿主机实测，macOS 仍需验证外部 mpv 安装与播放。
-- **回访报 mpv 报错的用户**：mpv 诊断三层已就位，但**尚未收到真实环境反馈**。下次出包后
-  让该用户复现，确认新报错是否指出了具体原因（缺 DLL / 杀软拦截 / 版本过低）；若仍是
-  「启动后立即退出」而无 stderr 输出，说明是我们的参数或环境问题，需另查。
+- **回访报 mpv 报错的用户（第一轮已回，见「近期更新」）**：拿到的新报错是「启动后立即
+  退出」且无 stderr，正是预判分支。第二轮已补上退出码与路径日志。**再出包后请该用户复现**，
+  新的报错会形如 `mpv 启动后立即退出（退出码 3221225781 (0xC0000135)：找不到依赖的 DLL）`，
+  照退出码即可定位到缺 DLL / 架构不匹配 / 崩溃。同时请他提供「查看日志」内容（现在播放
+  错误会进日志了）与安装方式（NSIS 包 or 便携 exe）。
 - 停车项：failover `Events()` fan-out、probe 同步阻塞 `Load`、tvbox 剧集缓存上限、
   点播收藏等。
 

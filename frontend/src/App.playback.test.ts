@@ -255,6 +255,13 @@ describe('App 播放事件接线', () => {
     expect(aboutSection).not.toContain('@click="openURL(DONATE_URL)"')
   })
 
+  // 播放失败的原因如果只显示在界面上，用户没法把「查看日志」发给我们，只能截图。
+  it('播放失败原因同时写入后端日志', () => {
+    expect(app).toContain('setVodPlaybackError')
+    expect(app).toContain("if (state === 'error' && message) setVodPlaybackError(message)")
+    expect(app).toContain("setVodPlaybackError('所有线路均无法播放当前剧集')")
+  })
+
   // 弹窗一打开 Donors 还是空数组，直接按长度判断会把「加载中」显示成「还没人捐助」。
   it('捐助弹窗按拉取状态区分加载中、失败与空态', () => {
     expect(app).toContain("donationViewState === 'loading'")

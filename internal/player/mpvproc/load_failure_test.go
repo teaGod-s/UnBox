@@ -56,6 +56,10 @@ func TestLoadSurfacesMPVStderrWhenProcessDies(t *testing.T) {
 	if !strings.Contains(err.Error(), "libmpv-2.dll") {
 		t.Fatalf("错误应带上 mpv 自己的输出，实际 %q", err.Error())
 	}
+	// 假 mpv 以 os.Exit(3) 结束；退出码必须透传出来——它是静默秒退时唯一的判据。
+	if !strings.Contains(err.Error(), "退出码 3") {
+		t.Fatalf("错误应带上退出码，实际 %q", err.Error())
+	}
 	// 进程在毫秒级退出，不该再空等满 ipcConnectTimeout。
 	if elapsed > ipcConnectTimeout {
 		t.Fatalf("耗时 %v，应在进程退出后立即返回而不是等满超时", elapsed)

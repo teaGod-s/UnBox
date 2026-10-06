@@ -1184,17 +1184,6 @@ body {
 .favorites-page { flex: 1; min-height: 0; overflow-y: auto; }
 .favorites-page h2 { margin: 0.25rem 0 0.75rem; }
 .favorites-list { margin: 0; padding: 0; list-style: none; }
-.favorites-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--row-alt);
-  cursor: pointer;
-}
-.favorites-list li:hover { background: var(--btn-bg); }
-.favorites-list .thumb { width: 44px; height: 60px; object-fit: cover; border-radius: 0.3rem; background: var(--row-alt); flex-shrink: 0; }
-.favorites-list .row-delete { margin-left: auto; }
 
 .favorite-toggle {
   align-self: flex-start;
@@ -1210,7 +1199,10 @@ body {
 
 .home-list { margin: 0; padding: 0; list-style: none; }
 
-.home-list li {
+/* 内容列表（观看记录 / 收藏 / 点播列表 / 搜索结果）统一由 ContentCardList 渲染，
+   列表模式一律两行：片名 + 「站点 · 补充」。原先点播与搜索是单行（.name + .group），
+   现统一为两行；直播频道列表仍走 .channel，不受这里影响。 */
+.content-row {
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -1218,14 +1210,12 @@ body {
   border-bottom: 1px solid var(--row-alt);
   cursor: pointer;
 }
-
-.home-list li:hover { background: var(--btn-bg); }
-
-.home-list .thumb { width: 44px; height: 60px; object-fit: cover; border-radius: 0.3rem; background: var(--row-alt); flex-shrink: 0; }
-
-.home-info { display: flex; flex-direction: column; min-width: 0; }
-.home-info .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.home-info .sub { color: var(--text-dim); font-size: 0.85rem; }
+.content-row:hover { background: var(--btn-bg); }
+.content-row .thumb { width: 44px; height: 60px; object-fit: cover; border-radius: 0.3rem; background: var(--row-alt); flex-shrink: 0; }
+.content-row .row-delete { margin-left: auto; }
+.content-row-info { display: flex; flex-direction: column; min-width: 0; }
+.content-row-info .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.content-row-info .sub { color: var(--text-dim); font-size: 0.85rem; }
 
 /* 内容卡片网格：海报作为卡片底图，站点/进度/标题叠加在半透明文字框中。 */
 .content-card-grid {
@@ -1337,8 +1327,6 @@ body {
      否则卡片会贴住面板边框，和左侧类目栏的内边距对不上。 */
   padding: var(--content-gap);
 }
-
-.home-list .row-delete { margin-left: auto; }
 
 .library-page {
   display: flex;

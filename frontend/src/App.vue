@@ -7,7 +7,10 @@ import PreloadView from './components/PreloadView.vue'
 import VodDetailHeader from './components/VodDetailHeader.vue'
 import { clampEpisodePage, episodePageIndex, episodePageRanges, paginateEpisodes } from './episodes'
 import { createLibraryThumbPipeline } from './libraryThumb'
+import ContentCardList from './components/ContentCardList.vue'
 import { contentCardStyleLabel, contentCardStyleOptions, normalizeContentCardStyle, type ContentCardStyle } from './contentCardStyle'
+import { historyCardItem, type ContentCardItem } from './contentCardItem'
+import { imgError, scrollxEnter, scrollxLeave } from './contentListDom'
 import { createPlaybackSettings, PLAYBACK_SETTING_ITEMS, type PlaybackSettingKey, type PlaybackSettingsApi } from './playbackSettings'
 import { VodAutomation, nextEpisodeInSource, sameNameEpisodeOnSource, type VodAutomationHost } from './playbackAutomation'
 import { resolveSkipAction, type SkipRuntime, type VodSkipMarks } from './vodSkip'
@@ -75,7 +78,7 @@ const vodPage = ref(0)
 const vodHasMore = ref(false)
 const vodListEnd = ref(false)
 const vodListLoading = ref(false)
-const vodListRef = ref<HTMLElement | null>(null)
+const vodListRef = ref<InstanceType<typeof ContentCardList> | null>(null)
 let vodCategoryRequest = 0
 let vodListRequest = 0
 const vodCategoryLoading = ref(false)
@@ -290,10 +293,39 @@ function openVodSourceDead(site: string, vodTitle: string, origin: VodDetailOrig
   vodSourceDead.value = { info: buildVodSourceDeadInfo(siteName(site), vodTitle, e), origin }
 }
 
-function vodItemSub(it: VodItem) {
-  const parts = [it.Site ? siteName(it.Site) : '', it.Group].filter(Boolean)
-  return parts.join(' · ')
+// 四处内容列表共用 ContentCardList，各自把原始数据归一成 ContentCardItem。
+// 数组与源数据一一对应：组件只回传下标，父级用它取回自己的对象。
+const homeCardItems = computed<ContentCardItem[]>(() => homeHistory.value.map(h => historyCardItem(
+  h.Site + h.VodID,
+  h.VodLogo,
+  h.VodTitle,
+  h.SiteName || h.Site,
+  h.EpName,
+  fmtProgress(h.Progress),
+)))
+
+const favoriteCardItems = computed<ContentCardItem[]>(() => vodFavorites.value.map(f => ({
+  key: f.Site + f.VodID,
+  logo: f.Logo,
+  title: f.Title,
+  site: siteName(f.Site) || f.Site,
+  detail: f.Group || '',
+})))
+
+// 点播条目（列表页与搜索结果共用）。没有站点名时把分类顶到站点位，与列表模式
+// 原先的 vodItemSub 输出保持一致；两者都缺时留空，卡片徽标不渲染。
+function vodCardItem(it: VodItem): ContentCardItem {
+  const site = it.Site ? siteName(it.Site) : ''
+  return {
+    key: it.ID + (it.Site || ''),
+    logo: it.Logo,
+    title: it.Title,
+    site: site || it.Group || '',
+    detail: site ? (it.Group || '') : '',
+  }
 }
+
+const vodCardItems = computed<ContentCardItem[]>(() => visibleVodItems.value.map(vodCardItem))
 
 async function refresh() {
   try {
@@ -550,9 +582,12 @@ function closeCardContextMenu() {
   cardContextMenu.value = null
 }
 
-function isContextCard(kind: 'history' | 'favorite', item: VodHistoryInfo | VodFavoriteInfo) {
-  return cardContextMenu.value?.kind === kind && cardContextMenu.value.item === item
-}
+// activeDeleteKey 是当前展开了删除遮罩的条目 key。原先按对象身份比较，改成按 key
+// 是因为列表交给 ContentCardList 渲染后，父级拿到的是下标而不是原对象引用。
+const activeDeleteKey = computed(() => {
+  const menu = cardContextMenu.value
+  return menu ? menu.item.Site + menu.item.VodID : null
+})
 
 function requestDeleteContextCard() {
   if (!cardContextMenu.value) return
@@ -929,7 +964,7 @@ function onVodListWheel(event: WheelEvent) {
 }
 
 function scrollVodListTop() {
-  vodListRef.value?.scrollTo({ top: 0, behavior: 'smooth' })
+  vodListRef.value?.scrollToTop()
 }
 
 async function selectVodCategory(id: string) {
@@ -1528,30 +1563,6 @@ async function checkUpdate() {
   }
 }
 
-// imgError 隐藏加载失败的图片（部分源 vod_pic 为空/失效/被防盗链拦截）。
-function imgError(e: Event) {
-  ;(e.target as HTMLImageElement).style.display = 'none'
-}
-
-// scrollxEnter/Leave 让过长文本在悬停时自动左滑揭示隐藏部分（无手动滚动条）。
-// 纯 CSS 做不到：translateX 百分比相对自身宽度，无法得知溢出量，故用 JS 量取。
-function scrollxEnter(e: MouseEvent) {
-  const box = e.currentTarget as HTMLElement
-  const inner = box.firstElementChild as HTMLElement | null
-  if (!inner) return
-  const overflow = inner.scrollWidth - box.clientWidth
-  if (overflow <= 0) return
-  inner.style.transition = `transform ${Math.min(3000, 600 + overflow * 4)}ms ease-out`
-  inner.style.transform = `translateX(${-overflow}px)`
-}
-function scrollxLeave(e: MouseEvent) {
-  const box = e.currentTarget as HTMLElement
-  const inner = box.firstElementChild as HTMLElement | null
-  if (!inner) return
-  inner.style.transition = 'transform 300ms ease-in-out'
-  inner.style.transform = ''
-}
-
 function openContentCardStyle() {
   showContentCardStyle.value = true
 }
@@ -1630,26 +1641,18 @@ onBeforeUnmount(() => {
     <section v-if="mode === 'home'" class="home">
       <h2>观看记录</h2>
       <p v-if="!homeHistory.length" class="home-empty">暂无观看记录，去「点播」看看吧</p>
-      <ul v-else class="home-list" :class="{ 'content-card-grid': contentCardStyle === 'grid' }">
-        <li v-for="h in homeHistory" :key="h.Site + h.VodID" :class="{ 'content-card': contentCardStyle === 'grid' }" @click="resumeVod(h)" @contextmenu="openCardContextMenu('history', h, $event)">
-          <img v-if="h.VodLogo" :src="h.VodLogo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
-          <template v-if="contentCardStyle === 'grid'">
-            <span class="content-card-badge content-card-site">{{ h.SiteName || h.Site }}</span>
-            <span v-if="h.EpName || fmtProgress(h.Progress)" class="content-card-badge content-card-progress scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner"><span v-if="h.EpName" class="cc-ep">{{ h.EpName }}</span><span v-if="fmtProgress(h.Progress)" class="cc-prog">{{ fmtProgress(h.Progress) }}</span></span></span>
-            <span class="content-card-badge content-card-title scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ h.VodTitle }}</span></span>
-            <div v-if="isContextCard('history', h)" class="content-card-delete-mask" @click.stop>
-              <button type="button" class="content-card-delete-action" @click.stop="requestDeleteContextCard">删除</button>
-            </div>
-          </template>
-          <template v-else>
-            <span class="home-info">
-              <span class="name">{{ h.VodTitle }}</span>
-              <span class="sub">{{ h.SiteName || h.Site }} · {{ h.EpName }}{{ fmtProgress(h.Progress) ? ' · 看到 ' + fmtProgress(h.Progress) : '' }}</span>
-            </span>
-            <button class="row-delete" type="button" title="删除观看记录" @click.stop="deleteHomeHistory(h)">删除</button>
-          </template>
-        </li>
-      </ul>
+      <ContentCardList
+        v-else
+        list-class="home-list"
+        :items="homeCardItems"
+        :style="contentCardStyle"
+        deletable
+        :active-delete-key="activeDeleteKey"
+        @select="(i) => resumeVod(homeHistory[i])"
+        @contextmenu="(i, event) => openCardContextMenu('history', homeHistory[i], event)"
+        @remove="(i) => deleteHomeHistory(homeHistory[i])"
+        @request-delete="requestDeleteContextCard"
+      />
     </section>
 
     <!-- 点播搜索 -->
@@ -1672,12 +1675,11 @@ onBeforeUnmount(() => {
       </div>
       <p v-if="showVodNoResults" class="home-empty">暂无搜索结果</p>
       <section class="vod-main search-results">
-        <ul>
-          <li v-for="it in vodSearchItems" :key="it.ID + (it.Site || '')" class="channel" @click="openVodDetail(it)">
-            <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
-            <span class="name">{{ it.Title }}</span><span class="group">{{ vodItemSub(it) }}</span>
-          </li>
-        </ul>
+        <ContentCardList
+          :items="vodCardItems"
+          :style="contentCardStyle"
+          @select="(i) => openVodDetail(vodSearchItems[i])"
+        />
       </section>
     </section>
 
@@ -1685,25 +1687,18 @@ onBeforeUnmount(() => {
     <section v-if="mode === 'favorites'" class="favorites-page">
       <h2>点播收藏</h2>
       <p v-if="!vodFavorites.length" class="home-empty">暂无点播收藏</p>
-      <ul v-else class="favorites-list" :class="{ 'content-card-grid': contentCardStyle === 'grid' }">
-        <li v-for="favorite in vodFavorites" :key="favorite.Site + favorite.VodID" :class="{ 'content-card': contentCardStyle === 'grid' }" @click="openVodFavorite(favorite)" @contextmenu="openCardContextMenu('favorite', favorite, $event)">
-          <img v-if="favorite.Logo" :src="favorite.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
-          <template v-if="contentCardStyle === 'grid'">
-            <span class="content-card-badge content-card-site">{{ siteName(favorite.Site) || favorite.Site }}</span>
-            <span class="content-card-badge content-card-title scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ favorite.Title }}</span></span>
-            <div v-if="isContextCard('favorite', favorite)" class="content-card-delete-mask" @click.stop>
-              <button type="button" class="content-card-delete-action" @click.stop="requestDeleteContextCard">删除</button>
-            </div>
-          </template>
-          <template v-else>
-            <span class="home-info">
-              <span class="name">{{ favorite.Title }}</span>
-              <span class="sub">{{ siteName(favorite.Site) || favorite.Site }}{{ favorite.Group ? ' · ' + favorite.Group : '' }}</span>
-            </span>
-            <button class="row-delete" type="button" title="删除收藏" @click.stop="deleteVodFavorite(favorite)">删除</button>
-          </template>
-        </li>
-      </ul>
+      <ContentCardList
+        v-else
+        list-class="favorites-list"
+        :items="favoriteCardItems"
+        :style="contentCardStyle"
+        deletable
+        :active-delete-key="activeDeleteKey"
+        @select="(i) => openVodFavorite(vodFavorites[i])"
+        @contextmenu="(i, event) => openCardContextMenu('favorite', vodFavorites[i], event)"
+        @remove="(i) => deleteVodFavorite(vodFavorites[i])"
+        @request-delete="requestDeleteContextCard"
+      />
     </section>
 
     <!-- 直播 -->
@@ -1820,18 +1815,13 @@ onBeforeUnmount(() => {
         <section class="vod-main">
           <VodDetailHeader v-if="vodView === 'detail'" :now-playing="vodNowPlaying" @back="backFromVodDetail" />
           <template v-if="vodView !== 'detail'">
-          <ul ref="vodListRef" :class="{ 'content-card-grid': contentCardStyle === 'grid' }" @wheel="onVodListWheel">
-            <li v-for="it in visibleVodItems" :key="it.ID + (it.Site || '')" class="channel" :class="{ 'content-card': contentCardStyle === 'grid' }" @click="openVodDetail(it)">
-              <img v-if="it.Logo" :src="it.Logo" class="thumb" loading="lazy" referrerpolicy="no-referrer" @error="imgError" />
-              <template v-if="contentCardStyle === 'grid'">
-                <span class="content-card-badge content-card-site">{{ siteName(it.Site) || it.Group || '点播' }}</span>
-                <span class="content-card-badge content-card-title scrollx" @mouseenter="scrollxEnter" @mouseleave="scrollxLeave"><span class="scrollx-inner">{{ it.Title }}</span></span>
-              </template>
-              <template v-else>
-                <span class="name">{{ it.Title }}</span><span class="group">{{ vodItemSub(it) }}</span>
-              </template>
-            </li>
-          </ul>
+          <ContentCardList
+            ref="vodListRef"
+            :items="vodCardItems"
+            :style="contentCardStyle"
+            @wheel="onVodListWheel"
+            @select="(i) => openVodDetail(visibleVodItems[i])"
+          />
           <div class="vod-list-footer">
             <button v-if="vodHasMore" type="button" class="vod-list-more" :disabled="vodListLoading" @click="loadNextVodPage">{{ vodListLoading ? '正在加载…' : '继续加载' }}</button>
             <span v-else-if="vodListEnd" class="vod-list-end">已经到达最底部</span>

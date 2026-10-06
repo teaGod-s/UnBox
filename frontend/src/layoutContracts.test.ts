@@ -119,3 +119,24 @@ describe('web player controls contract', () => {
     expect(stylesheet).toMatch(/\.ctrl-seek::-webkit-slider-runnable-track,[\s\S]*?background:\s*rgba\(255, 255, 255, 0\.28\);/)
   })
 })
+
+describe('内容列表布局契约', () => {
+  // 观看记录 / 收藏 / 点播列表 / 搜索结果四处共用 ContentCardList 与 .content-row，
+  // 列表模式统一两行。若又出现按页面分叉的行样式，说明有人绕开了组件。
+  it('四处内容列表共用一套行样式', () => {
+    expect(stylesheet).toMatch(/\.content-row\s*\{[^}]*cursor:\s*pointer;/s)
+    expect(stylesheet).toMatch(/\.content-row-info\s*\{[^}]*flex-direction:\s*column;/s)
+    expect(stylesheet).toMatch(/\.content-row-info \.sub\s*\{[^}]*color:\s*var\(--text-dim\);/s)
+
+    // 旧的两套样式已并入 .content-row，不该复活。
+    expect(stylesheet).not.toContain('.home-info')
+    expect(stylesheet).not.toContain('.home-list li')
+    expect(stylesheet).not.toContain('.favorites-list li')
+  })
+
+  // 直播频道列表仍走 .channel，别被上面的合并误伤。
+  it('直播频道行样式不受内容列表合并影响', () => {
+    expect(stylesheet).toMatch(/\.channel\s*\{/)
+    expect(stylesheet).toMatch(/\.channel \.group\s*\{/)
+  })
+})

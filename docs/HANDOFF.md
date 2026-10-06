@@ -55,6 +55,26 @@
 > 09-01 快照之后合入 master 的更新。下方「M4 之后新增的功能（本次会话）」为当时的
 > 冻结快照，保留作历史记录，不再更新。
 
+- **便携版缺 mpv 的提示与文档**（2026-10-06）：用户（同一人）反馈「便携版单独打不开
+  视频，装了 installer 之后便携版能打开」。查证：**Windows 便携版产物是单个 exe，不含
+  mpv**（`release.yml` 只把 `bin/unbox.exe` 改名搬出，没有 `mpv\` 目录），而 `bundledPath()`
+  找的是「exe 自己所在目录\mpv\mpv.exe」；NSIS 也**不写 PATH**（`project.nsi` /
+  `wails_tools.nsh` 里 PATH 出现 0 次）。所以便携版单独放着时，需要 mpv 的内容
+  （本地媒体库 / HEVC 的 HLS / RTMP）必然播不了——这是设计如此，但**文档和提示都没说**。
+  - **真正的缺陷在提示的触发条件**：`mpvNeeded`（原 `mpvFallbackRequested`）只在
+    `fallbackToMpv()` 里置位，也就是**只有 Web 播放失败、降级到 mpv 时**才提示。而
+    `needsMPV` 直接路由到 mpv 的内容**根本不经过 Web**，`loadMPV` 直接返回
+    `ErrMPVUnavailable`——这条路径永远不会打开安装提示。用户看到的只有一句失败文案。
+    现在改为按错误内容判定（`isMpvUnavailableError`），在播放失败处统一置位，直接路由
+    与降级两条路径都能提示。
+  - 文案改为说明缺什么、哪些内容受影响；Windows 上额外点明「便携版不包含 mpv」。
+  - `ref` 更名 `mpvFallbackRequested` → `mpvNeeded`：旧名字只描述了降级场景，会误导后人
+    把直接路由那条路径漏掉。
+  - README 补明便携版不含 mpv 及获取方式（此前只在 Windows 行写了「NSIS 安装包内嵌
+    mpv」，两种 exe 并列很容易让人以为便携版也带）。
+  - 跨语言配对断言：`frontend/src/playbackScope.ts` 的 `MPV_UNAVAILABLE_ERROR` 必须与
+    后端 `playback.ErrMPVUnavailable` 文案一致，`App.playback.test.ts` 会直接读
+    `internal/playback/controller.go` 校验，防止任一边改了文案后静默退化成「永不提示」。
 - **mpv 诊断补漏**（2026-10-06）：v0.8.1 发出后用户回报「mpv 启动后立即退出」，
   且**没有 stderr 内容**——正是上一轮在 `HANDOFF` 里预判的分支。排查发现上一轮的
   修复本身有三处缺陷：

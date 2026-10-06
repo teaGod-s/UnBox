@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt } from './playbackScope'
+import { isMpvUnavailableError, mpvInstallHint, playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt } from './playbackScope'
 
 describe('playback scope', () => {
   it('only exposes the plan belonging to the active page', () => {
@@ -47,5 +47,32 @@ describe('playback scope', () => {
     expect(shouldShowMpvInstallPrompt('windows', false, true)).toBe(true)
     expect(shouldShowMpvInstallPrompt('linux', false, false)).toBe(true)
     expect(shouldShowMpvInstallPrompt('windows', true, true)).toBe(false)
+  })
+})
+
+describe('mpv 缺失', () => {
+  // 本地媒体库 / HEVC 的 HLS / RTMP 直接路由到 mpv，不经过 Web 降级，
+  // 因此不能只靠 fallback 置位来判断「这次失败是不是缺 mpv」。
+  it('识别「缺 mpv」造成的播放失败', () => {
+    expect(isMpvUnavailableError('mpv 插件未安装')).toBe(true)
+    expect(isMpvUnavailableError('RuntimeError: mpv 插件未安装')).toBe(true)
+    expect(isMpvUnavailableError('网络超时')).toBe(false)
+    expect(isMpvUnavailableError('')).toBe(false)
+  })
+
+  // 便携版 exe 是单文件、不含 mpv，用户往往不知道自己缺了什么。
+  it('Windows 的提示点明便携版不含 mpv', () => {
+    expect(mpvInstallHint('windows')).toContain('便携版')
+  })
+
+  it('其他平台不冒充便携版说法', () => {
+    expect(mpvInstallHint('linux')).not.toContain('便携版')
+    expect(mpvInstallHint('darwin')).not.toContain('便携版')
+  })
+
+  it('提示说明哪些内容需要 mpv', () => {
+    for (const platform of ['windows', 'linux', 'darwin']) {
+      expect(mpvInstallHint(platform)).toContain('HEVC')
+    }
   })
 })

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { VodAutomation, type PlaybackSettings, type VodAutomationHost } from './playbackAutomation'
 
 const app = readFileSync('src/App.vue', 'utf8')
+const controller = readFileSync('../internal/playback/controller.go', 'utf8')
 
 const ALL_EPISODES = [
   { ID: 'a-1', Source: '线路A', Name: '第一集' },
@@ -260,6 +261,15 @@ describe('App 播放事件接线', () => {
     expect(app).toContain('setVodPlaybackError')
     expect(app).toContain("if (state === 'error' && message) setVodPlaybackError(message)")
     expect(app).toContain("setVodPlaybackError('所有线路均无法播放当前剧集')")
+  })
+
+  // 跨语言配对：前端靠文案匹配后端的哨兵错误，任一边改了文案都必须在这里暴露，
+  // 否则会静默退化成「mpv 缺失却永不提示安装」。
+  it('前端识别的 mpv 缺失文案与后端哨兵一致', () => {
+    expect(controller).toContain('mpv 插件未安装')
+    expect(app).toContain('isMpvUnavailableError')
+    // 直接路由到 mpv 的失败也要走检测，不能只靠 Web→mpv 降级置位。
+    expect(app).toContain('notePlaybackFailure(String(e))')
   })
 
   // 弹窗一打开 Donors 还是空数组，直接按长度判断会把「加载中」显示成「还没人捐助」。

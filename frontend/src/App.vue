@@ -12,7 +12,7 @@ import { createPlaybackSettings, PLAYBACK_SETTING_ITEMS, type PlaybackSettingKey
 import { VodAutomation, nextEpisodeInSource, sameNameEpisodeOnSource, type VodAutomationHost } from './playbackAutomation'
 import { resolveSkipAction, type SkipRuntime, type VodSkipMarks } from './vodSkip'
 import { initializeHomeState } from './startup'
-import { playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
+import { isMpvUnavailableError, mpvInstallHint, playbackPlanForMode, resolvePlaybackFallback, shouldPauseStalePlayback, shouldRecordVodProgress, shouldShowMpvInstallPrompt, type ActivePlaybackSession, type PlaybackScope, type PlaybackStatus } from './playbackScope'
 import { createVodSearchCache, isCurrentVodCategoryRequest, isVodSearchCacheValid, nextVodCategoryRequest, nextVodSearchRequest, pickResumeSeek, removeVodFavorite, removeVodHistory, removeVodSearchHistory, resolveVodSelection, shouldShowVodNoResults, upsertVodSearchHistory, vodBackTarget, vodResumeView, vodSearchQueryForReturn, type VodDetailOrigin, type VodSearchCache, type VodView } from './vodNavigation'
 import { buildVodSourceDeadInfo, vodSourceDeadBackLabel, vodSourceDeadBackTarget, type VodSourceDeadInfo } from './vodSourceDead'
 import { appendVodItems, hasNextVodPage, nextVodPage } from './vodPagination'
@@ -104,7 +104,7 @@ const preloadPlan = ref<PlaybackPlan | null>(null)
 let preloadGeneration = 0
 let nextPlaybackToken = 0
 const mpvReady = ref(false)
-const mpvFallbackRequested = ref(false)
+const mpvNeeded = ref(false)
 const mpvInstallMode = ref('')
 const installMessage = ref('')
 const vodSources = ref<SourceRecord[]>([])
@@ -205,7 +205,7 @@ const deleteConfirmation = ref<{
 } | null>(null)
 let lastProgressSave = 0
 
-const showMpvInstallPrompt = computed(() => shouldShowMpvInstallPrompt(platform.value, mpvReady.value, mpvFallbackRequested.value))
+const showMpvInstallPrompt = computed(() => shouldShowMpvInstallPrompt(platform.value, mpvReady.value, mpvNeeded.value))
 
 const activeEpisodes = computed(() => (vodDetail.value?.Episodes ?? []).filter(ep => ep.Source === activeSource.value))
 const episodePages = computed(() => paginateEpisodes(activeEpisodes.value))
@@ -315,12 +315,23 @@ function handleError(e: unknown) {
   ShellService.LogError(msg).catch(() => {})
 }
 
+// notePlaybackFailure 播放失败时的共同处理：如果这次失败是因为缺 mpv，
+// 就打开安装提示。
+//
+// 本地媒体库、HEVC 的 HLS、RTMP 会**直接**路由到 mpv，不经过 Web，因此不会
+// 触发 Web→mpv 的降级回调；只靠降级置位的话，这类失败永远不会提示安装 mpv。
+function notePlaybackFailure(message: string) {
+  if (isMpvUnavailableError(message)) mpvNeeded.value = true
+}
+
 // setVodPlaybackError 记下播放失败原因，界面回显之外再写入后端日志。
 // 播放失败（尤其是 mpv 报错）此前只活在界面提示里，用户没法把「查看日志」
 // 发给我们，只能截图——而这恰恰是排查播放问题时最需要的信息。
 function setVodPlaybackError(message: string) {
   vodPlaybackError.value = message
-  if (message) ShellService.LogError(message).catch(() => {})
+  if (!message) return
+  notePlaybackFailure(message)
+  ShellService.LogError(message).catch(() => {})
 }
 
 async function openAbout() {
@@ -361,7 +372,7 @@ async function refreshMpvStatus() {
   const s = await ShellService.MPVStatus()
   mpvReady.value = s.Available
   mpvInstallMode.value = s.InstallMode
-  if (s.Available) mpvFallbackRequested.value = false
+  if (s.Available) mpvNeeded.value = false
 }
 
 async function installMpv() {
@@ -654,6 +665,7 @@ async function playLibraryItem(path: string) {
       vodPlaybackToken.value = 0
       vodPlaybackStatus.value = 'error'
       vodPlaybackError.value = String(e)
+      notePlaybackFailure(String(e))
       handleError(e)
     }
   }
@@ -791,6 +803,7 @@ async function play(c: ChannelInfo) {
       livePlaybackToken.value = 0
       livePlaybackStatus.value = 'error'
       livePlaybackError.value = String(e)
+      notePlaybackFailure(String(e))
       handleError(e)
     }
   }
@@ -1108,6 +1121,7 @@ async function doPlayEpisode(site: string, epID: string, epName: string, source:
       vodPlayerLoading.value = false
       vodPlaybackStatus.value = 'error'
       vodPlaybackError.value = String(e)
+      notePlaybackFailure(String(e))
       throw e
     }
     return false
@@ -1141,7 +1155,7 @@ async function playEpisode(ep: EpisodeInfo) {
 }
 
 async function fallbackToMpv(scope: PlaybackScope, id: string, token: number, position: number) {
-  mpvFallbackRequested.value = true
+  mpvNeeded.value = true
   if (scope === 'live') {
     livePlaybackStatus.value = 'preparing'
     livePlaybackError.value = ''
@@ -1180,11 +1194,13 @@ async function fallbackToMpv(scope: PlaybackScope, id: string, token: number, po
         livePlaybackToken.value = 0
         livePlaybackStatus.value = 'error'
         livePlaybackError.value = String(e)
+        notePlaybackFailure(String(e))
       } else {
         vodPlaybackPlan.value = null
         vodPlaybackToken.value = 0
         vodPlaybackStatus.value = 'error'
         vodPlaybackError.value = String(e)
+        notePlaybackFailure(String(e))
       }
       handleError(e)
     }
@@ -1594,7 +1610,7 @@ onBeforeUnmount(() => {
     </header>
 
     <div v-if="showMpvInstallPrompt" class="mpv-install" aria-live="polite">
-      <span>mpv 插件未安装（HEVC / RTMP / 本地文件需要它）</span>
+      <span>{{ mpvInstallHint(platform) }}</span>
       <button @click="installMpv">{{ mpvInstallMode === 'download' ? '下载并安装 mpv' : '显示安装命令' }}</button>
       <button v-if="mpvInstallMode && mpvInstallMode !== 'download'" @click="recheckMpv">我已安装，重新检测</button>
       <p v-if="installMessage" class="install-cmd">{{ installMessage }}</p>

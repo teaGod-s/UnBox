@@ -55,7 +55,7 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 
 | 平台    | 安装包                                             | 说明                                                                                                                    |
 |---------|----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| Windows | `.exe`（NSIS 安装程序或便携版）· **amd64 / arm64** | NSIS 安装包内嵌 mpv，安装后可直接播放 HEVC / RTMP                                                                       |
+| Windows | `.exe`（NSIS 安装程序或便携版）· **amd64 / arm64** | 安装程序内嵌 mpv，装好即可播 HEVC / RTMP；**便携版是单文件、不含 mpv**，播这类内容需另行获取（应用内可直接下载） |
 | macOS   | `.zip`（内含 `.app`，**arm64 + amd64 通用**）      | 解压拖入「应用程序」；HEVC 需 `brew install mpv`                                                                        |
 | Linux   | `.deb`（Ubuntu / Debian）或 `.AppImage`            | `.deb` 双击安装并自动依赖 mpv，AppImage 加执行权限直接运行；AppImage 播放 HEVC / MKV / RTMP 等需 `sudo apt install mpv` |
 
@@ -65,8 +65,10 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 > 该提示需应用获得代码签名证书后才会消失，不是病毒拦截。
 
 > 💡 **关于 mpv**：mpv 用于 HEVC / RTMP 以及 MKV、AVI、RMVB、TS 等本地容器，也用于
-> WebView 无法解码的视频首帧海报兜底。Windows NSIS 安装包内嵌未修改的便携版 mpv，Linux
-> `.deb` 声明发行版 `mpv` 依赖；macOS 和 Linux `.AppImage` 仍需自行安装 mpv。MP4 / M4V /
+> WebView 无法解码的视频首帧海报兜底。**Windows 便携版是单个 `.exe`，不包含 mpv**，
+> 播上面这些内容需要另行获取：应用内「mpv 插件未安装」提示里点「下载并安装 mpv」即可
+> 自动装好，或者改用 NSIS 安装程序（内嵌未修改的便携版 mpv，装好即用）。Linux `.deb`
+> 声明发行版 `mpv` 依赖；macOS 和 Linux `.AppImage` 仍需自行安装 mpv。MP4 / M4V /
 > WebM 使用内置 Web 播放和首帧抓取。mpv 项目源码见 https://mpv.io/ 。
 
 ## 🖥️ 系统要求

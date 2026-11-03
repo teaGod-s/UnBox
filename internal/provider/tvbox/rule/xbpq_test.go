@@ -267,3 +267,42 @@ func TestXBPQResolveFallsBackToPageURL(t *testing.T) {
 		t.Fatalf("Resolve = %q，期望保留原地址", stream.URL)
 	}
 }
+
+// 详情页必须带回海报；列表里的 Logo 不能替代详情 Media.Logo。
+func TestXBPQDetailPosterFromRule(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<title>甲</title>
+<img class="fed-list-pics" data-original="/upload/poster.jpg">`))
+	}))
+	defer srv.Close()
+
+	e := NewXBPQEngine(&XBPQ{
+		HomeURL: srv.URL + "/",
+		Pic:     `data-original="&&"`,
+	}, NewClient(nil))
+
+	v, err := e.Detail(context.Background(), srv.URL+"/v/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Pic != srv.URL+"/upload/poster.jpg" {
+		t.Fatalf("Pic = %q，期望规则图片并转绝对地址", v.Pic)
+	}
+}
+
+func TestXBPQDetailPosterFromOGImage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<title>甲</title>
+<meta itemprop="image" property="og:image" content="https://img.example.com/p.jpg" />`))
+	}))
+	defer srv.Close()
+
+	e := NewXBPQEngine(&XBPQ{HomeURL: srv.URL + "/"}, NewClient(nil))
+	v, err := e.Detail(context.Background(), srv.URL+"/v/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Pic != "https://img.example.com/p.jpg" {
+		t.Fatalf("Pic = %q，期望 og:image 兜底", v.Pic)
+	}
+}

@@ -75,9 +75,17 @@ func (e *XBPQEngine) Detail(ctx context.Context, id string) (Vod, error) {
 		return Vod{}, err
 	}
 	name := firstNonEmpty(h1Text(raw), Clean(Cut(raw, e.rule.Title)), titleTag(raw))
+	pic := Clean(Cut(raw, e.rule.Pic))
+	if pic == "" {
+		pic = ogImage(raw)
+	}
+	if pic != "" {
+		pic = e.absURL(pic)
+	}
 	v := Vod{
 		ID:       id,
 		Name:     name,
+		Pic:      pic,
 		TypeName: Clean(Cut(raw, firstNonEmpty(e.rule.Type, e.rule.LegacyType))),
 		Year:     Clean(Cut(raw, firstNonEmpty(e.rule.Year, e.rule.LegacyYear))),
 		Area:     Clean(Cut(raw, firstNonEmpty(e.rule.Area, e.rule.LegacyArea))),
@@ -260,6 +268,8 @@ func originOf(raw string) string {
 
 var titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 var h1Re = regexp.MustCompile(`(?is)<h1[^>]*>(.*?)</h1>`)
+var ogImageRe = regexp.MustCompile(`(?is)<meta[^>]*(?:og:image|itemprop\s*=\s*"image")[^>]*>`)
+var contentRe = regexp.MustCompile(`(?is)content\s*=\s*"([^"]*)"`)
 
 // titleTag 是详情页标题的兜底：有的规则没有给 标题 字段。
 func titleTag(s string) string {
@@ -278,6 +288,16 @@ func h1Text(s string) string {
 		return ""
 	}
 	return Clean(m[1])
+}
+
+// ogImage 是详情海报的兜底：部分规则没有 图片 字段，但页面带 og:image。
+func ogImage(s string) string {
+	for _, tag := range ogImageRe.FindAllString(s, -1) {
+		if m := contentRe.FindStringSubmatch(tag); len(m) > 1 {
+			return Clean(m[1])
+		}
+	}
+	return ""
 }
 
 var _ Engine = (*XBPQEngine)(nil)

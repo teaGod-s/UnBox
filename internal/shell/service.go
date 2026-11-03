@@ -844,6 +844,14 @@ func collectVodSites(cfgs []*config.Config) (map[string]provider.Provider, map[s
 				vods[site.Key] = spider
 				names[site.Key] = site.Name
 				lines[site.Key] = line
+			case "jar":
+				jar, err := tvbox.NewJar(site)
+				if err != nil {
+					continue
+				}
+				vods[site.Key] = jar
+				names[site.Key] = site.Name
+				lines[site.Key] = line
 			}
 		}
 	}

@@ -8,7 +8,9 @@ func TestClassify(t *testing.T) {
 		wantKind string
 		wantSup  Support
 	}{
-		{Site{Type: SiteTypeSpider, API: "csp_Ftyg"}, "jar", SupportNo},
+		{Site{Type: SiteTypeSpider, API: "csp_Ftyg"}, "jar", SupportMaybe},
+		{Site{Type: SiteTypeSpider, API: "csp_XBPQ"}, "jar", SupportYes},
+		{Site{Type: SiteTypeSpider, API: "csp_xbpq?v=1"}, "jar", SupportYes},
 		{Site{Type: SiteTypeSpider, API: "https://x.com/d.js"}, "js", SupportYes},
 		{Site{Type: SiteTypeSpider, API: "https://x.com/d.py"}, "python", SupportNo},
 		{Site{Type: SiteTypeSpider, API: "https://x.com/api"}, "http", SupportYes},

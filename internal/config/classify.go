@@ -2,6 +2,11 @@ package config
 
 import "strings"
 
+// knownJarEngines 是已实现 Go 规则引擎的 csp 类（小写比较）。
+var knownJarEngines = map[string]bool{
+	"csp_xbpq": true,
+}
+
 // Support 表示 Unbox 对某个站点的支持程度。
 type Support int
 
@@ -44,7 +49,10 @@ func Classify(s Site) (kind string, sup Support) {
 	case SiteTypeSpider:
 		switch {
 		case strings.HasPrefix(api, "csp_"):
-			return "jar", SupportNo
+			if knownJarEngines[api] {
+				return "jar", SupportYes
+			}
+			return "jar", SupportMaybe
 		case strings.HasSuffix(api, ".js"):
 			return "js", SupportYes
 		case strings.HasSuffix(api, ".py"):

@@ -12,7 +12,9 @@ UnBox 是一个跨平台（Windows / macOS / Linux）桌面媒体播放器，完
 
 JAR（`csp_`）兼容的调研与 M6 规划见
 `docs/superpowers/specs/2026-10-17-unbox-jar-compat-design.md`；结论是
-「不执行 dex，走 Go 规则引擎」。drpy2 / ES Module 的调研与 M7 规划见
+「不执行 dex，走 Go 规则引擎」。**M6.1 `csp_XBPQ` 已实现**（纯 Go 规则引擎，
+`internal/provider/tvbox/rule` + `tvbox.JarProvider`），验收见
+`docs/2026-10-17-jar-acceptance.md`；M6.2 `csp_XYQHiker` 尚未实现。drpy2 / ES Module 的调研与 M7 规划见
 `docs/superpowers/specs/2026-10-17-unbox-js-esm-drpy2-design.md`；结论是
 「drpy2 用 `ext`，ESM 用纯 Go 模块加载器」。**M7.1/M7.2 已实现**（选源 + ESM
 加载器 + 官方 MIT cheerio / crypto-js bundle），最终 review 又修复了

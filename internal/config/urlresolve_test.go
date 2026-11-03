@@ -5,6 +5,7 @@ import "testing"
 func TestResolveRelativeURLs(t *testing.T) {
 	cfg := &Config{
 		SourceURL: "https://cfg.example.com/feed/api.json",
+		Spider:    "./jar/XYQ.jar;md5;705ba6e23c4384c37a11dd904727520b",
 		Sites: []Site{
 			{Key: "dot-slash", API: "./lib/drpy2.min.js"},
 			{Key: "root-path", API: "/spider.js"},
@@ -68,6 +69,10 @@ func TestResolveRelativeURLs(t *testing.T) {
 	}
 	if got := cfg.Lives[0].URL; got != "https://cfg.example.com/feed/live/iptv.m3u" {
 		t.Errorf("直播 URL = %q", got)
+	}
+	wantSpider := "https://cfg.example.com/feed/jar/XYQ.jar;md5;705ba6e23c4384c37a11dd904727520b"
+	if cfg.Spider != wantSpider {
+		t.Errorf("Spider = %q，期望 %q", cfg.Spider, wantSpider)
 	}
 }
 

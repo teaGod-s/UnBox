@@ -590,11 +590,12 @@ func TestCollectVodSitesSpider(t *testing.T) {
 			{Key: "sp", Name: "爬虫站", Type: config.SiteTypeSpider, API: "http://x:5757"},
 			{Key: "js", Name: "JS站", Type: config.SiteTypeSpider, API: "https://example.com/spider.js"},
 			{Key: "jar", Name: "JAR站", Type: config.SiteTypeSpider, API: "csp_xxx"},
+			{Key: "xbpq", Name: "XBPQ站", Type: config.SiteTypeSpider, API: "csp_XBPQ", Ext: "https://example.com/xbpq.json"},
 		},
 	}}
 	vods, names, _ := collectVodSites(cfgs)
-	if len(vods) != 3 {
-		t.Fatalf("应有 3 个站点（cms + spider http + js），得 %d", len(vods))
+	if len(vods) != 4 {
+		t.Fatalf("应有 4 个站点（cms + spider http + js + xbpq），得 %d", len(vods))
 	}
 	if names["sp"] != "爬虫站" {
 		t.Fatalf("names = %v", names)
@@ -604,6 +605,9 @@ func TestCollectVodSitesSpider(t *testing.T) {
 	}
 	if _, ok := vods["js"].(*tvbox.Spider); !ok {
 		t.Fatalf("js 站点应使用 tvbox.Spider，实际类型 %T", vods["js"])
+	}
+	if _, ok := vods["xbpq"].(*tvbox.JarProvider); !ok {
+		t.Fatalf("xbpq 站点应使用 tvbox.JarProvider，实际类型 %T", vods["xbpq"])
 	}
 }
 

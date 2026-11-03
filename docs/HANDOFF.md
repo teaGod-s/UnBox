@@ -31,10 +31,14 @@
   - 代码提交：`c54c23cd`、`30b3cd27`、`69119f3e`、`83bf134d`、`641a0df6`、`94922abd`、`386a7774`、`1be06d6b`、`24c6315b`；真实源校准为 `6274940e`、`77c5d8f3`、`832903e0`。
   - 最终验证：`go test ./... -count=1`、`go vet ./...`、`CGO_ENABLED=1 go build ./...`、`gofmt` 全部通过。
 
-- **M6 JAR（`csp_`）调研完成，规划中**（2026-10-17）：
-  8 个真实 JAR 均为普通 DEX，可逆向但不能直接执行；`csp_XBPQ`（约 114 站）与
-  `csp_XYQHiker`（约 42 站）是规则驱动型，`ext` 为明文 JSON。定案走 Go 规则引擎，
-  不内嵌 JVM/ART、不执行 JAR。设计见
+- **M6.1 `csp_XBPQ` Go 规则引擎已完成**（2026-11-03 提交）：`csp_` 站点不再
+  整类排除；`csp_XBPQ` 的 `ext` 明文 JSON 由纯 Go 规则引擎解释，支持分类 / 列表 /
+  搜索 / 详情 / 播放，不下载、不执行 JAR，不内嵌 JVM/ART。新增 `config.ParseSpider`
+  （`;md5;` 后缀、相对路径）、`internal/provider/tvbox/rule` 子包与
+  `tvbox.JarProvider` 适配器；壳层 `collectVodSites` 接入 `jar` 类。未知 `csp_`
+  类明确标为「待定」，不再伪装可用。验收见 `docs/2026-10-17-jar-acceptance.md`：
+  真实 6080 规则可解析、Home 得到 4 个分类；真实站点列表请求被网络返回 EOF，
+  fixture 已覆盖完整 Home/Browse/Detail/Resolve 链路。设计见
   `docs/superpowers/specs/2026-10-17-unbox-jar-compat-design.md`，实施计划见
   `docs/superpowers/plans/2026-10-17-unbox-jar-compat-xbpq.md`。
 
@@ -445,9 +449,12 @@
 
 ## 后续待办
 
-- **M6 `csp_` JAR（进行中）**：主线是 Go 规则引擎，先做 `csp_XBPQ`（约 114 站）和
-  `csp_XYQHiker`（约 42 站）；不下载、不执行 JAR，只解析 `ext` 规则 JSON。
-  长尾再评估远程桥。详见 `docs/superpowers/specs/2026-10-17-unbox-jar-compat-design.md`。
+- **M6 `csp_` JAR**：M6.1 `csp_XBPQ` 已完成，走纯 Go 规则引擎，不下载、不执行
+  JAR。待做 M6.2 `csp_XYQHiker`（约 42 站）；M6.3 长尾按收益逐类扩展，M6.4
+  远程 spider 桥仅在明确需求时做。已解析的 `SearchMode`/`筛选` 尚未驱动请求，
+  真实 6080 站点 Browse 受网络 EOF 阻挡，需可达网络复测。详见
+  `docs/superpowers/specs/2026-10-17-unbox-jar-compat-design.md` 与
+  `docs/2026-10-17-jar-acceptance.md`。
   「内嵌 JVM/ART」已实测不稳（VerifyError / QuickJS JNI / X5 WebView），不作为主线。
 - **M7 drpy2 / ESM（进行中）**：选源（drpy2 用 `ext`）与 import/export 加载器已实现；
   Task 10 已注入 `console` shim 并升级掩码（正则/嵌套模板/无空格 `export default`）；

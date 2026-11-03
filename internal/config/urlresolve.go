@@ -21,6 +21,9 @@ func ResolveRelativeURLs(cfg *Config) {
 	if err != nil || base.Host == "" {
 		return
 	}
+	if cfg.Spider != "" {
+		cfg.Spider = resolveSpider(base, cfg.Spider)
+	}
 	for i := range cfg.Sites {
 		cfg.Sites[i].API = resolveRelativeURL(base, cfg.Sites[i].API)
 		cfg.Sites[i].Ext = resolveExt(base, cfg.Sites[i].Ext)
@@ -50,6 +53,16 @@ func resolveRelativeURL(base *url.URL, raw string) string {
 // isSpiderClassName 判断是否是蜘蛛类名（csp_xxx），它不是地址。
 func isSpiderClassName(s string) bool {
 	return strings.HasPrefix(strings.ToLower(s), "csp_")
+}
+
+// resolveSpider 解析 spider 的地址部分，保留 ;md5; 后缀。
+func resolveSpider(base *url.URL, raw string) string {
+	d := ParseSpider(raw)
+	if d.Path == "" {
+		return raw
+	}
+	d.Path = resolveRelativeURL(base, d.Path)
+	return d.String()
 }
 
 // resolveExt 只解析字符串型 ext；JSON 字符串与对象/数组原样保留。

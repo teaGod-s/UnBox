@@ -28,8 +28,11 @@ func TestBuildReportCounts(t *testing.T) {
 	if r.Usable != 2 {
 		t.Errorf("Usable = %d, want 2 (js + cms)", r.Usable)
 	}
-	if r.Unsupported != 2 {
-		t.Errorf("Unsupported = %d, want 2 (两个 jar)", r.Unsupported)
+	if r.Maybe != 2 {
+		t.Errorf("Maybe = %d, want 2 (两个未知 jar)", r.Maybe)
+	}
+	if r.Unsupported != 0 {
+		t.Errorf("Unsupported = %d, want 0", r.Unsupported)
 	}
 	if r.LiveGroups != 1 {
 		t.Errorf("LiveGroups = %d, want 1", r.LiveGroups)

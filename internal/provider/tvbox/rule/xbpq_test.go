@@ -106,3 +106,122 @@ func TestXBPQResolve(t *testing.T) {
 		t.Fatalf("Resolve = %#v, %v", stream, err)
 	}
 }
+
+// 真实规则有两套详情字段名：影片类型/影片年代/影片地区/影片状态 与
+// 类型/年代/地区/状态。后者不能被引擎忽略。
+func TestXBPQDetailLegacyFieldAliases(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<title>甲</title>
+<div>类型：电影</div><div>年份：2026</div><div>地区：大陆</div><div>状态：HD</div>`))
+	}))
+	defer srv.Close()
+
+	e := NewXBPQEngine(&XBPQ{
+		HomeURL:      srv.URL + "/",
+		LegacyType:   `类型：&&<`,
+		LegacyYear:   `年份：&&<`,
+		LegacyArea:   `地区：&&<`,
+		LegacyStatus: `状态：&&<`,
+	}, NewClient(nil))
+
+	v, err := e.Detail(context.Background(), srv.URL+"/v/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.TypeName != "电影" || v.Year != "2026" || v.Area != "大陆" || v.Remarks != "HD" {
+		t.Fatalf("字段别名未生效: %#v", v)
+	}
+}
+
+// 详情页的 h1 比列表用的 标题 规则更可靠：真实站点的 标题 规则会先匹配到
+// 导航里的「首页」。
+func TestXBPQDetailPrefersH1Title(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<h1 class="title"><a href="/v/1"><span>生化危机</span></a></h1>
+<nav><a>首页</a></nav>`))
+	}))
+	defer srv.Close()
+
+	e := NewXBPQEngine(&XBPQ{
+		HomeURL: srv.URL + "/",
+		Title:   `a>&&</a>`,
+	}, NewClient(nil))
+
+	v, err := e.Detail(context.Background(), srv.URL+"/v/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Name != "生化危机" {
+		t.Fatalf("详情标题 = %q，期望 h1 文本", v.Name)
+	}
+}
+
+// 真实规则常留空 播放列表/播放标题/播放链接，XBPQ 引擎此时要用默认锚点规则。
+func TestXBPQDetailPlayRuleDefaults(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<title>甲</title>
+<div class="play">播放集数<ul><li><a href="/p/1.html">第1集</a></li><li><a href="/p/2.html">第2集</a></li></ul></div>`))
+	}))
+	defer srv.Close()
+
+	e := NewXBPQEngine(&XBPQ{
+		HomeURL:   srv.URL + "/",
+		PlayArray: `播放集数&&</div>`,
+	}, NewClient(nil))
+
+	v, err := e.Detail(context.Background(), srv.URL+"/v/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "第1集$" + srv.URL + "/p/1.html#第2集$" + srv.URL + "/p/2.html"
+	if v.PlayURL != want {
+		t.Fatalf("PlayURL = %q，期望 %q", v.PlayURL, want)
+	}
+}
+
+// 播放块里常先出现「视频排序」这类 javascript:; 按钮，不能当成剧集。
+func TestXBPQDetailSkipsJavascriptLinks(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<title>甲</title>
+<div class="play">播放集数<a href="javascript:;">视频排序：正序</a><a href="/p/1.html">第1集</a></div>`))
+	}))
+	defer srv.Close()
+
+	e := NewXBPQEngine(&XBPQ{
+		HomeURL:   srv.URL + "/",
+		PlayArray: `播放集数&&</div>`,
+	}, NewClient(nil))
+
+	v, err := e.Detail(context.Background(), srv.URL+"/v/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.PlayURL != "第1集$"+srv.URL+"/p/1.html" {
+		t.Fatalf("PlayURL = %q，javascript 链接应被跳过", v.PlayURL)
+	}
+}
+
+// 线路数组规则可能过宽，多出的名称不能超过实际播放段数。
+func TestXBPQDetailCapsSourcesToPlayGroups(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<title>甲</title>
+<div class="src"><b>线路一</b></div><div class="src"><b>线路二</b></div><div class="src"><b>线路三</b></div>
+<div class="play">播放集数<a href="/p/1.html">第1集</a></div>`))
+	}))
+	defer srv.Close()
+
+	e := NewXBPQEngine(&XBPQ{
+		HomeURL:       srv.URL + "/",
+		PlayFromArray: `class="src">&&</div>`,
+		PlayFromTitle: `>&&<`,
+		PlayArray:     `播放集数&&</div>`,
+	}, NewClient(nil))
+
+	v, err := e.Detail(context.Background(), srv.URL+"/v/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.PlayFrom != "线路一" {
+		t.Fatalf("PlayFrom = %q，应截断到实际播放段数", v.PlayFrom)
+	}
+}

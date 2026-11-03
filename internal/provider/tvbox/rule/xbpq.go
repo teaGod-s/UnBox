@@ -72,17 +72,14 @@ func (e *XBPQEngine) Detail(ctx context.Context, id string) (Vod, error) {
 	if err != nil {
 		return Vod{}, err
 	}
-	name := Clean(Cut(raw, e.rule.Title))
-	if name == "" {
-		name = titleTag(raw)
-	}
+	name := firstNonEmpty(h1Text(raw), Clean(Cut(raw, e.rule.Title)), titleTag(raw))
 	v := Vod{
 		ID:       id,
 		Name:     name,
-		TypeName: Clean(Cut(raw, e.rule.Type)),
-		Year:     Clean(Cut(raw, e.rule.Year)),
-		Area:     Clean(Cut(raw, e.rule.Area)),
-		Remarks:  Clean(Cut(raw, e.rule.Remarks)),
+		TypeName: Clean(Cut(raw, firstNonEmpty(e.rule.Type, e.rule.LegacyType))),
+		Year:     Clean(Cut(raw, firstNonEmpty(e.rule.Year, e.rule.LegacyYear))),
+		Area:     Clean(Cut(raw, firstNonEmpty(e.rule.Area, e.rule.LegacyArea))),
+		Remarks:  Clean(Cut(raw, firstNonEmpty(e.rule.Remarks, e.rule.LegacyStatus))),
 		Content:  Clean(Cut(raw, e.rule.Content)),
 	}
 	var froms, plays []string
@@ -91,12 +88,15 @@ func (e *XBPQEngine) Detail(ctx context.Context, id string) (Vod, error) {
 			froms = append(froms, name)
 		}
 	}
+	playList := firstNonEmpty(e.rule.PlayList, `<a&&</a>`)
+	playTitle := firstNonEmpty(e.rule.PlayTitle, `>&&`)
+	playLink := firstNonEmpty(e.rule.PlayLink, `href="&&"`)
 	for _, seg := range CutList(raw, e.rule.PlayArray) {
 		var eps []string
-		for _, entry := range CutList(seg, e.rule.PlayList) {
-			name := Clean(Cut(entry, e.rule.PlayTitle))
-			href := Clean(Cut(entry, e.rule.PlayLink))
-			if href == "" {
+		for _, entry := range CutList(seg, playList) {
+			name := Clean(Cut(entry, playTitle))
+			href := Clean(Cut(entry, playLink))
+			if href == "" || isNonPlayableHref(href) {
 				continue
 			}
 			eps = append(eps, name+"$"+e.absURL(href))
@@ -105,9 +105,19 @@ func (e *XBPQEngine) Detail(ctx context.Context, id string) (Vod, error) {
 			plays = append(plays, strings.Join(eps, "#"))
 		}
 	}
+	// 线路数组规则可能匹配到页面其他区块；线路名不能多于实际播放段。
+	if len(froms) > len(plays) {
+		froms = froms[:len(plays)]
+	}
 	v.PlayFrom = strings.Join(froms, "$$$")
 	v.PlayURL = strings.Join(plays, "$$$")
 	return v, nil
+}
+
+// isNonPlayableHref 过滤排序按钮等 javascript:; 伪链接。
+func isNonPlayableHref(href string) bool {
+	h := strings.ToLower(strings.TrimSpace(href))
+	return strings.HasPrefix(h, "javascript:") || strings.HasPrefix(h, "#")
 }
 
 func (e *XBPQEngine) Resolve(_ context.Context, epURL string) (player.Stream, error) {
@@ -178,10 +188,21 @@ func originOf(raw string) string {
 }
 
 var titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+var h1Re = regexp.MustCompile(`(?is)<h1[^>]*>(.*?)</h1>`)
 
 // titleTag 是详情页标题的兜底：有的规则没有给 标题 字段。
 func titleTag(s string) string {
 	m := titleRe.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return ""
+	}
+	return Clean(m[1])
+}
+
+// h1Text 取详情页首个 h1 的文本；真实站点的列表 标题 规则常会先匹配到导航
+// 里的「首页」，详情页用 h1 更贴近实际片名。
+func h1Text(s string) string {
+	m := h1Re.FindStringSubmatch(s)
 	if len(m) < 2 {
 		return ""
 	}

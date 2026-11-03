@@ -126,6 +126,11 @@ Clun在线（20）：一帆影视、人人影视、全网看、农民影视、�
 8. `Resolve` 识别播放页并从 `data-play`（`SXn`+base64）解出真实 m3u8/mp4，
    页面内直接出现媒体地址时也会兜底提取。
 9. 详情页补回海报：优先用规则 `图片` 字段，缺失时读 `og:image`，相对地址转绝对。
+10. `搜索url` 为相对路径时按 `主页url` 解析（真实规则如 `/search.html?wd={wd}`）。
+
+真实源里只有 3 个 XBPQ 站点带 `搜索url`（FREEOK、NIKETV、libvio），复测时
+分别遇到 TLS handshake failure、反爬空页（517 字节）和 HTTP 404，搜索链路
+因此只有 fixture 覆盖，没有可用的真实站点样本。
 
 ## 已知限制
 

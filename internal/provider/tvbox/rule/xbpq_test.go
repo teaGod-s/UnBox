@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/unbox/unbox/internal/player"
@@ -304,5 +305,35 @@ func TestXBPQDetailPosterFromOGImage(t *testing.T) {
 	}
 	if v.Pic != "https://img.example.com/p.jpg" {
 		t.Fatalf("Pic = %q，期望 og:image 兜底", v.Pic)
+	}
+}
+
+// 真实规则的 搜索url 可能是相对路径（如 /search.html?wd={wd}），必须按
+// 主页url 解析成绝对地址。
+func TestXBPQSearchRelativeURL(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.RequestURI()
+		_, _ = w.Write([]byte(`<li class="item"><a title="甲" href="/v/1"></a></li>`))
+	}))
+	defer srv.Close()
+
+	e := NewXBPQEngine(&XBPQ{
+		HomeURL:   srv.URL + "/",
+		SearchURL: `/search.html?wd={wd}`,
+		Array:     `class="item"&&</li>`,
+		Title:     `title="&&"`,
+		Link:      `href="&&"`,
+	}, NewClient(nil))
+
+	items, err := e.Search(context.Background(), "重器")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || gotPath == "" {
+		t.Fatalf("Search items=%v request=%q", items, gotPath)
+	}
+	if !strings.Contains(gotPath, "wd=") {
+		t.Fatalf("搜索请求未带 wd: %q", gotPath)
 	}
 }

@@ -56,7 +56,7 @@ func (e *XBPQEngine) Search(ctx context.Context, q string) ([]provider.Item, err
 	if strings.TrimSpace(e.rule.SearchURL) == "" {
 		return nil, nil
 	}
-	u := strings.NewReplacer("{wd}", url.QueryEscape(q), "{pg}", "1").Replace(e.rule.SearchURL)
+	u := e.absURL(strings.NewReplacer("{wd}", url.QueryEscape(q), "{pg}", "1").Replace(e.rule.SearchURL))
 	raw, err := e.c.Get(ctx, u)
 	if err != nil {
 		return nil, err

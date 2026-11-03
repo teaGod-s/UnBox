@@ -2,9 +2,12 @@ package rule
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/unbox/unbox/internal/player"
 )
 
 func xbpqFixture(t *testing.T) (*XBPQEngine, *httptest.Server) {
@@ -223,5 +226,44 @@ func TestXBPQDetailCapsSourcesToPlayGroups(t *testing.T) {
 	}
 	if v.PlayFrom != "线路一" {
 		t.Fatalf("PlayFrom = %q，应截断到实际播放段数", v.PlayFrom)
+	}
+}
+
+// 真实站点（冷曦影视所用 fed 播放器）把真实 m3u8 以 SXn+base64 放在
+// iframe 的 data-play 属性里；Resolve 必须解出它，而不是把 HTML 播放页
+// 当视频地址交给播放器。
+func TestXBPQResolvePlayPageDataPlay(t *testing.T) {
+	const realURL = "https://hn.example.com/play/abc/index.m3u8"
+	encoded := "SXn" + base64.StdEncoding.EncodeToString([]byte(realURL))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<iframe id="fed-play-iframe" data-play="` + encoded + `" data-pars="/player.php?id=m3u8&url="></iframe>`))
+	}))
+	defer srv.Close()
+
+	e := NewXBPQEngine(&XBPQ{HomeURL: srv.URL + "/"}, NewClient(nil))
+	stream, err := e.Resolve(context.Background(), srv.URL+"/p/1.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stream.URL != realURL || stream.Kind != player.StreamHLS {
+		t.Fatalf("Resolve = %#v，期望解出真实 m3u8", stream)
+	}
+}
+
+// 播放页里没有 data-play 时保持原地址，避免破坏其他站点。
+func TestXBPQResolveFallsBackToPageURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><body>no player</body></html>`))
+	}))
+	defer srv.Close()
+
+	e := NewXBPQEngine(&XBPQ{HomeURL: srv.URL + "/"}, NewClient(nil))
+	page := srv.URL + "/p/1.html"
+	stream, err := e.Resolve(context.Background(), page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stream.URL != page {
+		t.Fatalf("Resolve = %q，期望保留原地址", stream.URL)
 	}
 }

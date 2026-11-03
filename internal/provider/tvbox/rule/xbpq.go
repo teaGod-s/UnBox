@@ -2,6 +2,8 @@ package rule
 
 import (
 	"context"
+	"encoding/base64"
+	"html"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -120,12 +122,81 @@ func isNonPlayableHref(href string) bool {
 	return strings.HasPrefix(h, "javascript:") || strings.HasPrefix(h, "#")
 }
 
-func (e *XBPQEngine) Resolve(_ context.Context, epURL string) (player.Stream, error) {
+func (e *XBPQEngine) Resolve(ctx context.Context, epURL string) (player.Stream, error) {
+	realURL := epURL
+	if !looksLikeMediaURL(epURL) {
+		if page, err := e.c.Get(ctx, epURL); err == nil {
+			if u := decodeDataPlay(page); u != "" {
+				realURL = u
+			} else if u := findMediaURL(page); u != "" {
+				realURL = u
+			}
+		}
+	}
 	return player.Stream{
-		URL:     epURL,
-		Kind:    player.KindForURL(epURL),
+		URL:     realURL,
+		Kind:    player.KindForURL(realURL),
 		Headers: map[string]string{"User-Agent": tvboxUA, "Referer": originOf(e.rule.HomeURL)},
 	}, nil
+}
+
+// looksLikeMediaURL 判断地址是否已经是媒体文件；其余按播放页处理。
+func looksLikeMediaURL(raw string) bool {
+	base := strings.ToLower(strings.TrimSpace(raw))
+	if i := strings.IndexAny(base, "?#"); i >= 0 {
+		base = base[:i]
+	}
+	for _, ext := range []string{".m3u8", ".mp4", ".m4v", ".flv", ".ts", ".m2ts", ".mkv", ".webm", ".mp3", ".m4a"} {
+		if strings.HasSuffix(base, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+var dataPlayRe = regexp.MustCompile(`(?is)data-play\s*=\s*"([^"]+)"`)
+var mediaURLRe = regexp.MustCompile(`(?is)https?://[^"'\s<>]+\.(?:m3u8|mp4|flv|m4v|ts)(?:\?[^"'\s<>]*)?`)
+
+// decodeDataPlay 解析 fed 播放器 iframe 里的 data-play：
+// 形如 "SXn" + base64("https://.../index.m3u8")。
+func decodeDataPlay(page string) string {
+	m := dataPlayRe.FindStringSubmatch(page)
+	if len(m) < 2 {
+		return ""
+	}
+	raw := strings.TrimSpace(html.UnescapeString(m[1]))
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	// base64 里 "http" 的前缀是 aHR0c；从它开始解，天然跳过 SXn 之类的混淆前缀。
+	if i := strings.Index(raw, "aHR0c"); i >= 0 {
+		raw = raw[i:]
+	}
+	if u := decodeBase64(raw); strings.HasPrefix(u, "http") {
+		return u
+	}
+	return ""
+}
+
+func decodeBase64(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	for _, enc := range []*base64.Encoding{
+		base64.StdEncoding, base64.RawStdEncoding,
+		base64.URLEncoding, base64.RawURLEncoding,
+	} {
+		if b, err := enc.DecodeString(s); err == nil {
+			return string(b)
+		}
+	}
+	return ""
+}
+
+// findMediaURL 是播放页兜底：页面里直接出现 m3u8/mp4 时直接取用。
+func findMediaURL(page string) string {
+	return mediaURLRe.FindString(page)
 }
 
 func (e *XBPQEngine) parseItems(raw, array, title, link, pic, subtitle string) []provider.Item {

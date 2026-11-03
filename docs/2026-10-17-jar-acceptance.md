@@ -85,11 +85,12 @@ item title="生化危机：爆发夜2026" id=https://www.lenxitv.cc/v/754281.htm
 media title="生化危机：爆发夜2026" year="2026" area="美国" type="恐怖片"
 sources=[红牛云 极速云 速播云 精英云] episodes=4
 episode source="红牛云" name="正片" url=https://www.lenxitv.cc/p/754281-1-1.html
-stream kind=hls url=https://www.lenxitv.cc/p/754281-1-1.html
+stream kind=hls url=https://hn.bfvvs.com/play/dBB849Yd/index.m3u8
 ```
 
-列表、详情、线路与剧集解析均真实通过；播放页本身不含明文 m3u8/mp4，M6.1 按
-XBPQ 规则返回该播放页地址，交给现有播放/嗅探链路处理。
+列表、详情、线路、剧集与真实播放地址均通过。冷曦影视使用 fed 播放器，播放页
+把真实 m3u8 以 `data-play="SXn"+base64` 的形式放在 iframe 上；M6.1 会解码该属性
+并返回真实 m3u8（实测 `HTTP 200`、`application/vnd.apple.mpegurl`）。
 
 ### 本机新增站点清单
 
@@ -121,7 +122,9 @@ Clun在线（20）：一帆影视、人人影视、全网看、农民影视、�
    `类型/年代/地区/状态`；
 5. 详情标题优先取 `<h1>`，避免列表 `标题` 规则先匹配到导航「首页」；
 6. 播放列表/标题/链接为空时使用锚点默认规则；
-7. 过滤 `javascript:;` 排序按钮，并把多余的线路名截断到实际播放段数。
+7. 过滤 `javascript:;` 排序按钮，并把多余的线路名截断到实际播放段数；
+8. `Resolve` 识别播放页并从 `data-play`（`SXn`+base64）解出真实 m3u8/mp4，
+   页面内直接出现媒体地址时也会兜底提取。
 
 ## 已知限制
 
@@ -129,5 +132,6 @@ Clun在线（20）：一帆影视、人人影视、全网看、农民影视、�
 - XBPQ「筛选」目前只解析为规则模型，尚未接入分类筛选参数展开；
 - `SearchMode` 只保留在规则模型中，M6.1 的搜索按 GET 处理；
 - 详情页依赖规则字段；缺少 `播放数组` 时返回空剧集，而不是猜测网页结构；
-- 播放页若通过 JS 动态注入视频地址，M6.1 只返回播放页 URL，需依赖后续解码/嗅探；
+- 播放页若通过更复杂的 JS 动态注入视频地址（非 `data-play`、页面也无明文媒体
+  地址），M6.1 仍只返回播放页 URL，需依赖后续解码/嗅探；
 - 站点反爬、Cookie 之外的挑战（如 JavaScript 计算、WebView 输入）不在 M6.1 范围。

@@ -300,8 +300,52 @@ func TestAcceptanceQkanDetail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Detail(%s) 失败: %v", page.Items[0].ID, err)
 	}
-	t.Logf("qkan 详情: 片名=%q 线路=%q 内容=%q", v.Name, v.PlayFrom, contentSnippet(v.Content))
+	t.Logf("qkan 详情: 片名=%q 线路=%q 内容=%q 剧集数=%d", v.Name, v.PlayFrom, contentSnippet(v.Content), countPlays(v.PlayURL))
 	if v.PlayFrom == "" {
 		t.Log("qkan 线路名为空（该站线路规则可能不匹配，属站点侧）")
 	}
+}
+
+// 河马短剧：选集完整链路（a:not(:has(img)) 伪类 + 字段首段自匹配 +
+// 选集全文提取）。
+func TestAcceptanceHemaDetail(t *testing.T) {
+	if !acceptanceEnabled() {
+		t.Skip("跳过真实站点验收（设置 UNBOX_ACCEPTANCE=1 开启）")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	eng, err := NewEngine(ctx, "csp_XYQHiker", accHema)
+	if err != nil {
+		t.Fatalf("加载规则失败: %v", err)
+	}
+	page, err := eng.Browse(ctx, "0", 1)
+	if err != nil || len(page.Items) == 0 {
+		t.Fatalf("Browse = %d 项, %v", len(page.Items), err)
+	}
+	v, err := eng.Detail(ctx, page.Items[0].ID)
+	if err != nil {
+		t.Fatalf("Detail(%s) 失败: %v", page.Items[0].ID, err)
+	}
+	t.Logf("hema 详情: 片名=%q 剧集数=%d 前几集=%v", v.Name, countPlays(v.PlayURL), epNames(v.PlayURL, 3))
+	if countPlays(v.PlayURL) == 0 {
+		t.Fatal("hema 选集为空，期望 a:not(:has(img)) 语法要能取出免费集")
+	}
+}
+
+func epNames(playURL string, n int) []string {
+	var out []string
+	for _, seg := range strings.Split(playURL, "$$$") {
+		if len(out) >= n {
+			break
+		}
+		for _, ep := range strings.Split(seg, "#") {
+			if len(out) >= n {
+				break
+			}
+			name, _, _ := strings.Cut(ep, "$")
+			out = append(out, name)
+		}
+	}
+	return out
 }

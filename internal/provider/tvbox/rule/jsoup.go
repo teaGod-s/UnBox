@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	xhtml "golang.org/x/net/html"
 )
 
 // jsoup 选择器引擎：实现 XYQHiker 规则用到的 JSoup 链式子集。
@@ -103,10 +102,19 @@ func jsoupExtractChain(base *goquery.Selection, rule string) []string {
 	steps := strings.Split(rule, "&&")
 	nodes := base
 	var values []string
-	for _, raw := range steps {
+	for i, raw := range steps {
 		step := strings.TrimSpace(raw)
 		if step == "" {
 			continue
+		}
+		// 字段链首段对单个列表项有「自匹配」语义：hema 的数组规则直接选中
+		// <a> 本身（a:not(:has(img))），字段链 a&&Text 的第一段 a 应就地
+		// 认自身，而不是去找后代 a。
+		if i == 0 && !stepIsExtract(step) && isSingle(nodes) {
+			if matched := selfMatch(nodes, step); matched != nil {
+				nodes = matched
+				continue
+			}
 		}
 		nodes, values = jsoupStep(nodes, step)
 		if values != nil {
@@ -125,6 +133,46 @@ func jsoupExtractChain(base *goquery.Selection, rule string) []string {
 		out = append(out, strings.TrimSpace(s.Text()))
 	})
 	return out
+}
+
+// isSingle 判断 selection 是否只含一个节点（列表项通常如此）。
+func isSingle(s *goquery.Selection) bool {
+	return s != nil && s.Length() == 1
+}
+
+// selfMatch 单个节点自身匹配某选择器步时返回该节点（作为字段链首段的
+// 自匹配退化），否则返回 nil。剥离 :not/:matches/:has 伪类后先看节点自身
+// 是否命中基础选择器（goquery Is），再用 matches 过滤。带 ,N 索引的步
+// （要求取多个后代中的第 N 个）不参与自匹配。
+func selfMatch(node *goquery.Selection, step string) *goquery.Selection {
+	if node == nil || node.Length() != 1 {
+		return nil
+	}
+	for _, a := range strings.Split(step, "||") {
+		a = strings.TrimSpace(a)
+		if a == "" || isExtractAlt(a) {
+			continue
+		}
+		baseSel, index := stripIndex(a)
+		if index != noJSoupIndex {
+			continue // 索引自匹配语义不清，跳过
+		}
+		sel, matches := splitFilter(baseSel)
+		if sel == "" {
+			if matches != nil && matches(node) {
+				return node
+			}
+			continue
+		}
+		if !node.Is(sel) {
+			continue
+		}
+		if matches != nil && !matches(node) {
+			continue
+		}
+		return node
+	}
+	return nil
 }
 
 // jsoupStep 执行一个选择器步或取值步，返回后续步的起点节点（或取值结果）。
@@ -235,44 +283,57 @@ func stripIndex(sel string) (string, int) {
 // findNodes 对 base 中每个节点依次执行选择器；index>=0 时取第 index 个
 // 命中（负数从末尾数），noJSoupIndex 表示取全部。:matches(regex) /
 // :not(:matches(...)) 在剥离后按文本过滤。
+//
+// 返回的 selection 必须挂载 document（goquery 的 Find/Text 等依赖它），
+// 因此用 Each 里拿到的 *Selection 组装，不能只用裸 html.Node。
 func findNodes(base *goquery.Selection, sel string, index int) *goquery.Selection {
 	baseSel, matches := splitFilter(sel)
 
-	var found []*xhtml.Node
+	var hits []*goquery.Selection
 	base.Each(func(_ int, node *goquery.Selection) {
-		nodes := node.Find(baseSel).Nodes
+		kids := node.Find(baseSel)
 		if index == noJSoupIndex {
-			found = append(found, nodes...)
+			kids.Each(func(_ int, k *goquery.Selection) { hits = append(hits, k) })
 		} else if index >= 0 {
-			if index < len(nodes) {
-				found = append(found, nodes[index])
+			if index < kids.Length() {
+				hits = append(hits, kids.Eq(index))
 			}
 		} else {
-			if n := len(nodes) + index; n >= 0 {
-				found = append(found, nodes[n])
+			if n := kids.Length() + index; n >= 0 {
+				hits = append(hits, kids.Eq(n))
 			}
 		}
 	})
-	if len(found) == 0 {
+	if len(hits) == 0 {
 		return nil
 	}
-	selBuilder := &goquery.Selection{}
-	selBuilder = selBuilder.AddNodes(found...)
 	if matches == nil {
-		return selBuilder
+		return selectionWrap(hits)
 	}
-	var filtered []*xhtml.Node
-	for _, n := range selBuilder.Nodes {
-		wrap := goquery.NewDocumentFromNode(n).Selection
-		if matches(wrap) {
-			filtered = append(filtered, n)
+	var filtered []*goquery.Selection
+	for _, s := range hits {
+		if matches(s) {
+			filtered = append(filtered, s)
 		}
 	}
 	if len(filtered) == 0 {
 		return nil
 	}
-	out := &goquery.Selection{}
-	return out.AddNodes(filtered...)
+	return selectionWrap(filtered)
+}
+
+// selectionWrap 把多个带 document 的 *Selection 合并为一个 selection。
+// 这些 selection 都源自同一 document（findNodes 的 base 链），直接取首个
+// 的文档引用即可。
+func selectionWrap(sel []*goquery.Selection) *goquery.Selection {
+	if len(sel) == 0 {
+		return nil
+	}
+	out := sel[0]
+	for _, s := range sel[1:] {
+		out = out.AddSelection(s)
+	}
+	return out
 }
 
 // closingParen 返回 open 处 '(' 对应的 ')' 下标（感知嵌套括号与正则内括号）。
@@ -304,30 +365,34 @@ func splitFilter(sel string) (string, func(*goquery.Selection) bool) {
 	sel = strings.TrimSpace(sel)
 	var filters []func(*goquery.Selection) bool
 
-	// :not(:matches(re))
+	// :not(任意组合) 最先剥壳：内容（如 :matches(re)、:has(x)、:contains(t)）
+	// 递归展开后整体取反，避免内层伪类被下层分支错误截胡。
 	for {
-		marker := ":not(:matches("
-		i := strings.Index(sel, marker)
+		i := strings.Index(sel, ":not(")
 		if i < 0 {
 			break
 		}
-		open := i + len(marker) - 1 // 内层 :matches( 的 '(' 位置
+		open := i + len(":not(") - 1
 		end := closingParen(sel, open)
 		if end < 0 {
 			break
 		}
-		pat := sel[open+1 : end]
-		// 外层 :not( 的 ')' 紧跟在内层 ')' 之后。
-		outerEnd := end + 1
-		if outerEnd >= len(sel) || sel[outerEnd] != ')' {
-			break
+		inner := strings.TrimSpace(sel[open+1 : end])
+		sel = strings.TrimSpace(sel[:i] + sel[end+1:])
+		if inner == "" {
+			continue
 		}
-		sel = strings.TrimSpace(sel[:i] + sel[outerEnd+1:])
-		if re, err := regexp.Compile(pat); err == nil {
-			filters = append(filters, func(s *goquery.Selection) bool {
-				return !re.MatchString(outerHTML(s))
-			})
+		innerSel, innerFilter := splitFilter(inner)
+		combined := func(s *goquery.Selection) bool {
+			if innerSel != "" && s.Find(innerSel).Length() > 0 {
+				return false
+			}
+			if innerFilter != nil && innerFilter(s) {
+				return false
+			}
+			return true
 		}
+		filters = append(filters, combined)
 	}
 
 	// :matches(re)

@@ -153,6 +153,37 @@ func TestJsoupHasFilter(t *testing.T) {
 	}
 }
 
+// :not(:has(...)) 组合（hema 的选集规则 a:not(:has(img))）：
+// 排除内部含 img 的 a，留下纯文字链接。
+func TestJsoupNotHasFilter(t *testing.T) {
+	const html = `<div class="wrap"><a class="ep" href="/e1">第1集</a><a class="ep" href="/e2"><img src="/lock.png">第2集</a><a class="ep" href="/e3">第3集</a></div>`
+	doc := jsoupDoc(t, html)
+	got := jsoupExtractFirst(doc, ".wrap&&a:not(:has(img))&&href")
+	want := []string{"/e1", "/e3"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("a:not(:has(img)) = %v，期望 %v", got, want)
+	}
+}
+
+// 字段链首段自匹配：hema 的数组规则直接选中 <a>，字段链 a&&Text 的第一段
+// 应认自身而不去找后代 a。
+func TestJsoupFieldChainSelfAware(t *testing.T) {
+	const html = `<div class="wrap"><a class="ep" href="/e1">第1集</a></div>`
+	doc := jsoupDoc(t, html)
+	nodes := jsoupSelectOn(doc.Selection, "a:not(:has(img))")
+	if nodes == nil || nodes.Length() != 1 {
+		t.Fatalf("数组选择 = %d 项，期望 1", nodes.Length())
+	}
+	text := jsoupExtractOn(nodes.First(), "a&&Text")
+	if text != "第1集" {
+		t.Fatalf("首段自匹配文本 = %q，期望 第1集", text)
+	}
+	href := jsoupExtractOn(nodes.First(), "a&&href")
+	if href != "/e1" {
+		t.Fatalf("首段自匹配 href = %q，期望 /e1", href)
+	}
+}
+
 // 多个 || 选择器备选：第一个选择器无命中时退到第二个。
 func TestJsoupSelectorFallback(t *testing.T) {
 	const html = `<div class="badge">角标</div><div class="ribbon">缎带</div>`

@@ -35,7 +35,7 @@ type Engine interface {
 // Supported 判断类名是否已有 Go 规则引擎。
 func Supported(class string) bool {
 	switch strings.ToLower(strings.TrimSpace(class)) {
-	case "csp_xbpq":
+	case "csp_xbpq", "csp_xyqhiker", "csp_xyqhikeral":
 		return true
 	default:
 		return false
@@ -55,6 +55,16 @@ func NewEngine(ctx context.Context, class, extURL string) (Engine, error) {
 			return nil, err
 		}
 		return NewXBPQEngine(r, NewClient(r.Headers)), nil
+	case "csp_xyqhiker", "csp_xyqhikeral":
+		raw, err := NewClient(nil).Get(ctx, extURL)
+		if err != nil {
+			return nil, fmt.Errorf("获取 XYQHiker 规则失败: %w", err)
+		}
+		r, err := ParseXYQ([]byte(raw))
+		if err != nil {
+			return nil, err
+		}
+		return NewXYQHikerEngine(r, NewClient(r.Headers)), nil
 	default:
 		return nil, fmt.Errorf("暂不支持的 JAR 爬虫类: %s", class)
 	}

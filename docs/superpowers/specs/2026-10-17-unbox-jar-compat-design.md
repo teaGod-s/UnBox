@@ -189,6 +189,9 @@ config.Site{API:csp_XBPQ, Ext:"./XBPQ/x.json"}
 
 ### M6.2 XYQHiker 规则引擎（约 1 周）
 
+> 状态：**已实现（2026-11-07）**。JSoup 链式子集 + 简单 XPath 子集 + JSONC 容错 +
+> `firstPage`/`;post` 等边界语法，验收见 `docs/2026-10-17-jar-acceptance.md` §M6.2。
+
 - 解析 XYQHiker 规则 JSON（`搜索链接`、`搜索列表数组规则`、`片单标题`、
   `搜索片单是否Jsoup写法` 等）。
 - 实现 JSoup/简单 XPath 子集的提取；复用 `client.go`。

@@ -449,12 +449,12 @@
 
 ## 后续待办
 
-- **M6 `csp_` JAR**：M6.1 `csp_XBPQ` 已完成，走纯 Go 规则引擎，不下载、不执行
-  JAR。待做 M6.2 `csp_XYQHiker`（约 42 站）；M6.3 长尾按收益逐类扩展，M6.4
-  远程 spider 桥仅在明确需求时做。已解析的 `SearchMode`/`筛选` 尚未驱动请求，
-  真实 6080 站点 Browse 受网络 EOF 阻挡，需可达网络复测。详见
-  `docs/superpowers/specs/2026-10-17-unbox-jar-compat-design.md` 与
-  `docs/2026-10-17-jar-acceptance.md`。
+- **M6 `csp_` JAR**：M6.1 `csp_XBPQ` 与 M6.2 `csp_XYQHiker` 均已完成，纯 Go 规则引擎，
+  不下载、不执行 JAR（M6.2 另支持 JSoup 链 / 简单 XPath / JSONC / `firstPage` 等，
+  三个真实站点端到端见验收文档）。M6.3 长尾（`csp_XPath`/`csp_Wogg`/`csp_Bili` 等）
+  按收益逐类扩展，M6.4 远程 spider 桥仅在明确需求时做。已解析的 `SearchMode`/`筛选`
+  尚未驱动请求；详见 `docs/superpowers/specs/2026-10-17-unbox-jar-compat-design.md`
+  与 `docs/2026-10-17-jar-acceptance.md`。
   「内嵌 JVM/ART」已实测不稳（VerifyError / QuickJS JNI / X5 WebView），不作为主线。
 - **M7 drpy2 / ESM（进行中）**：选源（drpy2 用 `ext`）与 import/export 加载器已实现；
   Task 10 已注入 `console` shim 并升级掩码（正则/嵌套模板/无空格 `export default`）；

@@ -134,10 +134,62 @@ Clun在线（20）：一帆影视、人人影视、全网看、农民影视、�
 
 ## 已知限制
 
-- `csp_XYQHiker`、其余 `csp_` 长尾未实现；
 - XBPQ「筛选」目前只解析为规则模型，尚未接入分类筛选参数展开；
 - `SearchMode` 只保留在规则模型中，M6.1 的搜索按 GET 处理；
 - 详情页依赖规则字段；缺少 `播放数组` 时返回空剧集，而不是猜测网页结构；
 - 播放页若通过更复杂的 JS 动态注入视频地址（非 `data-play`、页面也无明文媒体
-  地址），M6.1 仍只返回播放页 URL，需依赖后续解码/嗅探；
-- 站点反爬、Cookie 之外的挑战（如 JavaScript 计算、WebView 输入）不在 M6.1 范围。
+  地址），仍只返回播放页 URL，需依赖后续解码/嗅探；
+- 站点反爬、Cookie 之外的挑战（如 JavaScript 计算、WebView 输入）不在 M6 范围。
+
+---
+
+## M6.2 `csp_XYQHiker` 验收（2026-11-07）
+
+### 范围
+
+在 `internal/provider/tvbox/rule` 新增 XYQHiker 规则引擎，与 M6.1 XBPQ 平行：
+
+- 规则解析：中文键字段子集 + **JSONC 容错**（剥行首 `//` 注释，保留 URL 内的 `//`）；
+- JSoup 链式子集（`jsoup.go`）：`&&` 链式步骤、`,N`/`,-1` 索引、`:matches` /
+  `:not(:matches)` / `:has`（嵌套括号安全解析）、`||` 多备选（取值步逐节点回退）、
+  `Text`/`Html` 伪属性与 `title`/`href`/`data-src`/`data-echo` 等属性、`!前缀` 去前缀；
+- 简单 XPath 子集（`xpath.go`）：`//` 轴、`[@class='x']` / `[@id='y']` / `[N]` /
+  `[last()]` 谓词、`text()` / `@attr` 取值，供「详情是否Jsoup写法」为否/0 的规则；
+- 引擎（`xyq.go`）：Home / Browse / Search / Detail / Resolve；
+- 边界语法：分类链接 `[firstPage=`/`[firstPg=` 第 1 页跳转、搜索链接 `;post`/`;get`
+  方法后缀、JSON 搜索响应（`搜索截取模式`=0，JSON 点路径取列表）；
+- `engine.go` 注册 `csp_XYQHiker` 与 `csp_XYQHikerAL`。
+
+### Fixture 单测
+
+`jsoup_test.go` / `xpath_test.go` / `xyq_test.go` 覆盖链式步进、索引、伪类过滤、
+`||` 回退、`!` 去前缀、JSONC 解析、JSON 搜索 POST、`firstPage` 语法、方法后缀。
+
+### 真实站点端到端
+
+规则取自已发布的聚合源（`gaotianliuyun/gao`、`xyq254245/xyqonlinerule`）。
+联网验收：`UNBOX_ACCEPTANCE=1 go test ./internal/provider/tvbox/rule/ -run TestAcceptance -v`
+
+| 站点 | 类名 | 覆盖语法 | 结果 |
+|---|---|---|---|
+| 玩偶哥哥 wogg.net | `csp_XYQHikerAL` | 完整 JSoup（`:not(:matches)`、`||`、`,N`）、线路/选集链 | PASS：6 分类、70 列表项、线路名取出 |
+| 河马短剧 kuaikaw.cn | `csp_XYQHiker` | `[firstPage=` 翻页、`img&&alt` 片名 | PASS：1 分类、10 列表项 |
+| 去看吧动漫 qkan8.com | `csp_XYQHiker` | `:has()` 过滤、JSON 搜索模式 | PASS：7 分类、48 列表项 |
+
+其余采样站点因站点侧环境未通过，与引擎无关：
+
+- 影搜 / 哔嘀影视：TLS handshake / 证书链不被本机信任（curl 同失败）；
+- 兔小贝：`/subject/{id}` 规则与站点当前结构不符（HTTP 404）；
+- 低端影视：站点要求访问密码；动漫巴士/农民影视等：DNS / 超时 / 连接失败。
+
+### 已知限制
+
+- XPath 详情只在「详情是否Jsoup写法」为否/0 时走 `xpath.go`；未见到真实可连通站点
+  验证到完整详情链路，fixture 覆盖为主；
+- 选集 `:matches(...)` 过滤条件与分享链接格式不符时返回空剧集（保留线路名），
+  wangou 站当前夸克/百度盘链接即此例，未做内容猜测；
+- 详情 `图片` 未按规则取（用列表 Logo + og:image 兜底），规则字段留待后续补齐；
+- 部分站点线路数组规则过宽（如 qkan 的 `.fed-tabs-item&&ul&&li` 会把选集区
+  标题一起纳入线路名）。引擎按规则忠实执行、不做内容猜测，与 XBPQ 行为一致；
+  线路名多于播放段数时截断到实际段数，但当选集规则同样偏宽时两侧对齐、无法
+  自动区分，需规则侧修正。

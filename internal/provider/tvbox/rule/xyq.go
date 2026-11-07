@@ -40,6 +40,7 @@ type XYQ struct {
 	SearchHeaders   HeaderMap `json:"搜索请求头参数"`
 	Actor           string    `json:"演员详情"`
 	Content         string    `json:"简介详情"`
+	DetailMode      string    `json:"详情是否Jsoup写法"` // "是"/"1" = JSoup；否则标记截取/XPath
 	PlayerTabArray  string    `json:"线路列表数组规则"`
 	PlayerTabTitle  string    `json:"线路标题"`
 	PlayerListArray string    `json:"播放列表数组规则"`
@@ -221,8 +222,10 @@ func (e *XYQHikerEngine) Detail(ctx context.Context, id string) (Vod, error) {
 		ID:      id,
 		Name:    name,
 		Pic:     pic,
-		Content: e.extractDetail(doc, e.rule.Content),
+		Content: e.extractDetail(raw, e.rule.Content),
 	}
+	actor := e.extractDetail(raw, e.rule.Actor)
+	_ = actor // 演员信息保留在 Content 之外（Vod 无此字段，留待接入）
 
 	// 线路
 	var froms []string
@@ -387,12 +390,38 @@ func jsonStr(v any) string {
 	return strings.TrimSpace(s)
 }
 
-// extractDetail 详情字段提取：JSoup 链式字段规则。
-func (e *XYQHikerEngine) extractDetail(doc *goquery.Document, rule string) string {
+// extractDetail 详情字段提取：按「详情是否Jsoup写法」分流。
+//   - "是"/"1"（或空）：JSoup 链式规则；
+//   - 规则以 "/" 开头：XPath 子集；
+//   - 其余：XBPQ 式 "A&&B" 标记截取（XYQHiker 非 JSoup 详情的常见写法）。
+func (e *XYQHikerEngine) extractDetail(raw string, rule string) string {
 	if strings.TrimSpace(rule) == "" {
 		return ""
 	}
-	return jsoupExtractOn(doc.Selection, rule)
+	rule = strings.TrimSpace(rule)
+	if isJsoupNonNull(e.rule.DetailMode) {
+		return jsoupExtractOn(e.newDoc(raw).Selection, rule)
+	}
+	if strings.HasPrefix(rule, "/") {
+		vals := xpathExtractFirst(e.newDoc(raw), rule)
+		if len(vals) == 0 {
+			return ""
+		}
+		return vals[0]
+	}
+	// 标记截取
+	return Clean(Cut(raw, rule))
+}
+
+// isJsoupNonNull 判断「是否Jsoup写法」类字段是否取 JSoup 语义。
+// 真值："是"/"1"/"Y/y"；否则走标记截取/XPath。空视为 JSoup（大多数规则主路径）。
+func isJsoupNonNull(v string) bool {
+	switch strings.TrimSpace(strings.ToLower(v)) {
+	case "", "是", "1", "y":
+		return true
+	default:
+		return false
+	}
 }
 
 func (e *XYQHikerEngine) selectNodes(doc *goquery.Document, rule string) []*goquery.Selection {

@@ -270,3 +270,38 @@ func countPlays(playURL string) int {
 	}
 	return strings.Count(playURL, "#") + 1
 }
+
+// contentSnippet 截取简介前若干字符供日志展示。
+func contentSnippet(s string) string {
+	r := []rune(s)
+	if len(r) > 60 {
+		return string(r[:60]) + "…"
+	}
+	return s
+}
+
+// 去看吧动漫：XPath/标记截取详情链路（详情是否Jsoup写法=0）。
+func TestAcceptanceQkanDetail(t *testing.T) {
+	if !acceptanceEnabled() {
+		t.Skip("跳过真实站点验收（设置 UNBOX_ACCEPTANCE=1 开启）")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	eng, err := NewEngine(ctx, "csp_XYQHiker", accQkan)
+	if err != nil {
+		t.Fatalf("加载规则失败: %v", err)
+	}
+	page, err := eng.Browse(ctx, "33", 1)
+	if err != nil || len(page.Items) == 0 {
+		t.Fatalf("Browse = %d 项, %v", len(page.Items), err)
+	}
+	v, err := eng.Detail(ctx, page.Items[0].ID)
+	if err != nil {
+		t.Fatalf("Detail(%s) 失败: %v", page.Items[0].ID, err)
+	}
+	t.Logf("qkan 详情: 片名=%q 线路=%q 内容=%q", v.Name, v.PlayFrom, contentSnippet(v.Content))
+	if v.PlayFrom == "" {
+		t.Log("qkan 线路名为空（该站线路规则可能不匹配，属站点侧）")
+	}
+}

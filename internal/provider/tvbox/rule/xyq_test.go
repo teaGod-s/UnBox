@@ -200,6 +200,7 @@ func TestXYQDetail(t *testing.T) {
 	}
 }
 
+// 无选集时应保留线路名（wangou 的 :matches 过滤条件与页面分享链接格式不符）。
 // 选集规则全部不匹配时不能连线路名一起清空（wangou 的 :matches 过滤条件
 // 与页面分享链接格式不符就是这种情形）。
 func TestXYQDetailKeepsSourcesWhenNoEpisodes(t *testing.T) {
@@ -227,6 +228,33 @@ func TestXYQDetailKeepsSourcesWhenNoEpisodes(t *testing.T) {
 	}
 	if v.PlayFrom != "线路A" {
 		t.Fatalf("无选集时应保留线路名，得 %q", v.PlayFrom)
+	}
+}
+
+// 非 JSoup 详情（详情是否Jsoup写法="0"）：字段可以是 "A&&B" 标记截取
+// （qkan 的 演员详情="主演：</span>&&</li>" 即此类），也可以是 XPath。
+func TestXYQDetailMarkedExtraction(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><body><div class="fed-info">
+<p><span>简介：</span>这是第一部简介</p>
+<p><span>主演：</span><a href="/a">张甲</a></p>
+</div></body></html>`))
+	}))
+	defer srv.Close()
+
+	e := NewXYQHikerEngine(&XYQ{
+		HomeURL:    srv.URL,
+		DetailMode: "0",
+		Actor:      `主演：</span>&&</li>`,
+		Content:    `简介：</span>&&</p>`,
+	}, NewClient(nil))
+
+	v, err := e.Detail(context.Background(), srv.URL+"/d/1.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Content != "这是第一部简介" {
+		t.Fatalf("标记截取简介 = %q，期望「这是第一部简介」", v.Content)
 	}
 }
 

@@ -327,6 +327,8 @@ func (e *XYQHikerEngine) Resolve(ctx context.Context, epURL string) (player.Stre
 				realURL = u
 			} else if u := findMediaURL(page); u != "" {
 				realURL = u
+			} else if u := macPlayerURL(page); u != "" {
+				realURL = u
 			}
 		}
 	}
@@ -335,6 +337,34 @@ func (e *XYQHikerEngine) Resolve(ctx context.Context, epURL string) (player.Stre
 		Kind:    player.KindForURL(realURL),
 		Headers: map[string]string{"User-Agent": tvboxUA, "Referer": originOf(e.rule.HomeURL)},
 	}, nil
+}
+
+// macPlayerURL 解析 MacPlayer 播放页（var player_aaaa={"url":"https:\/\/...m3u8"} 等）
+// 里的真实媒体地址。MacPlayer 的 url 值带 \/ 转义，直接正则匹配不到，
+// 先解码 JS 转义再按媒体扩展名找第一处地址。
+func macPlayerURL(page string) string {
+	// 先定位播放器变量整体（playerXXXX={"…" 到其后的 "url":"…"}），
+	// 避免误配普通 JSON。
+	i := strings.Index(page, `"url":"`)
+	if i < 0 {
+		return ""
+	}
+	// 从该位置的 url 值里解码转义后再匹配媒体地址。
+	rest := page[i+len(`"url":"`) : minInt(len(page), i+len(`"url":"`)+2048)]
+	for _, esc := range []struct{ a, b string }{
+		{`\/`, "/"}, {`\"`, `"`}, {`\\`, `\`}, {`\n`, "\n"},
+	} {
+		rest = strings.ReplaceAll(rest, esc.a, esc.b)
+	}
+	return mediaURLRe.FindString(rest)
+}
+
+// minInt 返回两整数较小者（供 macPlayerURL 截断用）。
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // parseHTMLItems 解析一个 HTML 列表（分类首页与搜索共用）。

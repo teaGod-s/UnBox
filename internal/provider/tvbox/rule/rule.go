@@ -193,24 +193,80 @@ func ParseXBPQ(data []byte) (*XBPQ, error) {
 
 // sanitizeJSONEscapes 把非标准 JSON 转义（真实规则里出现过 \&）补成
 // 字面量反斜杠，避免一条规则因为一个字符整份作废。
+//
+// 实现按 JSON 字符串状态机扫描（跟踪是否在字符串内），而不是逐字节盲猜：
+//
+//   - 引号在字符串外是开/关边界；字符串内的 \"（转义引号）原样保留，
+//     绝不能当边界处理；
+//   - 字符串内 \X（X 为合法转义，含 \\ 成对）原样保留；
+//   - 字符串内 \X（X 非法，如 \&、\#）补成 \\X（反斜杠字面量+X）；
+//   - 字符串外部出现的 \ 直接报错交给 json 自己处理。
+//
+// 背景：真实规则（文才影视 wcys.json）播放数组含 "题链#\\#>>"（合法 \\）、
+// "数组二次截取": "\"list\\\":[&&]\""（字符串内 \\" 转义）。此前逐字节算法
+// 把合法 \\ 后半当独立转义补对、把字符串内 \\" 误当边界，反而制造
+// invalid escape sequence，整站规则解析失败。
 func sanitizeJSONEscapes(data []byte) []byte {
 	needsFix := false
-	for i := 0; i+1 < len(data); i++ {
-		if data[i] == '\\' && !validJSONEscape(data[i+1]) {
-			needsFix = true
-			break
+	inString := false
+	for i := 0; i < len(data); i++ {
+		if !inString {
+			if data[i] == '"' {
+				inString = true
+			}
+			continue
+		}
+		switch data[i] {
+		case '\\':
+			// 反斜杠转义：下一字符无论是否合法转义都被 \<x> 锁定为一个整体，
+			// 绝不能在下一轮把转义内容（如 \" 里的引号）当成字符串边界。
+			if i+1 >= len(data) {
+				break
+			}
+			if !validJSONEscape(data[i+1]) {
+				needsFix = true
+				i = len(data) // 强制结束扫描，进入修复
+				continue
+			}
+			i++ // 跳过被转义的下一字符
+		case '"':
+			inString = false
 		}
 	}
 	if !needsFix {
 		return data
 	}
 	out := make([]byte, 0, len(data)+16)
+	inString = false
 	for i := 0; i < len(data); i++ {
-		if data[i] == '\\' && i+1 < len(data) && !validJSONEscape(data[i+1]) {
-			out = append(out, '\\', '\\')
+		if !inString {
+			out = append(out, data[i])
+			if data[i] == '"' {
+				inString = true
+			}
 			continue
 		}
-		out = append(out, data[i])
+		if data[i] == '"' {
+			out = append(out, data[i])
+			inString = false
+			continue
+		}
+		if data[i] != '\\' || i+1 >= len(data) {
+			out = append(out, data[i])
+			continue
+		}
+		next := data[i+1]
+		if validJSONEscape(next) {
+			// 合法转义（含 \\、\"、\u 等）原样保留，并 i++ 跳过被转义的
+			// next（对 \\ 成对时同样跳过它的后半、对 \" 时跳过转义引号，
+			// 防止后半内容被下一轮重复处理或误判成字符串边界）。
+			out = append(out, data[i], next)
+			i++
+			continue
+		}
+		// 非法转义（如 \&、\#）：补成 \\X，X 作为普通字符保留。
+		out = append(out, '\\', '\\', next)
+		i++
 	}
 	return out
 }

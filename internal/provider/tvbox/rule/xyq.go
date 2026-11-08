@@ -278,11 +278,10 @@ func (e *XYQHikerEngine) Detail(ctx context.Context, id string) (Vod, error) {
 			if name == "" || href == "" || isNonPlayableHref(href) {
 				continue
 			}
-			href = e.rule.PlayPrefix + href + e.rule.PlaySuffix
-			href = e.absURL(href)
+			href = e.absURL(withPrefixSuffix(href, e.rule.PlayPrefix, e.rule.PlaySuffix))
 			eps = append(eps, name+"$"+href)
 		}
-		if strings.EqualFold(e.rule.Reverse, "是") {
+		if xyqReverseEnabled(e.rule.Reverse) {
 			reverseStrings(eps)
 		}
 		if len(eps) > 0 {
@@ -341,10 +340,10 @@ func (e *XYQHikerEngine) parseHTMLItems(doc *goquery.Document, kind, array, titl
 		logo := e.extractOn(node, pic)
 		sub := e.extractOn(node, subtitle)
 		if logo != "" {
-			logo = e.absURL(prefix + logo + suffix)
+			logo = e.absURL(withPrefixSuffix(logo, prefix, suffix))
 		}
 		out = append(out, provider.Item{
-			ID:    e.absURL(prefix + href + suffix),
+			ID:    e.absURL(withPrefixSuffix(href, prefix, suffix)),
 			Title: name,
 			Logo:  logo,
 			Group: sub,
@@ -384,9 +383,9 @@ func (e *XYQHikerEngine) parseJSONItems(raw string) ([]provider.Item, error) {
 			continue
 		}
 		item := provider.Item{
-			ID:    e.absURL(e.rule.SearchPrefix + href + e.rule.SearchSuffix),
+			ID:    e.absURL(withPrefixSuffix(href, e.rule.SearchPrefix, e.rule.SearchSuffix)),
 			Title: title,
-			Logo:  e.absURL(e.rule.SearchPrefix + jsonStr(obj[e.rule.SearchPic]) + e.rule.SearchSuffix),
+			Logo:  e.absURL(withPrefixSuffix(jsonStr(obj[e.rule.SearchPic]), e.rule.SearchPrefix, e.rule.SearchSuffix)),
 			Group: jsonStr(obj[e.rule.SearchSubtitle]),
 		}
 		if strings.TrimSpace(item.ID) == "" {
@@ -578,6 +577,33 @@ func reverseStrings(s []string) {
 	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
 		s[i], s[j] = s[j], s[i]
 	}
+}
+
+// xyqReverseEnabled 判断「是否反转选集序列」是否为真值。
+// 真实规则取值是 0/1/否/是 的混合（动漫巴士/七新影视/农民影视写 "1"），
+// 不能只认「是」——它代表页面按最新在前降序，需要翻转为升序展示。
+func xyqReverseEnabled(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "是", "y", "true":
+		return true
+	default:
+		return false
+	}
+}
+
+// withPrefixSuffix 给相对地址补上前缀/后缀，绝对地址原样返回。
+// 站点页里图片/链接常是相对路径（如 /d/1.html）需要前缀补全；但若是绝对
+// URL（CDN 直链），一律加前缀会拼出 "https://站https://cdn/..." 畸形地址。
+func withPrefixSuffix(raw, prefix, suffix string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return raw
+	}
+	lower := strings.ToLower(trimmed)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		return trimmed
+	}
+	return prefix + trimmed + suffix
 }
 
 var _ Engine = (*XYQHikerEngine)(nil)

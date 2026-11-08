@@ -188,6 +188,18 @@ config.Site{API:csp_AList, Ext:"./json/alist.json"}
 - Quark/UC 优先，再 Ali/115；需要 token 设置页、安全存储、直链刷新、代理。
 - 或继续用 AList 兜底，不单独实现。
 
+> **2026-11-08 实测（`csp_Duopan`/八仙 源码）：** 从
+> `https://xn--cnq85d.52011.top/a?id=1` 抓到的「Duopan.jar」实为 **APK**
+> （签名 `tv.nxog.top_ysc`），`classes.dex` 内为 CatVod spider：
+> `com/github/catvod/spider/{Wogg,Bili,Push,Init}`，用 okhttp3 + gson。
+> 其核心是**多网盘分享解析 SDK**：Quark/UC 走 `drive-pc.quark.cn`/
+> `pc-api.uc.cn/1/clouddrive/file/sort`（需 cookie + shareid），Ali 走
+> `open.aliyundrive.com/oauth`（需 refresh token），百度走
+> `pan.baidu.com/api/gettemplatevariable`，123 盘走 `file/list`，另含
+> `javax.crypto AES`（分享口令解密）。结论：**转 Go 成本 ≈ M8.4 云盘解析
+> 本身（每个 1–2 周），且只覆盖 2–3 个站点，方向与 M8 非目标重复**。
+> 维持「暂不支持 `csp_Duopan`」，预算留给长尾规则同构类。
+
 ### M8.5 可选搜索聚合（按需）
 
 - PanSearch/UpYun/Zhaozy/YiSo/PanSou/QuarkPanso。
@@ -220,6 +232,8 @@ config.Site{API:csp_AList, Ext:"./json/alist.json"}
 - `pg.jar`：SHA-256 `0e622ce7…`；REA 归档证据 `ev_63cf65ae…`。
 - 类结构：`Wogg extends Push`、`Wobg extends Wogg`、`QuarkShare extends Quark` 等
   （jadx 1.4.7 反编译）。
+- `csp_Duopan`（八仙）实测：APK，`classes.dex` 内 Wogg 调 Quark/Ali/百度/123 盘
+  分享 API（okhttp3+gson+AES），见 §M8.4 结论。
 - ext 样本：`gao_alist.json`、`gao_webdav.json`、`candy_alist.json`、
   `token.json`、`*share.txt`（格式见 §2.2/§2.3）。
 - UnBox 播放侧：`internal/playback` 已注入 `Stream.Headers`，支持 Range/HLS。

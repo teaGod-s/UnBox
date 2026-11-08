@@ -77,6 +77,8 @@ func TestControllerRouting(t *testing.T) {
 		{"flv no-mse", false, player.Stream{URL: "https://x/live.flv", Kind: player.StreamFLV}, BackendMPV},
 		{"ts no-mse", false, player.Stream{URL: "https://x/live.ts", Kind: player.StreamTS}, BackendMPV},
 		{"mp4 no-mse", false, player.Stream{URL: "https://x/a.mp4", Kind: player.StreamMP4}, BackendWeb},
+		{"audio web-mse", true, player.Stream{URL: "https://cdn/x.mflac", Kind: player.StreamAudio}, BackendMPV},
+		{"audio no-mse", false, player.Stream{URL: "https://cdn/x.flac", Kind: player.StreamAudio}, BackendMPV},
 	}
 	for _, tc := range cases {
 		c.SetWebMSE(tc.webMSE)

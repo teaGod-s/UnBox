@@ -3,8 +3,12 @@ package config
 import "strings"
 
 // knownJarEngines 是已实现 Go 规则引擎的 csp 类（小写比较）。
+// 与 internal/provider/tvbox/rule/engine.go 的 Supported() 保持一致：
+// 新增规则引擎类时两边都要登记，否则支持程度会误标成「待定」。
 var knownJarEngines = map[string]bool{
-	"csp_xbpq": true,
+	"csp_xbpq":       true,
+	"csp_xyqhiker":   true,
+	"csp_xyqhikeral": true,
 }
 
 // Support 表示 Unbox 对某个站点的支持程度。

@@ -34,3 +34,25 @@ func TestClassify(t *testing.T) {
 		}
 	}
 }
+
+// knownJarEngines 必须与 rule.Supported() 的实现类集合保持一致：
+// rule.Supported() 新增引擎类（如 M6.2 的 csp_xyqhiker）时这里要同步登记，
+// 否则支持程度会误标成「待定」。
+func TestKnownJarEnginesMatchRuleSupported(t *testing.T) {
+	// case 里的 api 会被 ToLower，测试用全小写。
+	implemented := []string{
+		"csp_xbpq",
+		"csp_xyqhiker",
+		"csp_xyqhikeral",
+	}
+	for _, class := range implemented {
+		if !knownJarEngines[class] {
+			t.Errorf("knownJarEngines 缺已实现类 %q（rule.Supported 已支持）", class)
+		}
+		site := Site{Type: SiteTypeSpider, API: class}
+		_, sup := Classify(site)
+		if sup != SupportYes {
+			t.Errorf("Classify(%q) support=%v, want 可用", class, sup)
+		}
+	}
+}

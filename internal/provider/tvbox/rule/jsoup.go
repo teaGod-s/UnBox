@@ -34,7 +34,8 @@ const noJSoupIndex = int(-1 << 30)
 var jsoupKnownAttrs = map[string]bool{
 	"title": true, "href": true, "src": true, "data-src": true,
 	"data-original": true, "data-screenshot": true, "data-lazy": true,
-	"data-echo": true, "alt": true, "value": true, "content": true,
+	"data-echo": true, "data-bg": true, "data-thumb": true, "data-url": true,
+	"alt": true, "value": true, "content": true,
 	"id": true, "name": true,
 }
 
@@ -288,6 +289,7 @@ func stripIndex(sel string) (string, int) {
 // 因此用 Each 里拿到的 *Selection 组装，不能只用裸 html.Node。
 func findNodes(base *goquery.Selection, sel string, index int) *goquery.Selection {
 	baseSel, matches := splitFilter(sel)
+	baseSel = normalizeAttrSelector(baseSel)
 
 	var hits []*goquery.Selection
 	base.Each(func(_ int, node *goquery.Selection) {
@@ -334,6 +336,62 @@ func selectionWrap(sel []*goquery.Selection) *goquery.Selection {
 		out = out.AddSelection(s)
 	}
 	return out
+}
+
+// normalizeAttrSelector 给属性选择器里未加引号的值补引号。
+//
+// goquery（cascadia）能解析 `a[href^="#playlist"]`，但对 `a[href^=#playlist]`
+// （值以 # 开头且未加引号）解析失败返回空集——`#` 会被当作非法字符。
+// 真实 JSoup 规则（如看影网线路列表 array "body&&a[href^=#playlist]"）
+// 常写不带引号的形态，须在交给 goquery 前规范化：`[attr^=value]` →
+// `[attr^="value"]`，但已带引号（含引号内的合/引号）的保持原样。
+func normalizeAttrSelector(sel string) string {
+	var out []byte
+	for i := 0; i < len(sel); {
+		j := strings.IndexByte(sel[i:], '[')
+		if j < 0 {
+			out = append(out, sel[i:]...)
+			break
+		}
+		out = append(out, sel[i:i+j+1]...)
+		i += j + 1
+		// 找一个属性选择器的右括号（不越出本组）。
+		end := strings.IndexByte(sel[i:], ']')
+		if end < 0 {
+			out = append(out, sel[i:]...)
+			break
+		}
+		inner := sel[i : i+end]
+		out = append(out, normalizeAttrInner(inner)...)
+		out = append(out, ']')
+		i += end + 1
+	}
+	return string(out)
+}
+
+// normalizeAttrInner 规范化单个 [..] 内部：给未引号属性值补引号。
+func normalizeAttrInner(inner string) string {
+	// 找操作符（^= $= *= ~= |= =）。值部分可能为：(1) 带引号已合法；
+	// (2) 裸标识符/URL 片段含 # $ . / 等，需补引号。
+	for _, op := range []string{"^=", "$=", "*=", "~=", "|=", "="} {
+		pos := strings.Index(inner, op)
+		if pos < 0 {
+			continue
+		}
+		name := strings.TrimSpace(inner[:pos])
+		val := strings.TrimSpace(inner[pos+len(op):])
+		if val == "" {
+			return name + op + val
+		}
+		// 已带匹配引号则原样保留。
+		if (strings.HasPrefix(val, `"`) && strings.HasSuffix(val, `"`)) ||
+			(strings.HasPrefix(val, "'") && strings.HasSuffix(val, "'")) {
+			return name + op + val
+		}
+		// 未引号：补双引号（值内不能含裸双引号，JSoup 语义下补引号安全）。
+		return name + op + `"` + val + `"`
+	}
+	return inner
 }
 
 // closingParen 返回 open 处 '(' 对应的 ')' 下标（感知嵌套括号与正则内括号）。

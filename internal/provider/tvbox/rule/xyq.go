@@ -239,11 +239,21 @@ func (e *XYQHikerEngine) Detail(ctx context.Context, id string) (Vod, error) {
 	doc := e.newDoc(raw)
 	name := firstNonEmpty(h1Text(raw), titleTag(raw))
 	pic := ""
-	if img := doc.Find(".module-item-pic img").First(); img.Length() > 0 {
-		if src, ok := img.Attr("data-src"); ok {
-			pic = src
-		} else if src, ok = img.Attr("src"); ok {
-			pic = src
+	// 详情页海报优先按「分类片单图片」规则在整页提取（真实 XYQHiker 站点的
+	// 详情页复用列表图片字段，如去看吧动漫的 ".fed-list-pics&&data-original"），
+	// 而不是硬编码某个站点特有结构。
+	if strings.TrimSpace(e.rule.CatPic) != "" {
+		if vals := jsoupExtractFirst(doc, e.rule.CatPic); len(vals) > 0 && vals[0] != "" {
+			pic = vals[0]
+		}
+	}
+	if pic == "" {
+		if img := doc.Find(".module-item-pic img").First(); img.Length() > 0 {
+			if src, ok := img.Attr("data-src"); ok {
+				pic = src
+			} else if src, ok = img.Attr("src"); ok {
+				pic = src
+			}
 		}
 	}
 	if pic == "" {

@@ -20,6 +20,7 @@ const (
 	StreamTS
 	StreamRTMP
 	StreamLocal // 本地文件或本地代理地址
+	StreamAudio // 音频直链（flac/m4a/mp3 等），交给 mpv 按内容播放
 )
 
 func (k StreamKind) String() string {
@@ -36,6 +37,8 @@ func (k StreamKind) String() string {
 		return "rtmp"
 	case StreamLocal:
 		return "local"
+	case StreamAudio:
+		return "audio"
 	default:
 		return "unknown"
 	}
@@ -61,6 +64,14 @@ func KindForURL(rawURL string) StreamKind {
 		return StreamFLV
 	case strings.HasSuffix(path, ".ts"), strings.HasSuffix(path, ".m2ts"):
 		return StreamTS
+	case strings.HasSuffix(path, ".flac"), strings.HasSuffix(path, ".mflac"),
+		strings.HasSuffix(path, ".mp3"), strings.HasSuffix(path, ".m4a"),
+		strings.HasSuffix(path, ".aac"), strings.HasSuffix(path, ".ogg"),
+		strings.HasSuffix(path, ".opus"), strings.HasSuffix(path, ".wav"),
+		strings.HasSuffix(path, ".ape"), strings.HasSuffix(path, ".mgg"):
+		// 音频直链按内容交给 mpv 播放；mflac/mgg 是酷我/QQ音乐的私有
+		// 加密容器，浏览器编解码器不认，绝不能误当 HLS 走 Web。
+		return StreamAudio
 	default:
 		return StreamHLS
 	}

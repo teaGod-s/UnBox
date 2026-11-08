@@ -197,13 +197,11 @@ func (e *Engine) VodPlay(flag, id string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		var envelope struct {
-			URL string `json:"url"`
-		}
-		if err := decodeActionValue(value, &envelope); err != nil {
+		url, err := playURLFromEnvelope(value)
+		if err != nil {
 			return "", fmt.Errorf("爬虫播放返回格式错误: %w", err)
 		}
-		return envelope.URL, nil
+		return url, nil
 	}
 	rule, err := e.Rule()
 	if err != nil {
@@ -369,6 +367,43 @@ func decodeActionValue(value goja.Value, target any) error {
 		return err
 	}
 	return json.Unmarshal(b, target)
+}
+
+// playURLFromEnvelope 提取 play()/playerContent() 返回信封里的播放地址。
+//
+// 绝大多数规则返回 {url:"https://..."} 单字符串；音乐类规则（听海/库里等）
+// 返回 {url:["FLAC无损","https://...","HQ高品质","https://...",...]} 的
+// 多清晰度数组。数组形态按「标签/地址交替」约定，取第一个 http(s) 地址，
+// 不能因数组无法解码为 string 而整体报错。
+func playURLFromEnvelope(value goja.Value) (string, error) {
+	b, err := actionJSON(value)
+	if err != nil {
+		return "", err
+	}
+	var envelope struct {
+		URL json.RawMessage `json:"url"`
+	}
+	if err := json.Unmarshal(b, &envelope); err != nil {
+		return "", err
+	}
+	var s string
+	if err := json.Unmarshal(envelope.URL, &s); err == nil {
+		return s, nil
+	}
+	var arr []string
+	if err := json.Unmarshal(envelope.URL, &arr); err != nil {
+		return "", fmt.Errorf("url 字段既不是字符串也不是数组")
+	}
+	for _, item := range arr {
+		if strings.HasPrefix(item, "http://") || strings.HasPrefix(item, "https://") {
+			return item, nil
+		}
+	}
+	// 数组里没有 http 地址时退化为第一个元素（规则可能只放了单地址元素）。
+	if len(arr) > 0 {
+		return arr[0], nil
+	}
+	return "", fmt.Errorf("play 响应 url 为空")
 }
 
 func (e *Engine) fetchVods(target string, rule *Rule) ([]Vod, error) {

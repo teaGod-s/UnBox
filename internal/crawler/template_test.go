@@ -186,6 +186,41 @@ func TestDrpyPlayURLTemplate(t *testing.T) {
 	}
 }
 
+// 听海/库里等音乐规则的 playerContent 返回 {url:[清晰度,地址,...]} 数组
+// （多清晰度列表）。VodPlay 应从数组里取第一个真实媒体地址，而不是因
+// 数组无法解码为 string 而报错（否则 Resolve 把 rid 裸 ID 当播放地址）。
+func TestDrpyPlayArrayURL(t *testing.T) {
+	e := New()
+	script := `async function playerContent(flag, id, vipFlags) {
+  return JSON.stringify({parse:0, url:["FLAC无损","https://cdn.example.com/song.flac","HQ高品质","https://cdn.example.com/song.mp3"]})
+}`
+	if err := e.Load(script); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.VodPlay("音乐欣赏", "rid123")
+	if err != nil {
+		t.Fatalf("VodPlay = %v, %v", got, err)
+	}
+	if got != "https://cdn.example.com/song.flac" {
+		t.Fatalf("VodPlay = %q，期望取数组第一个媒体地址", got)
+	}
+}
+
+// playerContent 返回单个字符串 url（常见形态）不能回归。
+func TestDrpyPlayStringURL(t *testing.T) {
+	e := New()
+	script := `async function playerContent(flag, id, vipFlags) {
+  return JSON.stringify({parse:0, url:"https://cdn.example.com/a.m3u8"})
+}`
+	if err := e.Load(script); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.VodPlay("线路", "movie-1")
+	if err != nil || got != "https://cdn.example.com/a.m3u8" {
+		t.Fatalf("play=%q err=%v", got, err)
+	}
+}
+
 func TestDrpyJSDetailReceivesDetailURL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/detail" || r.URL.Query().Get("cat") != "2" || r.URL.Query().Get("id") != "42" {

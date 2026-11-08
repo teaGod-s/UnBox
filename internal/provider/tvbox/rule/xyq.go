@@ -72,6 +72,10 @@ type XYQ struct {
 	SearchPrefix    string     `json:"搜索片单链接加前缀"`
 	SearchSuffix    string     `json:"搜索片单链接加后缀"`
 	SearchHeaders   HeaderMap  `json:"搜索请求头参数"`
+	TypeDetail      string     `json:"类型详情"`
+	YearDetail      string     `json:"年代详情"`
+	AreaDetail      string     `json:"地区详情"`
+	DirectorDetail  string     `json:"导演详情"`
 	Actor           string     `json:"演员详情"`
 	Content         string     `json:"简介详情"`
 	DetailMode      string     `json:"详情是否Jsoup写法"` // "是"/"1" = JSoup；否则标记截取/XPath
@@ -263,10 +267,13 @@ func (e *XYQHikerEngine) Detail(ctx context.Context, id string) (Vod, error) {
 		pic = e.absURL(pic)
 	}
 	v := Vod{
-		ID:      id,
-		Name:    name,
-		Pic:     pic,
-		Content: e.extractDetail(raw, e.rule.Content),
+		ID:       id,
+		Name:     name,
+		Pic:      pic,
+		TypeName: e.extractDetail(raw, e.rule.TypeDetail),
+		Year:     e.extractDetail(raw, e.rule.YearDetail),
+		Area:     e.extractDetail(raw, e.rule.AreaDetail),
+		Content:  e.extractDetail(raw, e.rule.Content),
 	}
 	actor := e.extractDetail(raw, e.rule.Actor)
 	_ = actor // 演员信息保留在 Content 之外（Vod 无此字段，留待接入）

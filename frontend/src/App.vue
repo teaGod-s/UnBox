@@ -2172,7 +2172,7 @@ onBeforeUnmount(() => {
                 <div class="info-body">
                   <img v-if="vodDetail.Logo" :src="vodDetail.Logo" class="poster" referrerpolicy="no-referrer" @error="imgError" />
                   <h2>{{ vodDetail.Title }}</h2>
-                  <p class="meta">{{ vodDetail.Type }} · {{ vodDetail.Year }} · {{ vodDetail.Area }}</p>
+                  <p v-if="vodDetail.Type || vodDetail.Year || vodDetail.Area" class="meta">{{ [vodDetail.Type, vodDetail.Year, vodDetail.Area].filter(Boolean).join(' · ') }}</p>
                   <button class="favorite-toggle" type="button" :aria-pressed="vodFavorited" @click="toggleVodFavorite">{{ vodFavorited ? '取消收藏' : '收藏' }}</button>
                   <div class="desc" v-html="vodDetail.Description"></div>
                 </div>

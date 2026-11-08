@@ -42,13 +42,36 @@ func TestSmoke(t *testing.T) {
 		}
 		sites = append(sites, extractSupportedSites(raw, rawURL)...)
 	}
-	if len(sites) == 0 {
-		t.Fatal("无可测站点")
+	runSmoke(t, "主订阅", sites)
+}
+
+// TestSmokeBaxian 对八仙源（xn--cnq85d.52011.top）全部站点冒烟。
+// 该源 api 全为未实现类（csp_Douban/Duopan/PanWebShare/Config/Push/Market/py)，
+// 冒烟确认它们因「引擎未实现」而非其他 bug 而不可用。
+// 用法：UNBOX_ACCEPTANCE=1 go test ./... -run 'TestSmokeBaxian' -v -count=1
+func TestSmokeBaxian(t *testing.T) {
+	if os.Getenv("UNBOX_ACCEPTANCE") != "1" {
+		t.Skip("UNBOX_ACCEPTANCE=1 开启")
 	}
-	t.Logf("已支持引擎站点 %d 个，开始冒烟…", len(sites))
+	ctx := context.Background()
+	raw, err := NewClient(nil).Get(ctx, "https://xn--cnq85d.52011.top/a?id=1")
+	if err != nil {
+		t.Fatalf("八仙源拉取失败: %v", err)
+	}
+	sites := extractAllSites(raw)
+	runSmoke(t, "八仙源", sites)
+}
+
+// runSmoke 对一批站点逐一 Home/Browse/Search，统计三类结果。
+func runSmoke(t *testing.T, label string, sites []smokeSite) {
+	if len(sites) == 0 {
+		t.Fatalf("%s 无站点", label)
+	}
+	t.Logf("%s: %d 个站点，开始冒烟…", label, len(sites))
 
 	var engineBugs, siteIssues, transOK []string
 	okCount := 0
+	unsupported := 0
 	for i, s := range sites {
 		if i%15 == 0 {
 			t.Logf("进度 %d/%d…", i, len(sites))
@@ -56,6 +79,13 @@ func TestSmoke(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		eng, err := NewEngine(ctx, s.class, s.ext)
 		if err != nil {
+			msg := err.Error()
+			if strings.Contains(msg, "暂不支持的 JAR 爬虫类") {
+				unsupported++
+				t.Logf("%s(%s): 引擎未实现（预期）", s.name, s.class)
+				cancel()
+				continue
+			}
 			engineBugs = append(engineBugs, fmt.Sprintf("%s(%s): 加载规则 %v", s.name, s.class, shortErr(err)))
 			cancel()
 			continue
@@ -104,21 +134,21 @@ func TestSmoke(t *testing.T) {
 		okCount++
 		cancel()
 	}
-	t.Logf("\n=== 汇总: 通过=%d 站点侧=%d 疑似引擎bug=%d ===", okCount, len(siteIssues), len(engineBugs))
+	t.Logf("\n=== %s 汇总: 通过=%d 站点侧=%d 疑似引擎bug=%d 引擎未实现=%d ===", label, okCount, len(siteIssues), len(engineBugs), unsupported)
 	if len(transOK) > 0 {
-		t.Logf("\n=== 可用的(XBPQ/XYQH → Home成功) ===")
+		t.Logf("\n=== 可用 ===")
 		for _, x := range transOK {
 			t.Logf("  %s", x)
 		}
 	}
 	if len(engineBugs) > 0 {
-		t.Logf("\n=== 疑似引擎 bug（规则加载/解析/执行层报错） ===")
+		t.Logf("\n=== 疑似引擎 bug ===")
 		for _, b := range engineBugs {
 			t.Logf("  %s", b)
 		}
 	}
 	if len(siteIssues) > 0 {
-		t.Logf("\n=== 站点侧问题（网络/无响应，非bug）前15 ===")
+		t.Logf("\n=== 站点侧问题（非bug）前15 ===")
 		for i, b := range siteIssues {
 			if i >= 15 {
 				break
@@ -141,6 +171,39 @@ func looksNetwork(err error) bool {
 		strings.Contains(s, "tls") || strings.Contains(s, "无法解析") ||
 		strings.Contains(s, "404") || strings.Contains(s, "403") ||
 		strings.Contains(s, "请求") || strings.Contains(s, "deadline")
+}
+
+// extractAllSites 收集一个源里所有 api 站点（不限已支持类），
+// 供「任意源全量冒烟」使用（如八仙源全部 12 站）。
+// 八仙源是混杂注释/尾逗号的 JSONC，整份 Unmarshal 会失败，这里用正则
+// 逐对象提取（站点对象可能含一层嵌套 ext，正则容忍一层 {}），
+// 保证不因解析失败漏站。
+func extractAllSites(raw string) []smokeSite {
+	objRe := regexp.MustCompile(`(?s)\{(?:[^{}]|\{[^{}]*\})*"api"(?:[^{}]|\{[^{}]*\})*\}`)
+	seen := map[string]bool{}
+	var out []smokeSite
+	for _, m := range objRe.FindAllString(raw, -1) {
+		api := reField(m, `"api"\s*:\s*"([^"]*)"`)
+		name := reField(m, `"name"\s*:\s*"([^"]*)"`)
+		key := reField(m, `"key"\s*:\s*"([^"]*)"`)
+		if api == "" || seen[key+api] {
+			continue
+		}
+		seen[key+api] = true
+		searchable := reField(m, `"searchable"\s*:\s*(\d+)`) == "1" || reField(m, `"searchable"\s*:\s*(true)`) == "true"
+		out = append(out, smokeSite{name: name, class: api, ext: "", searchable: searchable})
+	}
+	return out
+}
+
+// reField 从站点对象文本里提取某个字段值。
+func reField(m string, pattern string) string {
+	re := regexp.MustCompile(pattern)
+	sm := re.FindStringSubmatch(m)
+	if len(sm) < 2 {
+		return ""
+	}
+	return sm[1]
 }
 
 // extractSupportedSites 从子源 JSON 里收集 XBPQ / XYQHiker 站点。

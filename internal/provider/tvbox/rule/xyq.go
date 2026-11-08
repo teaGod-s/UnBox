@@ -13,48 +13,82 @@ import (
 	"github.com/unbox/unbox/internal/provider"
 )
 
+// FlexString 兼容 string 与 JSON 值两种形态：JSON 的值直接取字符串，
+// 对象/数组则序列化成紧凑 JSON 字符串（如 POST请求数据 可写成
+// {"sk":"{wd}","offset":0}，反序列化后仍是 JSON 字符串，供 Search 拼请求体）。
+type FlexString string
+
+// UnmarshalJSON 实现 string / object / array 三态兼容。
+func (f *FlexString) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		*f = ""
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*f = FlexString(s)
+		return nil
+	}
+	var raw json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	// 对象/数组：重序列化成紧凑 JSON（map 遍历无序，但对请求体语义无影响）。
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	*f = FlexString(b)
+	return nil
+}
+
 // XYQ 是 XYQHiker 规则文件的字段子集。字段名保持规则文件的中文键。
 // 所有字段可选；缺失时对应能力返回空结果而非报错。
 type XYQ struct {
-	HomeURL         string    `json:"首页推荐链接"`
-	CategoryNames   string    `json:"分类名称"`
-	CategoryIDs     string    `json:"分类名称替换词"`
-	CategoryURL     string    `json:"分类链接"`
-	CategoryArray   string    `json:"分类列表数组规则"`
-	CatTitle        string    `json:"分类片单标题"`
-	CatLink         string    `json:"分类片单链接"`
-	CatPic          string    `json:"分类片单图片"`
-	CatSubtitle     string    `json:"分类片单副标题"`
-	LinkPrefix      string    `json:"分类片单链接加前缀"`
-	LinkSuffix      string    `json:"分类片单链接加后缀"`
-	SearchURL       string    `json:"搜索链接"`
-	PostBody        string    `json:"POST请求数据"`
-	SearchModeJSON  string    `json:"搜索截取模式"` // "0" = JSON 响应
-	SearchArray     string    `json:"搜索列表数组规则"`
-	SearchTitle     string    `json:"搜索片单标题"`
-	SearchLink      string    `json:"搜索片单链接"`
-	SearchPic       string    `json:"搜索片单图片"`
-	SearchSubtitle  string    `json:"搜索片单副标题"`
-	SearchPrefix    string    `json:"搜索片单链接加前缀"`
-	SearchSuffix    string    `json:"搜索片单链接加后缀"`
-	SearchHeaders   HeaderMap `json:"搜索请求头参数"`
-	Actor           string    `json:"演员详情"`
-	Content         string    `json:"简介详情"`
-	DetailMode      string    `json:"详情是否Jsoup写法"` // "是"/"1" = JSoup；否则标记截取/XPath
-	PlayerTabArray  string    `json:"线路列表数组规则"`
-	PlayerTabTitle  string    `json:"线路标题"`
-	PlayerListArray string    `json:"播放列表数组规则"`
-	PlayArray       string    `json:"选集列表数组规则"`
-	PlayTitle       string    `json:"选集标题"`
-	PlayLink        string    `json:"选集链接"`
-	PlayPrefix      string    `json:"选集链接加前缀"`
-	PlaySuffix      string    `json:"选集链接加后缀"`
-	Reverse         string    `json:"是否反转选集序列"`
-	DirectPlay      string    `json:"链接是否直接播放"`
-	SniffEnabled    string    `json:"是否开启手动嗅探"`
-	SniffKeys       string    `json:"手动嗅探视频链接关键词"`
-	SniffFilters    string    `json:"手动嗅探视频链接过滤词"`
-	Headers         HeaderMap `json:"请求头参数"`
+	HomeURL         string     `json:"首页推荐链接"`
+	CategoryNames   string     `json:"分类名称"`
+	CategoryIDs     string     `json:"分类名称替换词"`
+	CategoryURL     string     `json:"分类链接"`
+	CategoryArray   string     `json:"分类列表数组规则"`
+	CatTitle        string     `json:"分类片单标题"`
+	CatLink         string     `json:"分类片单链接"`
+	CatPic          string     `json:"分类片单图片"`
+	CatSubtitle     string     `json:"分类片单副标题"`
+	LinkPrefix      string     `json:"分类片单链接加前缀"`
+	LinkSuffix      string     `json:"分类片单链接加后缀"`
+	SearchURL       string     `json:"搜索链接"`
+	PostBody        FlexString `json:"POST请求数据"`
+	SearchModeJSON  string     `json:"搜索截取模式"` // "0" = JSON 响应
+	SearchArray     string     `json:"搜索列表数组规则"`
+	SearchTitle     string     `json:"搜索片单标题"`
+	SearchLink      string     `json:"搜索片单链接"`
+	SearchPic       string     `json:"搜索片单图片"`
+	SearchSubtitle  string     `json:"搜索片单副标题"`
+	SearchPrefix    string     `json:"搜索片单链接加前缀"`
+	SearchSuffix    string     `json:"搜索片单链接加后缀"`
+	SearchHeaders   HeaderMap  `json:"搜索请求头参数"`
+	Actor           string     `json:"演员详情"`
+	Content         string     `json:"简介详情"`
+	DetailMode      string     `json:"详情是否Jsoup写法"` // "是"/"1" = JSoup；否则标记截取/XPath
+	PlayerTabArray  string     `json:"线路列表数组规则"`
+	PlayerTabTitle  string     `json:"线路标题"`
+	PlayerListArray string     `json:"播放列表数组规则"`
+	PlayArray       string     `json:"选集列表数组规则"`
+	PlayTitle       string     `json:"选集标题"`
+	PlayLink        string     `json:"选集链接"`
+	PlayPrefix      string     `json:"选集链接加前缀"`
+	PlaySuffix      string     `json:"选集链接加后缀"`
+	Reverse         string     `json:"是否反转选集序列"`
+	DirectPlay      string     `json:"链接是否直接播放"`
+	SniffEnabled    string     `json:"是否开启手动嗅探"`
+	SniffKeys       string     `json:"手动嗅探视频链接关键词"`
+	SniffFilters    string     `json:"手动嗅探视频链接过滤词"`
+	Headers         HeaderMap  `json:"请求头参数"`
 }
 
 // ParseXYQ 解析规则 JSON；规则是 JSONC（可能含 // 注释），先剥离注释。
@@ -157,7 +191,7 @@ func (e *XYQHikerEngine) Search(ctx context.Context, q string) ([]provider.Item,
 	}
 	// 搜索链接可能以 ";post"/";get" 结尾声明方法（如 yingso 的 .../search;post）。
 	target, forcePost := splitMethodSuffix(xyqReplaceSearch(e.rule.SearchURL, q))
-	body := strings.NewReplacer("{wd}", q).Replace(e.rule.PostBody)
+	body := strings.NewReplacer("{wd}", q).Replace(string(e.rule.PostBody))
 	usePost := forcePost || strings.TrimSpace(body) != ""
 
 	var raw string

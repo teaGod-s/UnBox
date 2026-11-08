@@ -71,7 +71,7 @@ func (r *Resolver) Resolve(ctx context.Context, stream player.Stream) (player.St
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return player.Stream{}, fmt.Errorf("探测播放地址失败: HTTP %d", resp.StatusCode)
+		return player.Stream{}, fmt.Errorf("站点反爬或源站异常：探测播放地址返回 HTTP %d（可换线路或稍后重试）", resp.StatusCode)
 	}
 
 	mediaType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))

@@ -329,6 +329,8 @@ func (e *XYQHikerEngine) Resolve(ctx context.Context, epURL string) (player.Stre
 				realURL = u
 			} else if u := macPlayerURL(page); u != "" {
 				realURL = u
+			} else if from := cipherCloudFrom(page); from != "" {
+				return player.Stream{}, fmt.Errorf("该线路为加密云播源（%s），真实地址由第三方解析+混淆脚本运行时生成，UnBox 无法直接播放", from)
 			}
 		}
 	}
@@ -337,6 +339,50 @@ func (e *XYQHikerEngine) Resolve(ctx context.Context, epURL string) (player.Stre
 		Kind:    player.KindForURL(realURL),
 		Headers: map[string]string{"User-Agent": tvboxUA, "Referer": originOf(e.rule.HomeURL)},
 	}, nil
+}
+
+// cipherCloudFrom 判断播放页是否为「url 密文 + 云播源」的加密链路。
+// dev云播（vxdev）、vx云播（xgvxcd）等 player_aaaa.url 是密文，靠第三方
+// 云解析（yun.92cj.com 等）+ 混淆 JS 换取真实 m3u8。能识别出 from 时返回
+// 源名（以给出明确报错），否则返回空串。
+func cipherCloudFrom(page string) string {
+	// 只认 MacPlayer 播放器里的 url 字段，避免误配普通页面 JSON。
+	u := macPlayerField(page, "url")
+	if u == "" {
+		return ""
+	}
+	// 明文 http(s) 地址交给上层 macPlayerURL 处理，不是密文链路。
+	lower := strings.ToLower(u)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		return ""
+	}
+	return macPlayerField(page, "from")
+}
+
+// macPlayerField 提取 MacPlayer 播放器变量（player_aaaa）里的字段值。
+// 播放器 JSON 用 {\"flag\":\"play\",\"url\":\"...\",\"from\":\"vxdev\"...}
+// 结构，值可能带 \\/ 转义。定位 field\\":\\" 之后到下一个 \\" 为止。
+func macPlayerField(page, field string) string {
+	marker := `"` + field + `":"`
+	i := strings.Index(page, marker)
+	if i < 0 {
+		return ""
+	}
+	start := i + len(marker)
+	rest := page[start:minInt(len(page), start+1024)]
+	var b strings.Builder
+	for j := 0; j < len(rest); j++ {
+		if rest[j] == '"' {
+			break
+		}
+		if rest[j] == '\\' && j+1 < len(rest) {
+			b.WriteByte(rest[j+1])
+			j++
+			continue
+		}
+		b.WriteByte(rest[j])
+	}
+	return b.String()
 }
 
 // macPlayerURL 解析 MacPlayer 播放页（var player_aaaa={"url":"https:\/\/...m3u8"} 等）

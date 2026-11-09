@@ -96,6 +96,12 @@ func (e *Engine) installHelpers() {
 		h := md5.Sum([]byte(call.Argument(0).String()))
 		return e.vm.ToValue(hex.EncodeToString(h[:]))
 	})
+	// md5X 是 FongMi 引擎脚本的全局 md5 别名（金牌影视等脚本
+	// function md5Text(v){ return md5X(v) }），语义与 md5 完全一致。
+	_ = e.vm.Set("md5X", func(call goja.FunctionCall) goja.Value {
+		h := md5.Sum([]byte(call.Argument(0).String()))
+		return e.vm.ToValue(hex.EncodeToString(h[:]))
+	})
 	_ = e.vm.Set("sleep", func(call goja.FunctionCall) goja.Value {
 		time.Sleep(time.Duration(call.Argument(0).ToInteger()) * time.Millisecond)
 		return goja.Undefined()

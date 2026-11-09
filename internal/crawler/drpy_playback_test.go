@@ -222,6 +222,11 @@ func extractJSSites(raw, subURL string, out *[]jsSite) int {
 								b, _ := json.Marshal(e)
 								ext = string(b)
 							}
+							// api 是直播引擎（lf_live_min.js 等）且 ext 是订阅 txt 时，
+							// 这是直播源（走 provider/live），不是点播 js 爬虫，跳过。
+							if isJSFile(api) && ext != "" && !isJSFile(ext) {
+								continue
+							}
 							*out = append(*out, jsSite{name: name, api: api, ext: ext, base: subURL})
 							n++
 						}

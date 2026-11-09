@@ -18,12 +18,24 @@ func TestParseClassesUsesSelectedEntries(t *testing.T) {
 	}
 }
 
-func TestParseClassesRequiresFourSegments(t *testing.T) {
-	if _, err := parseClasses(`<li>x</li>`, `li;Text;href`); err == nil {
+func TestParseClassesRequiresSegments(t *testing.T) {
+	// 2 段太少了。
+	if _, err := parseClasses(`<li>x</li>`, `li;Text`); err == nil {
 		t.Fatal("expected error for missing class_parse segment")
 	}
+	// 5 段太多。
 	if _, err := parseClasses(`<li>x</li>`, `li;Text;href;/(x)/;extra`); err == nil {
 		t.Fatal("expected error for extra class_parse segment")
+	}
+}
+
+// 三段省略 id 正则：很多 drpy2 真实脚本（如 B站影视）的 id 规则已直接
+// 取出值，不必再配 /…/ 提取正则。
+func TestParseClassesThreeSegmentsWithoutRegexp(t *testing.T) {
+	html := `<ul><li><a href="/movie.html" data-id="17">电影</a></li><li><a href="/tv.html" data-id="18">电视剧</a></li></ul>`
+	cls, err := parseClasses(html, `li;a&&Text;a&&data-id`)
+	if err != nil || len(cls) != 2 || cls[0].TypeID != "17" || cls[0].TypeName != "电影" {
+		t.Fatalf("cls=%+v err=%v", cls, err)
 	}
 }
 

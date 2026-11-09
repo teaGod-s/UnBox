@@ -12,6 +12,14 @@ import (
 var jqueryPositionalRe = regexp.MustCompile(`(?i)^(.*):((?:lt|eq))\((-?\d+)\)$`)
 
 // evalRule 执行一条 pdfh/pdfa 规则，返回全部命中值。
+
+// isDataAttr 判断一段规则是否为裸 data-* 自定义属性名（data-id、data-bg…）。
+// 只匹配 data- 前缀：普通标签选择器（li/a/div）与 Text/Html 等关键字不受影响，
+// 既有的 href/src/attr(...) 分支优先于这里。
+func isDataAttr(seg string) bool {
+	return strings.HasPrefix(seg, "data-") && len(seg) > len("data-")
+}
+
 func evalRule(doc *goquery.Document, rule string) []string {
 	selection := doc.Selection
 	values := []string(nil)
@@ -37,6 +45,16 @@ func evalRule(doc *goquery.Document, rule string) []string {
 					name = strings.Trim(strings.TrimSuffix(strings.TrimPrefix(seg, "attr("), ")"), `"' `)
 					values = selection.Map(func(_ int, s *goquery.Selection) string { v, _ := s.Attr(name); return v })
 				}
+				stringMode = true
+			case isDataAttr(seg):
+				// 裸 data-* 属性名（如 data-id、data-title、data-bg）。
+				// drpy 的 pdfh/pdfa 把这类裸标识符当「取该属性值」，
+				// 只有元素上没有该属性时才退化为空（不由文本兜底）。
+				name := seg
+				values = selection.Map(func(_ int, s *goquery.Selection) string {
+					v, _ := s.Attr(name)
+					return v
+				})
 				stringMode = true
 			case seg == "Array()":
 				values = selection.Map(func(_ int, s *goquery.Selection) string { return strings.TrimSpace(s.Text()) })

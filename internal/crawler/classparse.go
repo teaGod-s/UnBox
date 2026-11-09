@@ -9,13 +9,19 @@ import (
 )
 
 // parseClasses parses drpy's class_parse declaration:
-// selector;name rule;id rule;id extraction regexp.
+// selector;name rule;id rule;[id extraction regexp].
+// 最后一段（id 正则）可省略：很多真实脚本的 id 规则已直接提取出值
+// （如 B站影视 ".fixed-nav&&.flex:lt(4);li&&Text;li&&data-id"）。
 func parseClasses(html, classParse string) ([]Class, error) {
 	parts := strings.Split(classParse, ";")
-	if len(parts) != 4 {
-		return nil, fmt.Errorf("class_parse 需要四段规则")
+	if len(parts) != 3 && len(parts) != 4 {
+		return nil, fmt.Errorf("class_parse 需要三段或四段规则")
 	}
-	selectorRule, nameRule, idRule, idPattern := parts[0], parts[1], parts[2], parts[3]
+	selectorRule, nameRule, idRule := parts[0], parts[1], parts[2]
+	idPattern := ""
+	if len(parts) == 4 {
+		idPattern = parts[3]
+	}
 	if strings.TrimSpace(selectorRule) == "" {
 		return nil, fmt.Errorf("class_parse 选择器不能为空")
 	}

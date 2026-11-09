@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -533,24 +534,80 @@ func exportDetail(value goja.Value) (*Detail, error) {
 	if err != nil {
 		return nil, fmt.Errorf("爬虫详情返回格式错误: %w", err)
 	}
-	if len(strings.TrimSpace(string(b))) > 0 && strings.TrimSpace(string(b))[0] == '[' {
+	detail, flow := lenientDetailFromJSON(b)
+	if flow != "" {
+		return nil, fmt.Errorf("爬虫详情返回格式错误: %s", flow)
+	}
+	return detail, nil
+}
+
+// lenientDetailFromJSON 把详情 JSON 解成 Detail，兼容三种信封形态：
+// 数组、{list:[…]}、字段直铺。JS 脚本（二级 js:）常把数字直接赋给字符串字段
+// （如博看听书 `VOD.vod_name = data.list[0].id`，id=5690048），直接 json.Unmarshal
+// 到 Detail 的 string 字段会报 "cannot unmarshal number"。JS 语义里 number 赋给
+// string 字段本应转成十进制字符串，这里先递归把数字值规范化再解码。
+// 返回 flow 非空表示解析失败（错误说明）。
+func lenientDetailFromJSON(b []byte) (*Detail, string) {
+	if len(bytes.TrimSpace(b)) > 0 && bytes.TrimSpace(b)[0] == '[' {
 		var details []Detail
-		if err := json.Unmarshal(b, &details); err != nil || len(details) == 0 {
-			return nil, fmt.Errorf("爬虫详情返回列表为空")
+		if err := json.Unmarshal(coerceDetailNumbers(b), &details); err != nil || len(details) == 0 {
+			if err != nil {
+				return nil, err.Error()
+			}
+			return nil, "爬虫详情返回列表为空"
 		}
-		return &details[0], nil
+		return &details[0], ""
 	}
 	var envelope struct {
 		List []Detail `json:"list"`
 	}
-	if err := json.Unmarshal(b, &envelope); err == nil && len(envelope.List) > 0 {
-		return &envelope.List[0], nil
+	if err := json.Unmarshal(coerceDetailNumbers(b), &envelope); err == nil && len(envelope.List) > 0 {
+		return &envelope.List[0], ""
 	}
 	var detail Detail
-	if err := json.Unmarshal(b, &detail); err != nil {
-		return nil, fmt.Errorf("爬虫详情返回格式错误: %w", err)
+	if err := json.Unmarshal(coerceDetailNumbers(b), &detail); err != nil {
+		return nil, err.Error()
 	}
-	return &detail, nil
+	return &detail, ""
+}
+
+// coerceDetailNumbers 把 JSON 里所有 JSON 数字转成字符串值（保持十进制，无科学计数法）。
+//
+// 详情字段在 JS 语义里基本是字符串；脚本给字符串字段赋数字（博看听书 id）时，
+// 规范化后 json.Unmarshal 到 string 字段才能成功。整数字符串不经过 float64 中转，
+// 直接用 []byte 文本，避免 9000000000000 这类大整数丢精度。
+func coerceDetailNumbers(b []byte) []byte {
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var decoded any
+	if err := dec.Decode(&decoded); err != nil {
+		return b // 不是合法 JSON，让原调用方报错
+	}
+	coerced := coerceJSONValueNumbers(decoded)
+	out, err := json.Marshal(coerced)
+	if err != nil {
+		return b
+	}
+	return out
+}
+
+func coerceJSONValueNumbers(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, child := range t {
+			t[k] = coerceJSONValueNumbers(child)
+		}
+		return t
+	case []any:
+		for i, child := range t {
+			t[i] = coerceJSONValueNumbers(child)
+		}
+		return t
+	case json.Number:
+		return t.String()
+	default:
+		return v
+	}
 }
 
 func joinURL(host, path string) string {
@@ -559,13 +616,46 @@ func joinURL(host, path string) string {
 	}
 	base, err := url.Parse(host)
 	if err != nil {
-		return path
+		// 规则 host 可能是 URL 编码混淆形式（芒果 `https://pianku.api.%6d%67%74%76.com`，
+		// `%6d%67%74%76`=mgtv）：Go 的 url.Parse 对 host 段的 %XX 报 invalid URL
+		// escape。此时把 host 段解码后再解析，否则解析失败返回相对路径，请求会被
+		// resolveRequestURL 打到脚本基址 → 站点反爬/空响应。
+		if decoded, derr := decodeHostEscapes(host); derr == nil {
+			base, err = url.Parse(decoded)
+		}
+		if err != nil {
+			return path
+		}
 	}
 	ref, err := url.Parse(path)
 	if err != nil {
 		return path
 	}
 	return base.ResolveReference(ref).String()
+}
+
+// decodeHostEscapes 把 URL 中主机段的 %XX 转义（%6d%67%74%76 → mgtv）解码。
+// 只改「//host 之后、路径之前」的字符，避免动 query/path 里的合法转义。
+func decodeHostEscapes(raw string) (string, error) {
+	// 拆 scheme://authority
+	rest := raw
+	scheme := ""
+	if i := strings.Index(raw, "://"); i >= 0 {
+		scheme = raw[:i+3]
+		rest = raw[i+3:]
+	}
+	authorityEnd := strings.IndexAny(rest, "/?#")
+	authority := rest
+	tail := ""
+	if authorityEnd >= 0 {
+		authority = rest[:authorityEnd]
+		tail = rest[authorityEnd:]
+	}
+	decoded, err := url.PathUnescape(authority)
+	if err != nil {
+		return "", err
+	}
+	return scheme + decoded + tail, nil
 }
 
 func addPage(path string, pg int) string {

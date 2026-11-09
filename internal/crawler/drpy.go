@@ -13,8 +13,24 @@ func fillURL(tmpl, tid string, pg int) string {
 	return strings.ReplaceAll(tmpl, "**", url.QueryEscape(tid))
 }
 
-// flPlaceholderRe 匹配 drpy2 筛选模板里的 {{fl.key}} / {{ fl.key }}。
+// flPlaceholderRe 匹配 drpy2 筛选模板里的 {{fl.key}} / {{ fl.key }}（纯键形态）。
 var flPlaceholderRe = regexp.MustCompile(`\{\{\s*fl\.([\p{L}\p{N}_]+)\s*\}\}`)
+
+// flTemplateRe 匹配一个完整的 {{fl.xxx ...}} 占位块（含 jinja「或默认值」形态
+// {{fl.year or "all"}} 与管道过滤器形态），供 renderFilterTemplate 逐块替换。
+var flTemplateRe = regexp.MustCompile(`\{\{\s*fl\.[\p{L}\p{N}_]+\s*(?:\|\s*[^}]*)?(?:\s+or\s+[^}]*)?\s*\}\}`)
+
+// flOrDefaultRe 抓 or 默认值块的键（组1）与值文本（组2，可能带引号）。
+var flOrDefaultRe = regexp.MustCompile(`\{\{\s*fl\.([\p{L}\p{N}_]+)\s*.*?\s+or\s+([^}]*)\s*\}\}`)
+
+// unquote strips surrounding single/double quotes from a jinja default value.
+func unquote(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && (s[0] == '"' && s[len(s)-1] == '"' || s[0] == '\'' && s[len(s)-1] == '\'') {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
 
 // applyFilterTemplate 复刻 drpy2 categoryParse 的 filter_url 展开：
 //
@@ -103,16 +119,36 @@ func filterValueString(value any) string {
 	}
 }
 
-// renderFilterTemplate 把 {{fl.key}} 替换成对应的筛选值，缺失的键渲染为空串。
+// renderFilterTemplate 把筛选模板里的 {{fl.key}} 替换成对应的筛选值。
+//
+// 支持两种 jinja 形态：
+//   - 纯键 `{{fl.year}}`：键缺失渲染空串（与原行为一致）。
+//   - 「或默认值」`{{fl.year or "all"}}`：键有值用值，键缺失用 or 后的默认值
+//     （去掉引号）。百忙无果等规则的 filter_url 写成 `year={{fl.year or "all"}}`，
+//     不展开会把整段字面量带进请求 → 芒果等站点返回空 JSON。
 func renderFilterTemplate(tmpl string, values map[string]string) string {
 	if !strings.Contains(tmpl, "{{") {
 		return tmpl
 	}
-	return flPlaceholderRe.ReplaceAllStringFunc(tmpl, func(match string) string {
-		sub := flPlaceholderRe.FindStringSubmatch(match)
-		if len(sub) < 2 {
+	return flTemplateRe.ReplaceAllStringFunc(tmpl, func(match string) string {
+		// 纯键形态优先（避免把 or 默认值当普通模板误判）。
+		if sub := flPlaceholderRe.FindStringSubmatch(match); len(sub) >= 2 {
+			if v, ok := values[sub[1]]; ok && v != "" {
+				return v
+			}
+			// 键缺失但有 or 默认值 → 用默认值。
+			if or := flOrDefaultRe.FindStringSubmatch(match); len(or) >= 3 {
+				return unquote(or[2])
+			}
 			return ""
 		}
-		return values[sub[1]]
+		// 带 or/管道的整块没被纯键正则吃下时，直接抓 or 默认值。
+		if or := flOrDefaultRe.FindStringSubmatch(match); len(or) >= 3 {
+			if v, ok := values[or[1]]; ok && v != "" {
+				return v
+			}
+			return unquote(or[2])
+		}
+		return ""
 	})
 }

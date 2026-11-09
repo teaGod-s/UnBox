@@ -1,8 +1,11 @@
 package crawler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -241,7 +244,7 @@ func extractJSONVods(raw, rule string) ([]Vod, error) {
 		return nil, fmt.Errorf("json 列表响应解析失败: 站点返回了网页而不是 JSON（开头: %s）", responseHead(raw))
 	}
 	var document any
-	if err := json.Unmarshal([]byte(raw), &document); err != nil {
+	if err := json.Unmarshal(stripJSONP([]byte(raw)), &document); err != nil {
 		return nil, fmt.Errorf("json 列表响应解析失败: %w", err)
 	}
 	value, ok := navigateJSON(document, parts[0])
@@ -287,6 +290,32 @@ func extractJSONVods(raw, rule string) ([]Vod, error) {
 		}
 	}
 	return vods, nil
+}
+
+// stripJSONP 剥离 JSONP 外壳（`callback({...})` → `{...}`），原样返回非 JSONP。
+//
+// 网易公版影像等站点的 `.jsonp` 接口返回 `_callback({...})` 包裹体：
+// 直接 json.Unmarshal 报 "invalid character '_'"，但参考 TVBox 引擎会剥掉
+// callback 名与首尾括号再按 json 规则取字段。仅当整串以 `名字(` 开头且以 `)` 结尾、
+// 中间是可解析 JSON 时才剥；纯 JSON（`{`/`[` 开头）与网页原样放行。
+func stripJSONP(raw []byte) []byte {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) < 2 || trimmed[0] == '{' || trimmed[0] == '[' {
+		return raw
+	}
+	open := bytes.IndexByte(trimmed, '(')
+	if open <= 0 || trimmed[len(trimmed)-1] != ')' {
+		return raw
+	}
+	inner := bytes.TrimSpace(trimmed[open+1 : len(trimmed)-1])
+	if len(inner) == 0 || (inner[0] != '{' && inner[0] != '[') {
+		return raw
+	}
+	// 只有内层能解析成 JSON 时才剥，避免把含糊串误改坏。
+	if json.Valid(inner) {
+		return inner
+	}
+	return raw
 }
 
 // responseHead 截取响应开头一小段，附在「路径不存在」类错误里。
@@ -384,7 +413,13 @@ func jsonScalarString(value any) string {
 	case json.Number:
 		return v.String()
 	case float64:
-		return fmt.Sprintf("%v", v)
+		// JSON 整数 id（如 3331822）经 json.Unmarshal 会解析成 float64，
+		// 不能直接 %v——大整数会输出科学计数法（3.331822e+06），详情 URL
+		// 直接失效（博看听书实际线上根因）。整数按十进制输出，真小数保留。
+		if v == math.Trunc(v) && !math.IsInf(v, 0) && math.Abs(v) <= 1<<53 {
+			return strconv.FormatInt(int64(v), 10)
+		}
+		return strconv.FormatFloat(v, 'f', -1, 64)
 	case bool:
 		return fmt.Sprintf("%t", v)
 	default:
@@ -403,7 +438,7 @@ func setVodField(vod *Vod, field, value string) {
 		vod.VodName = value
 	case "titletxt", "titlealias":
 		vod.VodName = value
-	case "cover", "pic", "image", "vod_pic":
+	case "cover", "pic", "image", "vod_pic", "cover_pic", "coverpic":
 		vod.VodPic = value
 	case "id", "url", "vod_id":
 		vod.VodID = flexID(value)
@@ -423,7 +458,7 @@ func canonicalVodField(expr string) string {
 		for _, candidate := range strings.Split(part, "||") {
 			name := strings.ToLower(strings.TrimSpace(candidate))
 			switch name {
-			case "title", "name", "vod_name", "titletxt", "titlealias", "cover", "pic", "image", "vod_pic", "id", "url", "vod_id", "cat_id", "en_id", "description", "desc", "content", "vod_content", "cat_name", "type_name", "type", "remarks", "remark", "vod_remarks":
+			case "title", "name", "vod_name", "titletxt", "titlealias", "cover", "pic", "image", "vod_pic", "cover_pic", "coverpic", "id", "url", "vod_id", "cat_id", "en_id", "description", "desc", "content", "vod_content", "cat_name", "type_name", "type", "remarks", "remark", "vod_remarks":
 				return name
 			}
 		}

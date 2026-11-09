@@ -75,7 +75,7 @@ func TestSmokeJS(t *testing.T) {
 		}
 	}
 
-	var ok, engineBug, siteSide []string
+	var ok, engineBug, siteSide, scriptEmpty []string
 	for i, job := range jsJobs {
 		if i%15 == 0 {
 			t.Logf("进度 %d/%d…", i, len(jsJobs))
@@ -92,7 +92,15 @@ func TestSmokeJS(t *testing.T) {
 		// api/ext 可能是相对路径（./dr/js/xxx.js），按来源子源展开成绝对地址。
 		loadURL = resolveSub(job.base, loadURL)
 		if err := eng.LoadFromURL(ctx, loadURL); err != nil {
-			engineBug = append(engineBug, fmt.Sprintf("%s: 加载 %v", job.name, shortErrStr(err)))
+			cls, reason := classifyJsError(err)
+			switch cls {
+			case "engine":
+				engineBug = append(engineBug, fmt.Sprintf("%s: 加载 %v", job.name, reason))
+			case "site":
+				siteSide = append(siteSide, fmt.Sprintf("%s: 加载网络 %v", job.name, reason))
+			default:
+				engineBug = append(engineBug, fmt.Sprintf("%s: 加载 %v", job.name, reason))
+			}
 			cancel()
 			continue
 		}
@@ -115,10 +123,17 @@ func TestSmokeJS(t *testing.T) {
 		}
 		items, berr := eng.VodCategory(classes[0].TypeID, 1)
 		if berr != nil || len(items) == 0 {
-			if berr != nil && looksNetErr(berr) {
-				siteSide = append(siteSide, fmt.Sprintf("%s: 列表网络 %v", job.name, shortErrStr(berr)))
+			if berr != nil {
+				cls, reason := classifyJsError(berr)
+				if cls == "site" {
+					siteSide = append(siteSide, fmt.Sprintf("%s: 列表网络 %v", job.name, reason))
+				} else if cls == "empty" {
+					scriptEmpty = append(scriptEmpty, fmt.Sprintf("%s: 列表脚本空 %v", job.name, reason))
+				} else {
+					engineBug = append(engineBug, fmt.Sprintf("%s: 列表 %v", job.name, reason))
+				}
 			} else {
-				engineBug = append(engineBug, fmt.Sprintf("%s: 列表=%d项 %v", job.name, len(items), shortErrStr(berr)))
+				scriptEmpty = append(scriptEmpty, fmt.Sprintf("%s: 列表数据空 items=0", job.name))
 			}
 			cancel()
 			continue
@@ -129,10 +144,18 @@ func TestSmokeJS(t *testing.T) {
 			playURL = detail.VodPlayURL
 		}
 		if derr != nil || detail == nil || strings.TrimSpace(playURL) == "" {
-			if derr != nil && looksNetErr(derr) {
-				siteSide = append(siteSide, fmt.Sprintf("%s: 详情网络 %v", job.name, shortErrStr(derr)))
+			if derr != nil {
+				cls, reason := classifyJsError(derr)
+				switch cls {
+				case "site":
+					siteSide = append(siteSide, fmt.Sprintf("%s: 详情网络 %v", job.name, reason))
+				case "empty":
+					scriptEmpty = append(scriptEmpty, fmt.Sprintf("%s: 详情脚本空 %v", job.name, reason))
+				default:
+					engineBug = append(engineBug, fmt.Sprintf("%s: 详情 %v", job.name, reason))
+				}
 			} else {
-				engineBug = append(engineBug, fmt.Sprintf("%s: 详情(nil=%v) %v playURL=%q", job.name, detail == nil, shortErrStr(derr), playURL))
+				scriptEmpty = append(scriptEmpty, fmt.Sprintf("%s: 详情数据空 detail=nil=%v playURL=%q", job.name, detail == nil, playURL))
 			}
 			cancel()
 			continue
@@ -144,10 +167,14 @@ func TestSmokeJS(t *testing.T) {
 		src := strings.SplitN(detail.VodPlayFrom, "$$$", 2)[0]
 		purl, perr := eng.VodPlay(src, epURL)
 		if perr != nil {
-			if looksNetErr(perr) {
-				siteSide = append(siteSide, fmt.Sprintf("%s: play网络 %v", job.name, shortErrStr(perr)))
-			} else {
-				engineBug = append(engineBug, fmt.Sprintf("%s: play %v", job.name, shortErrStr(perr)))
+			cls, reason := classifyJsError(perr)
+			switch cls {
+			case "site":
+				siteSide = append(siteSide, fmt.Sprintf("%s: play网络 %v", job.name, reason))
+			case "empty":
+				scriptEmpty = append(scriptEmpty, fmt.Sprintf("%s: play空 %v", job.name, reason))
+			default:
+				engineBug = append(engineBug, fmt.Sprintf("%s: play %v", job.name, reason))
 			}
 			cancel()
 			continue
@@ -171,6 +198,15 @@ func TestSmokeJS(t *testing.T) {
 		t.Logf("\n=== 首集可播（%d）前15 ===", len(ok))
 		for i, b := range ok {
 			if i >= 15 {
+				break
+			}
+			t.Logf("  %s", b)
+		}
+	}
+	if len(scriptEmpty) > 0 {
+		t.Logf("\n=== 脚本空/数据空（规则与站点结构不符，非引擎bug，前20） ===")
+		for i, b := range scriptEmpty {
+			if i >= 20 {
 				break
 			}
 			t.Logf("  %s", b)
@@ -293,6 +329,49 @@ func looksNetErr(err error) bool {
 		strings.Contains(s, "tls") || strings.Contains(s, "404") ||
 		strings.Contains(s, "403") || strings.Contains(s, "deadline") ||
 		strings.Contains(s, "无法解析")
+}
+
+// classifyJsError 把 js/drpy2 冒烟的错误细分为三类，避免把「站点数据空」
+// 误归成引擎 bug：
+//
+//	"site"   —— 网络层问题（timeout/HTTP状态/tls/EOF/连接/超时/无法解析），
+//	           站点侧，非引擎缺陷
+//	"empty"  —— 脚本/引擎正常执行但结果为「空」（空列表/空详情/空 playURL），
+//	           通常是规则与站点页面结构不匹配（脚本空），非引擎逻辑错
+//	"engine" —— JS 运行时异常或引擎约束未满足（ReferenceError/TypeError/
+//	           未定义/格式错误/需要段/爬虫未定义 etc），需要修引擎或脚本
+//
+// 返回分类与截断后的错误文本。
+func classifyJsError(err error) (string, string) {
+	if err == nil {
+		return "empty", ""
+	}
+	msg := err.Error()
+	lower := strings.ToLower(msg)
+
+	// 网络层关键词优先。
+	for _, kw := range []string{"timeout", "超时", "http ", "http:", "tls", "连接失败",
+		"connection", "eof", "无法解析", "deadline", "未解析成功", "403", "404", "502", "522",
+		"请求失败", "返回 http"} {
+		if strings.Contains(lower, kw) {
+			return "site", shortErrStr(err)
+		}
+	}
+	// 空数据（脚本正常但结果空）。
+	for _, kw := range []string{"返回空", "列表为空", "详情返回空", "空值", "为空", "响应不是 js"} {
+		if strings.Contains(lower, kw) {
+			return "empty", shortErrStr(err)
+		}
+	}
+	// JS 运行时异常/引擎约束。
+	for _, kw := range []string{"referenceerror", "typeerror", "未定义", "需要的规则",
+		"需要四段", "需要三段", "格式错误", "爬虫未定义", "responseformat"} {
+		if strings.Contains(lower, kw) {
+			return "engine", shortErrStr(err)
+		}
+	}
+	// 默认：调用方按引擎 bug 处理（可人工复核）。
+	return "engine", shortErrStr(err)
 }
 
 func shortErrStr(err error) string {

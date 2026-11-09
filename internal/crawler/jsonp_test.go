@@ -36,6 +36,18 @@ func TestExtractJSONVodsJSONP(t *testing.T) {
 	}
 }
 
+// 网易公版的真实响应末尾带分号：`_callback({...});` —— stripJSONP 必须容忍。
+func TestExtractJSONVodsJSONPTrailingSemi(t *testing.T) {
+	raw := `_callback({"status":"success","list":[{"id":1931,"cover_pic":"http://a.jpg","title":"黑猫","media_type":"film"}]});`
+	vods, err := extractJSONVods(raw, "json:list;title;cover_pic;media_type;id")
+	if err != nil {
+		t.Fatalf("带尾分号的 JSONP 失败: %v", err)
+	}
+	if len(vods) != 1 || vods[0].VodID != "1931" || vods[0].VodName != "黑猫" {
+		t.Fatalf("vods = %+v, want [1931 黑猫]", vods)
+	}
+}
+
 // 剥壳要处理连字符等宽松回调名，但 HTML 仍应报「网页」错误。
 func TestExtractJSONVodsJSONPNotHTML(t *testing.T) {
 	_, err := extractJSONVods(`<html><body>busy</body></html>`, "json:list;title;id")

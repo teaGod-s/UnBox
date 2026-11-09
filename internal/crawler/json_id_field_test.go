@@ -19,4 +19,13 @@ func TestPlayPartID(t *testing.T) {
 	if !isJSONIDField("id") {
 		t.Fatal("isJSONIDField(id) 应为 true")
 	}
+	// vid 是 TVBox 通用 id 字段（网易公版影像规则 `json:list;…;vid`）。
+	if !isJSONIDField("vid") {
+		t.Fatal("isJSONIDField(vid) 应为 true")
+	}
+	var vod2 Vod
+	setVodField(&vod2, "vid", "10086")
+	if vod2.VodID != "10086" {
+		t.Fatalf("setVodField(vid) = %q, want 10086", vod2.VodID)
+	}
 }

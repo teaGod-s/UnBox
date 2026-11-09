@@ -304,10 +304,15 @@ func stripJSONP(raw []byte) []byte {
 		return raw
 	}
 	open := bytes.IndexByte(trimmed, '(')
-	if open <= 0 || trimmed[len(trimmed)-1] != ')' {
+	if open <= 0 {
 		return raw
 	}
-	inner := bytes.TrimSpace(trimmed[open+1 : len(trimmed)-1])
+	// 尾部剥掉可选分号（网易公版真实响应 `_callback({...});`），保留右括号。
+	end := bytes.LastIndexByte(trimmed, ')')
+	if end <= open {
+		return raw
+	}
+	inner := bytes.TrimSpace(trimmed[open+1 : end])
 	if len(inner) == 0 || (inner[0] != '{' && inner[0] != '[') {
 		return raw
 	}
@@ -386,7 +391,7 @@ func evalJSONExpr(obj map[string]any, expr string) string {
 // 这里按字段名判断：本引擎同时支持非标准排序与别名，按名字更稳。
 func isJSONIDField(expr string) bool {
 	switch canonicalVodField(expr) {
-	case "id", "url", "vod_id", "cat_id", "en_id", "play_part_id", "playpartid":
+	case "id", "url", "vod_id", "cat_id", "en_id", "play_part_id", "playpartid", "vid":
 		return true
 	}
 	return false
@@ -442,7 +447,7 @@ func setVodField(vod *Vod, field, value string) {
 		vod.VodPic = value
 	case "id", "url", "vod_id":
 		vod.VodID = flexID(value)
-	case "cat_id", "en_id", "play_part_id", "playpartid":
+	case "cat_id", "en_id", "play_part_id", "playpartid", "vid":
 		vod.VodID = flexID(value)
 	case "description", "desc", "content", "vod_content":
 		vod.VodContent = value
@@ -458,7 +463,7 @@ func canonicalVodField(expr string) string {
 		for _, candidate := range strings.Split(part, "||") {
 			name := strings.ToLower(strings.TrimSpace(candidate))
 			switch name {
-			case "title", "name", "vod_name", "titletxt", "titlealias", "cover", "pic", "image", "vod_pic", "cover_pic", "coverpic", "id", "url", "vod_id", "cat_id", "en_id", "play_part_id", "playpartid", "description", "desc", "content", "vod_content", "cat_name", "type_name", "type", "remarks", "remark", "vod_remarks":
+			case "title", "name", "vod_name", "titletxt", "titlealias", "cover", "pic", "image", "vod_pic", "cover_pic", "coverpic", "id", "url", "vod_id", "cat_id", "en_id", "play_part_id", "playpartid", "vid", "description", "desc", "content", "vod_content", "cat_name", "type_name", "type", "remarks", "remark", "vod_remarks":
 				return name
 			}
 		}

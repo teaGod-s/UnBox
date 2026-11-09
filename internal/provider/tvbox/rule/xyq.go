@@ -55,6 +55,7 @@ type XYQ struct {
 	CategoryIDs     string     `json:"分类名称替换词"`
 	CategoryURL     string     `json:"分类链接"`
 	CategoryArray   string     `json:"分类列表数组规则"`
+	CategoryMode    string     `json:"分类截取模式"` // "0" = JSON 响应（与搜索截取模式同语义）
 	CatTitle        string     `json:"分类片单标题"`
 	CatLink         string     `json:"分类片单链接"`
 	CatPic          string     `json:"分类片单图片"`
@@ -182,6 +183,18 @@ func (e *XYQHikerEngine) Browse(ctx context.Context, cat string, page int) (prov
 	raw, err := e.fetch(ctx, e.absURL(e.resolveCategoryURL(cat, page)), nil)
 	if err != nil {
 		return provider.Page{}, err
+	}
+	// 分类截取模式 "0"：JSON 响应，列表数组是 JSON 路径，字段是 JSON 键。
+	// （如戏曲多多 getcollabellist: list/name/ddurl/pic，此前缺失此分支导致
+	// Browse 恒为 0 项）
+	if e.rule.CategoryMode == "0" {
+		items, jerr := e.parseJSONItemsFields(raw,
+			e.rule.CategoryArray, e.rule.CatTitle, e.rule.CatLink,
+			e.rule.CatPic, e.rule.CatSubtitle, e.rule.LinkPrefix, e.rule.LinkSuffix)
+		if jerr != nil {
+			return provider.Page{}, jerr
+		}
+		return provider.Page{Items: items, Page: page, HasMore: len(items) > 0}, nil
 	}
 	items := e.parseHTMLItems(e.newDoc(raw), "分类", e.rule.CategoryArray,
 		e.rule.CatTitle, e.rule.CatLink, e.rule.CatPic, e.rule.CatSubtitle,
@@ -446,12 +459,22 @@ func (e *XYQHikerEngine) parseHTMLItems(doc *goquery.Document, kind, array, titl
 }
 
 // parseJSONItems 解析 JSON 响应（截取模式 0）。
+// parseJSONItems 解析 JSON 截取模式的搜索响应（搜索截取模式=0）。
 func (e *XYQHikerEngine) parseJSONItems(raw string) ([]provider.Item, error) {
+	return e.parseJSONItemsFields(raw,
+		e.rule.SearchArray, e.rule.SearchTitle, e.rule.SearchLink,
+		e.rule.SearchPic, e.rule.SearchSubtitle,
+		e.rule.SearchPrefix, e.rule.SearchSuffix)
+}
+
+// parseJSONItemsFields 解析 JSON 截取模式的列表响应（分类/搜索共用）。
+// 截取模式 "0" 时列表数组是 JSON 点路径，标题/链接/图片是条目里的 JSON 键。
+func (e *XYQHikerEngine) parseJSONItemsFields(raw, array, title, link, pic, subtitle, prefix, suffix string) ([]provider.Item, error) {
 	var root any
 	if err := json.Unmarshal([]byte(raw), &root); err != nil {
-		return nil, fmt.Errorf("搜索 JSON 解析失败: %w", err)
+		return nil, fmt.Errorf("JSON 列表解析失败: %w", err)
 	}
-	arr := descendJSONPath(root, e.rule.SearchArray)
+	arr := descendJSONPath(root, array)
 	if arr == nil {
 		return nil, nil
 	}
@@ -470,16 +493,16 @@ func (e *XYQHikerEngine) parseJSONItems(raw string) ([]provider.Item, error) {
 		if !ok {
 			continue
 		}
-		title := jsonStr(obj[e.rule.SearchTitle])
-		href := jsonStr(obj[e.rule.SearchLink])
+		title := jsonStr(obj[title])
+		href := jsonStr(obj[link])
 		if strings.TrimSpace(title) == "" && strings.TrimSpace(href) == "" {
 			continue
 		}
 		item := provider.Item{
-			ID:    e.absURL(withPrefixSuffix(href, e.rule.SearchPrefix, e.rule.SearchSuffix)),
+			ID:    e.absURL(withPrefixSuffix(href, prefix, suffix)),
 			Title: title,
-			Logo:  e.absURL(withPrefixSuffix(jsonStr(obj[e.rule.SearchPic]), e.rule.SearchPrefix, e.rule.SearchSuffix)),
-			Group: jsonStr(obj[e.rule.SearchSubtitle]),
+			Logo:  e.absURL(withPrefixSuffix(jsonStr(obj[pic]), prefix, suffix)),
+			Group: jsonStr(obj[subtitle]),
 		}
 		if strings.TrimSpace(item.ID) == "" {
 			item.ID = item.Title // 无链接时以标题兜底 id，仍可进详情尝试

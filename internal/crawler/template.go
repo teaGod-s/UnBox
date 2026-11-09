@@ -12,16 +12,31 @@ import (
 )
 
 // Rule returns the loaded declaration's rule object.
-func (e *Engine) Rule() (*Rule, error) {
+//
+// 导出时 goja 的 ExportTo 在遇到 rule 值里的动态对象（如某脚本把 headers/
+// filter 设成运行时对象）会直接 panic（Could not convert *dynamicObject to
+// primitive），而不是返回 error——会把整个进程打崩。这里用 recover 兜底，
+// 并把导出先经 JSON 中转，类型不兼容时让 json/unmarshal 返回可读错误。
+func (e *Engine) Rule() (rule *Rule, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			rule, err = nil, fmt.Errorf("读取爬虫 rule 失败（rule 值含动态对象）: %v", r)
+		}
+	}()
 	value := e.vm.Get("rule")
 	if value == nil || goja.IsUndefined(value) || goja.IsNull(value) {
 		return nil, fmt.Errorf("爬虫未定义 rule 对象")
 	}
-	var rule Rule
-	if err := e.vm.ExportTo(value, &rule); err != nil {
+	exported := value.Export()
+	b, err := json.Marshal(exported)
+	if err != nil {
 		return nil, fmt.Errorf("读取爬虫 rule 失败: %w", err)
 	}
-	return &rule, nil
+	var r Rule
+	if err := json.Unmarshal(b, &r); err != nil {
+		return nil, fmt.Errorf("读取爬虫 rule 失败: %w", err)
+	}
+	return &r, nil
 }
 
 func (e *Engine) VodHome() ([]Vod, error) {

@@ -54,6 +54,26 @@ func xbpqFixture(t *testing.T) (*XBPQEngine, *httptest.Server) {
 	return NewXBPQEngine(rule, NewClient(nil)), srv
 }
 
+// XBPQ 规则文件是 JSONC：真实文件（养生堂.json 等）里夹着整行
+// `// "播放链接前缀": "..."` 注释。ParseXBPQ 必须像 ParseXYQ 那样先剥
+// 注释，否则 json.Unmarshal 报 `invalid character '/'`，八仙源
+// csp_XBPQ 站（养生堂/wget.la、jsdmirror 外链）全部加载失败。
+func TestParseXBPQJSONC(t *testing.T) {
+	raw := []byte(`{
+    "首页": "0",
+    // "播放链接前缀": "https://www.gyf.lol",
+    "数组": "data\":{\"tit&&s_log",
+    "分类url": "https://a/{cateId}/{catePg}.html"
+}`)
+	r, err := ParseXBPQ(raw)
+	if err != nil {
+		t.Fatalf("ParseXBPQ(JSONC) = %v", err)
+	}
+	if r.CategoryURL == "" || r.Array != `data":{"tit&&s_log` {
+		t.Fatalf("解析字段缺失: %#v", r)
+	}
+}
+
 func TestNewEngineXBPQ(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"主页url":"https://a/","分类":"电影$1","分类url":"https://a/{cateId}/{catePg}"}`))

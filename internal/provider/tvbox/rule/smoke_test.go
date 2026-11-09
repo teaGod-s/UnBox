@@ -77,6 +77,16 @@ func runSmoke(t *testing.T, label string, sites []smokeSite) {
 			t.Logf("进度 %d/%d…", i, len(sites))
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		// 内联规则 ext（对象/文本）是引擎未实现的形态，和「未支持的 JAR
+		// 爬虫类」一样归未实现桶，不当作 URL 请求（否则报空 URL / parse
+		// 失败误导为引擎 bug）。对象用标记串占位；樱花动漫这类文本规则
+		//（`分类url:...,分类:...`）本身不是 URL，一并按内联规则处理。
+		if !extIsRuleURL(s.ext) {
+			unsupported++
+			t.Logf("%s(%s): 内联规则ext（引擎未实现形态）", s.name, s.class)
+			cancel()
+			continue
+		}
 		eng, err := NewEngine(ctx, s.class, s.ext)
 		if err != nil {
 			msg := err.Error()
@@ -191,9 +201,60 @@ func extractAllSites(raw string) []smokeSite {
 		}
 		seen[key+api] = true
 		searchable := reField(m, `"searchable"\s*:\s*(\d+)`) == "1" || reField(m, `"searchable"\s*:\s*(true)`) == "true"
-		out = append(out, smokeSite{name: name, class: api, ext: "", searchable: searchable})
+		ext := reField(m, `"ext"\s*:\s*"([^"]*)"`)
+		// ext 为对象（`"ext": {...}`）：八仙内联规则形态，规则直接写在
+		// ext 里（含 分类url/主页url 等字段），无需外链。extractAllSites
+		// 用标记串占位，冒烟把它归「未实现形态」而不是当 URL 请求。
+		if isInlineExt(m) {
+			ext = "<内联规则ext对象>"
+		}
+		out = append(out, smokeSite{name: name, class: api, ext: ext, searchable: searchable})
 	}
 	return out
+}
+
+// isInlineExt 判断站点对象文本里 ext 是否是对象（`"ext": {`）——
+// 八仙源给 csp_XBPQ 站内联完整规则（副标题/请求头/编码/分类url 等），
+// 这类站无需外链规则文件，引擎暂不支持这种形态。
+func isInlineExt(m string) bool {
+	return regexp.MustCompile(`"ext"\s*:\s*\{`).MatchString(m)
+}
+
+// extIsRuleURL 判断 ext 是否是规则文件 URL（而非内联规则文本/对象）。
+// 引擎支持的是「ext 指向要下载的规则文件」：`./x.json`、`/x.json` 相对
+// 路径或 `http(s)://` 绝对地址。八仙源里 `分类url:https://...,分类:...`
+// 这类逗号分隔的文本规则（以字段名开头，scheme 是字段值的一部分）与
+// `<内联规则ext对象>` 标记都不是 URL —— 归未实现。
+func extIsRuleURL(ext string) bool {
+	ext = strings.TrimSpace(ext)
+	if ext == "" || strings.HasPrefix(ext, "<") {
+		return false
+	}
+	if strings.HasPrefix(ext, "./") || strings.HasPrefix(ext, "/") {
+		return true
+	}
+	return strings.HasPrefix(ext, "http://") || strings.HasPrefix(ext, "https://")
+}
+
+// expandSiteExt 把站点 ext 的相对路径（./x.json）按 base 展开成绝对 URL，
+// 与 extractSupportedSites 的 resolve 语义一致（否则引擎拿 ./x.json 当 URL
+// 请求，误报加载失败）。已带协议的原样保留。
+func expandSiteExt(base string, sites []smokeSite) {
+	for i := range sites {
+		ext := strings.TrimSpace(sites[i].ext)
+		if ext == "" || strings.Contains(ext, "://") || strings.HasPrefix(ext, "<") {
+			continue
+		}
+		b, err := url.Parse(base)
+		if err != nil || b.Host == "" {
+			continue
+		}
+		r, err := url.Parse(ext)
+		if err != nil {
+			continue
+		}
+		sites[i].ext = b.ResolveReference(r).String()
+	}
 }
 
 // reField 从站点对象文本里提取某个字段值。

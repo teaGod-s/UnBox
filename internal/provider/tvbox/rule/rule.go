@@ -179,10 +179,12 @@ type XBPQ struct {
 	Filters       FilterMap `json:"筛选"`
 }
 
-// ParseXBPQ 解析规则 JSON；至少要有主页url或分类url之一。
+// ParseXBPQ 解析规则 JSON；规则是 JSONC（可能含整行 // 注释，如真实文件
+// 养生堂.json 里的 `// "播放链接前缀"`），先剥注释再解析，与 ParseXYQ 一致。
 func ParseXBPQ(data []byte) (*XBPQ, error) {
+	clean := stripJSONCComments(data)
 	var r XBPQ
-	if err := json.Unmarshal(sanitizeJSONEscapes(data), &r); err != nil {
+	if err := json.Unmarshal(sanitizeJSONEscapes(clean), &r); err != nil {
 		return nil, fmt.Errorf("解析 XBPQ 规则失败: %w", err)
 	}
 	if strings.TrimSpace(r.HomeURL) == "" && strings.TrimSpace(r.CategoryURL) == "" {

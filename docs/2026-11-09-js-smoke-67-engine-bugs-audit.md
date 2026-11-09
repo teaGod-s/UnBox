@@ -88,3 +88,51 @@
 - `internal/crawler/template.go`：lenientDetailFromJSON + coerceDetailNumbers / joinURL 编码 host 解码
 - `internal/crawler/drpy.go`：renderFilterTemplate 支持 `or 默认值` + flTemplateRe/flOrDefaultRe
 - 测试：`inline_idint_test.go`、`exportdetail_num_test.go`、`jsonp_test.go`、`filter_or_test.go`、`joinurl_host_test.go`
+
+---
+
+# 八仙源全量冒烟结论（追加）
+
+**日期**：2026-11-09（同日）
+**范围**：八仙源（`https://xn--cnq85d.52011.top/a?id=1`）四层导航全量冒烟。
+**链路**：`a?id=1`（现 302 → 主仓库 `/nxog/d.php?b=八仙`，中文参数须 URL 编码）→ 22 条线路 `b.php?id=N` → 每条线路是 `\njhSPAyzn**`（11 字节）前缀 + **StdEncoding base64** 的站点配置 → `extractAllSites` + `expandSiteExt` 收集全部站点 → 去重后 1674 站逐站 Home → Browse/Search 冒烟。
+**汇总（当前）**：**通过=13 / 站点侧=4 / 疑似引擎bug=13 / 引擎未实现=1644。**
+
+## 一句话
+
+**13 条引擎桶 = 1 个真引擎 bug（XBPQ JSONC 注释，已修）+ 12 条站点侧。**
+
+修复前第一次全量（ext 遗漏 + JSONC 未支持 + 分类器缺内联识别）：疑似引擎 34 → 修复后 13，通过 0 → 13。
+
+## 真引擎 bug（1 条，已修）
+
+### K. ParseXBPQ 不支持 JSONC 注释（养生堂系 2 站）→ 真 bug ✅ 已修
+错误：`解析 XBPQ 规则失败: invalid character '/' looking for beginning of object key string`
+站：`🪆养生｜知识学堂`（wget.la 外链）、`🧿养生｜知识`（jsdmirror 外链）——同一份 `养生堂.json`。
+根因：`ParseXBPQ` 只做 `sanitizeJSONEscapes`，没有像 `ParseXYQ` 那样先 `stripJSONCComments`。真实规则文件里夹整行 `// "播放链接前缀": ...`，直接 `json.Unmarshal` 报 `invalid character '/'`。
+修复：`ParseXBPQ` 先 `stripJSONCComments`（`rule.go`）。测试 `TestParseXBPQJSONC`（xbpq_test.go）。
+
+## 引擎未实现形态（非 bug，归「未实现」桶）
+
+八仙源给 `csp_XBPQ` 站两种**内联规则 ext**——TVBox 原版支持，UnBox 引擎只支持「ext 是规则文件 URL」一种形态：
+- **对象形态**（`🧿┃农民┃影视`、`🧿VIP｜影视`、`🧿先生｜影视`）：`"ext": {"副标题":…,"请求头":"User-Agent$MOBILE_UA","编码":"UTF-8","分类url":"https://…;!H"}`。`Site.ExtString()` 对非字符串返回空 → 引擎拿到空 URL。
+- **文本形态**（`樱花动漫`）：`"ext": "分类url:https://…,分类:日本动漫$…"` 逗号分隔文本，直接当 URL parse 失败。
+处理：冒烟分类器把非 URL 形态 ext（`extIsRuleURL` 判断）计为「引擎未实现」，不混入 bug 桶。后续实现时按 `scriptExt` 的序列化先例把对象转规则 JSON。
+
+## 站点侧（12 条，非 bug）
+
+| 站 | 问题 |
+|---|---|
+| 🚑️养生知识 / 💎VIP / 韩剧看看 / 韩剧在线 / 巴士动漫 / 路漫 / 番茶 / AEG / 啊哈 / 巴士动漫`/ext/39.png` | 八仙自营 `/json/*.json`、`/XBPQ/*.json`、`/ext/39.png` 全部 **404**（统一返回门户 iframe 兜底页）。这些相对 ext 按线路 URL 展开后 404，带 Referer/不同 UA 亦 404——八仙自营规则文件已失效/路径不对。同款站（VIP/养生堂）在其它线路给了 iyouhun/gh-proxy 绝对地址，可见多线路各自维护、自营链接多数过期。 |
+| 🧲电影港湾 / 🎃电影磁力 | 规则文件 **200 但格式不匹配**：海阔 XPath 体系字段（`class_url`/`class_name`/`Coding_format`），XYQ 引擎只认 `分类链接/搜索链接/首页推荐链接` → 报「规则缺少 首页推荐链接/分类链接/搜索链接」。站点规则格式与引擎不同，非引擎缺陷。 |
+| 动漫巴士 | ext 外链 `gh.con.sh` 现 302、GitHub 直链 404 → `invalid character 'S'`（代理/源文件失效）。 |
+
+## 冒烟基础设施修复（非引擎 bug，但属测试正确性）
+
+- `extractAllSites` 此前**不提取 ext 字段**（永远空串）→ csp_XBPQ/XYQHiker 站全部用空 URL 加载，34 条「疑似引擎」的根因。已补 `ext` 提取。
+- `expandSiteExt`：相对 ext（`./XBPQ/养生堂.json`）按线路 URL `ResolveReference` 展开（带 `://` 原样留）。
+- 分类器：内联规则 ext（对象/文本）归「引擎未实现」桶；非 `http(s)://` 前缀、非 `./`、非 `/` 开头一律视作非 URL。
+
+## 遗留观察
+- 八仙线路基址漂移：`a?id=1` 现 302 到 `/m/e.php`，主仓库在 `/nxog/d.php`；`TestSmokeBaxianFull` 已适应（正则找 `d.php` 相对引用）。主仓库中文参数必须 `encodeQuery`（`b=八仙`）否则 HTTP 400。
+- 站点计数因多线路重复注册不稳定（哆啦新番社在两次 run 中通过/失败翻转），根因是 jsdmirror 间歇慢速而非引擎。

@@ -124,11 +124,15 @@ func TestSmokeJS(t *testing.T) {
 			continue
 		}
 		detail, derr := eng.VodDetail(items[0].VodID.String())
-		if derr != nil || strings.TrimSpace(detail.VodPlayURL) == "" {
+		playURL := ""
+		if detail != nil {
+			playURL = detail.VodPlayURL
+		}
+		if derr != nil || detail == nil || strings.TrimSpace(playURL) == "" {
 			if derr != nil && looksNetErr(derr) {
 				siteSide = append(siteSide, fmt.Sprintf("%s: 详情网络 %v", job.name, shortErrStr(derr)))
 			} else {
-				engineBug = append(engineBug, fmt.Sprintf("%s: 详情 %v playURL=%q", job.name, shortErrStr(derr), detail.VodPlayURL))
+				engineBug = append(engineBug, fmt.Sprintf("%s: 详情(nil=%v) %v playURL=%q", job.name, detail == nil, shortErrStr(derr), playURL))
 			}
 			cancel()
 			continue

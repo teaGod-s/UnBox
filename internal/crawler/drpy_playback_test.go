@@ -111,10 +111,16 @@ func TestSmokeJS(t *testing.T) {
 		}
 		classes, cerr := eng.VodClasses()
 		if cerr != nil || len(classes) == 0 {
-			if cerr != nil && looksNetErr(cerr) {
-				siteSide = append(siteSide, fmt.Sprintf("%s: 分类网络 %v", job.name, shortErrStr(cerr)))
-			} else if cerr != nil {
-				engineBug = append(engineBug, fmt.Sprintf("%s: 分类 %v", job.name, shortErrStr(cerr)))
+			if cerr != nil {
+				cls, reason := classifyJsError(cerr)
+				switch cls {
+				case "site":
+					siteSide = append(siteSide, fmt.Sprintf("%s: 分类网络 %v", job.name, reason))
+				case "empty":
+					scriptEmpty = append(scriptEmpty, fmt.Sprintf("%s: 分类脚本空 %v", job.name, reason))
+				default:
+					engineBug = append(engineBug, fmt.Sprintf("%s: 分类 %v", job.name, reason))
+				}
 			} else {
 				siteSide = append(siteSide, fmt.Sprintf("%s: 无分类", job.name))
 			}
@@ -320,15 +326,6 @@ func fetchStr(u string) (string, error) {
 		return "", err
 	}
 	return string(body), nil
-}
-
-func looksNetErr(err error) bool {
-	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "timeout") || strings.Contains(s, "超时") ||
-		strings.Contains(s, "http ") || strings.Contains(s, "连接失败") ||
-		strings.Contains(s, "tls") || strings.Contains(s, "404") ||
-		strings.Contains(s, "403") || strings.Contains(s, "deadline") ||
-		strings.Contains(s, "无法解析")
 }
 
 // classifyJsError 把 js/drpy2 冒烟的错误细分为三类，避免把「站点数据空」

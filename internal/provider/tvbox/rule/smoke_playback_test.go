@@ -19,24 +19,32 @@ func TestSmokePlayback(t *testing.T) {
 	if os.Getenv("UNBOX_ACCEPTANCE") != "1" {
 		t.Skip("UNBOX_ACCEPTANCE=1 开启")
 	}
-	subs := []string{
-		"https://gh-proxy.com/raw.githubusercontent.com/yw88075/tvbox/main/yw.json",
-		"https://gitlab.com/noimank/tvbox/-/raw/main/tvbox1.json",
-		"https://clun.top/box.json",
-		"https://gh-proxy.com/raw.githubusercontent.com//gaotianliuyun/gao/master/0827.json",
-		"https://gh-proxy.org/https:/raw.githubusercontent.com/xyq254245/xyqonlinerule/main/XYQTVBox.json",
-		"https://gh-proxy.com/raw.githubusercontent.com/gaotianliuyun/gao/master/XYQ.json",
-		"https://gh-proxy.org/https:/raw.githubusercontent.com/xyq254245/xyqonlinerule/main/XYQHiker/看影网.json",
-		"https://gh-proxy.org/https:/raw.githubusercontent.com/xyq254245/xyqonlinerule/main/XYQHiker/路漫漫.json",
+	subs := []struct{ name, url string }{
+		{"🚀1-心魔在线", "https://gh-proxy.com/raw.githubusercontent.com/yw88075/tvbox/main/yw.json"},
+		{"🚀2-饭太硬推荐", "http://www.饭太硬.cc/tv"},
+		{"🚀3-小饭太硬备用", "http://www.饭太硬.net/tv"},
+		{"🚀4-健康家用", "https://gitlab.com/noimank/tvbox/-/raw/main/tvbox1.json"},
+		{"🚀5-Clun在线", "https://clun.top/box.json"},
+		{"🚀6-FongMI线路", "https://gh-proxy.com/raw.githubusercontent.com//gaotianliuyun/gao/master/0827.json"},
+		{"🚀7-香雅情", "https://gh-proxy.org/https:/raw.githubusercontent.com/xyq254245/xyqonlinerule/main/XYQTVBox.json"},
+		{"🚀8-巧计线路", "http://pandown.pro/tvbox/tvbox.json"},
+		{"🚀9-欧歌4K", "http://tv.nxog.top/m/"},
+		{"🚀10-高天流云js", "https://gh-proxy.com/raw.githubusercontent.com/gaotianliuyun/gao/master/js.json"},
+		{"🚀11-高天流云 XYQ", "https://gh-proxy.com/raw.githubusercontent.com/gaotianliuyun/gao/master/XYQ.json"},
+		{"🚀12-影探线路", "http://www.lyyytv.cn/yt/yt.json"},
+		{"🚀13-南风", "https://gh-proxy.com/https://raw.githubusercontent.com/yoursmile66/TVBox/main/XC.json"},
+		{"🚀14-无意线路", "https://www.wya6.cn/tv/yc.json"},
 	}
 	var sites []smokeSite
-	for _, rawURL := range subs {
-		raw, err := NewClient(nil).Get(context.Background(), rawURL)
+	for _, s := range subs {
+		raw, err := NewClient(nil).Get(context.Background(), s.url)
 		if err != nil {
-			t.Logf("子源 %s 拉取失败: %v", rawURL, shortErr(err))
+			t.Logf("子源[%s] 拉取失败: %v", s.name, shortErr(err))
 			continue
 		}
-		sites = append(sites, extractSupportedSites(raw, rawURL)...)
+		got := extractSupportedSites(raw, s.url)
+		t.Logf("子源[%s] 提取规则型站点 %d 个", s.name, len(got))
+		sites = append(sites, got...)
 	}
 	// 去重（多个子源可能引用同一 ext）
 	seen := map[string]bool{}

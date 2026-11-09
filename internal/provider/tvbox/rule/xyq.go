@@ -249,6 +249,22 @@ func splitMethodSuffix(raw string) (url string, post bool) {
 }
 
 func (e *XYQHikerEngine) Detail(ctx context.Context, id string) (Vod, error) {
+	// 分类/搜索给出的链接可能本身就是可播放媒体（JSON 截取模式的
+	// 分类片单链接直接是 mp4/m3u8 直链，如戏曲多多 ddurl），或规则声明
+	// 链接是否直接播放=是。此时不能再去 fetch（会把整个视频下载回来，
+	// 4MB+ 直接超限报错），应直接作为可播放剧集返回。
+	if looksLikeMediaURL(id) || isDirectPlayOn(e.rule.DirectPlay) {
+		name := id
+		if i := strings.LastIndexByte(id, '/'); i >= 0 {
+			name = id[i+1:]
+		}
+		return Vod{
+			ID:       id,
+			Name:     name,
+			PlayFrom: "直连",
+			PlayURL:  name + "$" + id,
+		}, nil
+	}
 	raw, err := e.fetch(ctx, id, nil)
 	if err != nil {
 		return Vod{}, err
@@ -564,6 +580,8 @@ func (e *XYQHikerEngine) extractDetail(raw string, rule string) string {
 
 // isJsoupNonNull 判断「是否Jsoup写法」类字段是否取 JSoup 语义。
 // 真值："是"/"1"/"Y/y"；否则走标记截取/XPath。空视为 JSoup（大多数规则主路径）。
+// isJsoupNonNull 判断「是否Jsoup写法」类字段是否取 JSoup 语义。
+// 真值："是"/"1"/"Y/y"；否则走标记截取/XPath。空视为 JSoup（大多数规则主路径）。
 func isJsoupNonNull(v string) bool {
 	switch strings.TrimSpace(strings.ToLower(v)) {
 	case "", "是", "1", "y":
@@ -571,6 +589,11 @@ func isJsoupNonNull(v string) bool {
 	default:
 		return false
 	}
+}
+
+// isDirectPlayOn 判断「链接是否直接播放」是否开启（规则写 是/1/y/true）。
+func isDirectPlayOn(v string) bool {
+	return xyqReverseEnabled(v)
 }
 
 func (e *XYQHikerEngine) selectNodes(doc *goquery.Document, rule string) []*goquery.Selection {

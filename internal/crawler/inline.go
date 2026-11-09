@@ -386,7 +386,7 @@ func evalJSONExpr(obj map[string]any, expr string) string {
 // 这里按字段名判断：本引擎同时支持非标准排序与别名，按名字更稳。
 func isJSONIDField(expr string) bool {
 	switch canonicalVodField(expr) {
-	case "id", "url", "vod_id", "cat_id", "en_id":
+	case "id", "url", "vod_id", "cat_id", "en_id", "play_part_id", "playpartid":
 		return true
 	}
 	return false
@@ -442,7 +442,7 @@ func setVodField(vod *Vod, field, value string) {
 		vod.VodPic = value
 	case "id", "url", "vod_id":
 		vod.VodID = flexID(value)
-	case "cat_id", "en_id":
+	case "cat_id", "en_id", "play_part_id", "playpartid":
 		vod.VodID = flexID(value)
 	case "description", "desc", "content", "vod_content":
 		vod.VodContent = value
@@ -458,7 +458,7 @@ func canonicalVodField(expr string) string {
 		for _, candidate := range strings.Split(part, "||") {
 			name := strings.ToLower(strings.TrimSpace(candidate))
 			switch name {
-			case "title", "name", "vod_name", "titletxt", "titlealias", "cover", "pic", "image", "vod_pic", "cover_pic", "coverpic", "id", "url", "vod_id", "cat_id", "en_id", "description", "desc", "content", "vod_content", "cat_name", "type_name", "type", "remarks", "remark", "vod_remarks":
+			case "title", "name", "vod_name", "titletxt", "titlealias", "cover", "pic", "image", "vod_pic", "cover_pic", "coverpic", "id", "url", "vod_id", "cat_id", "en_id", "play_part_id", "playpartid", "description", "desc", "content", "vod_content", "cat_name", "type_name", "type", "remarks", "remark", "vod_remarks":
 				return name
 			}
 		}

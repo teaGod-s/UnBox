@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/dop251/goja"
 )
 
@@ -80,6 +81,57 @@ func (e *Engine) installHelpers() {
 	}
 	_ = e.vm.Set("fetch", fetch)
 	_ = e.vm.Set("request", fetch)
+	// jsp 是 drpy2 脚本的 jQuery 风格选择器 shim：极多脚本（百忙无果、芒果、
+	// 博看听书等）在详情/解析里写 `pdfh=jsp.pdfh; pdfa=jsp.pdfa; pd=jsp.pd;`。
+	// 三个函数都是 (html, selector) → 结果：pdfh 取第一个匹配值（字符串），
+	// pdfa 返回全部匹配值（数组），pd 同 pdfh 取第一个。选择器语法与 evalRule
+	// 完全一致（p:eq(3)、&&Text、&&Html、&&src、data-* 等）。
+	_ = e.vm.Set("jsp", map[string]func(goja.FunctionCall) goja.Value{
+		"pdfh": e.jspPick(false),
+		"pd":   e.jspPick(false),
+		"pdfa": e.jspPick(true),
+	})
+	// setResult 是 drpy2 FongMi 脚本详情/搜索动作的收尾原语：接收播放项数组
+	// [{title,url,...}]，在 VOD.vod_play_url 为空时按 title$url（# 连接）兜底
+	// 生成。百忙无果等脚本手动设置 VOD.vod_play_url 后仍会调 setResult(d)，
+	// 已有值时不再覆盖（保持脚本既设值优先）。
+	_ = e.vm.Set("setResult", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return e.vm.ToValue("")
+		}
+		arr, ok := call.Argument(0).Export().([]any)
+		if !ok {
+			arr = []any{}
+		}
+		var titles, urls []string
+		for _, item := range arr {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			title := valueString(e.vm.ToValue(m["title"]))
+			url := valueString(e.vm.ToValue(m["url"]))
+			titles = append(titles, title)
+			urls = append(urls, url)
+		}
+		vodVal := e.vm.Get("VOD")
+		if vodVal == nil || goja.IsUndefined(vodVal) || goja.IsNull(vodVal) {
+			return e.vm.ToValue("")
+		}
+		vod := vodVal.ToObject(e.vm)
+		// 已有播放地址则不覆盖（脚本通常手动 set 过 vod_play_url）。
+		existing := vod.Get("vod_play_url")
+		if existing != nil && !goja.IsUndefined(existing) && !goja.IsNull(existing) && strings.TrimSpace(existing.String()) != "" {
+			return e.vm.ToValue(existing.String())
+		}
+		var parts []string
+		for i := range urls {
+			parts = append(parts, titles[i]+"$"+urls[i])
+		}
+		_ = vod.Set("vod_play_url", strings.Join(parts, "#"))
+		_ = vod.Set("vod_play_from", "线路")
+		return e.vm.ToValue(strings.Join(parts, "#"))
+	})
 	// http(url, opts) 是 FongMi 脚本里的另一个取正文原语（等价于 fetch）：
 	// 真实脚本会写 `this.content = http(url, {headers:{Referer: ...}})`。
 	// 不改名注入，脚本会直接报 `ReferenceError: http is not defined`。
@@ -228,6 +280,113 @@ func consoleArgString(v goja.Value) string {
 		return "null"
 	}
 	return fmt.Sprint(v.Export())
+}
+
+// jspPick 构造 jsp.pdfh/pdfa/pd 之一：all=true 时返回全部匹配值数组，
+// 否则返回第一个匹配值（drpy2 语义：pdfh 取首个、pd 同取首个）。
+//
+// 参数 (html, selector)：selector 是 goquery/evalRule 语法，但 drpy2 习惯用
+// 无括号的 `&&Text`/`&&Html`，以及裸属性名 `&&content`（读 meta 的 content
+// 属性），evalRule 只认 Text()/Html()/href/src/data-*。这里把无括号形式归一化
+// 成 evalRule 语法后再求值。HTML 用 DocumentFromReader 包一层（evalRule 期望
+// Document）。找不到时 pdfh/pd 返回空串、pdfa 返回空数组。
+func (e *Engine) jspPick(all bool) func(goja.FunctionCall) goja.Value {
+	return func(call goja.FunctionCall) goja.Value {
+		html, selector := "", ""
+		if len(call.Arguments) > 0 {
+			html = call.Argument(0).String()
+		}
+		if len(call.Arguments) > 1 {
+			selector = call.Argument(1).String()
+		}
+		if strings.TrimSpace(selector) == "" {
+			if all {
+				return e.vm.ToValue([]string{})
+			}
+			return e.vm.ToValue("")
+		}
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+		if err != nil {
+			if all {
+				return e.vm.ToValue([]string{})
+			}
+			return e.vm.ToValue("")
+		}
+		values := evalRule(doc, jspNormalizeSelector(selector))
+		if all {
+			return e.vm.ToValue(values)
+		}
+		if len(values) == 0 {
+			return e.vm.ToValue("")
+		}
+		return e.vm.ToValue(values[0])
+	}
+}
+
+// jspNormalizeSelector 把 drpy2 jsp 习惯的选择器语法归一化成 evalRule 能认的形式：
+//   - &&Text → &&Text()、&&Html → &&Html()（evalRule 只认带括号）
+//   - 最后一段是裸属性名（content、title 等 meta 属性）→ &&attr(name)
+//
+// 只有「最后一段」会按属性名解释——drpy2 语义里最后一段是取值操作符，前面都是
+// 元素选择器（img/p 等标签必须保持标签语义）。href/src/data-* 已由 evalRule 原生支持。
+func jspNormalizeSelector(sel string) string {
+	parts := strings.Split(sel, "&&")
+	if len(parts) == 0 {
+		return sel
+	}
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	last := len(parts) - 1
+	switch parts[last] {
+	case "Text":
+		parts[last] = "Text()"
+	case "Html":
+		parts[last] = "Html()"
+	default:
+		if isBareAttrName(parts[last]) {
+			parts[last] = "attr(" + parts[last] + ")"
+		}
+	}
+	return strings.Join(parts, "&&")
+}
+
+// isBareAttrName 判断一段选择器是否是裸属性名（如 content/title/alt/data-id）。
+// 排除 evalRule 已支持的关键字（Text/Html/href/src）与带特殊语法的段（attr(...)、
+// match(...)、split(...)、replace(...)、substring(...)、*:eq/lt 伪类、标签/类/ID
+// 选择器、Stream data-* 已有单独处理）。
+func isBareAttrName(seg string) bool {
+	if seg == "" {
+		return false
+	}
+	lower := strings.ToLower(seg)
+	switch lower {
+	case "text", "html", "href", "src", "trim", "ltrim", "rtrim":
+		return false
+	}
+	if strings.HasPrefix(lower, "attr(") || strings.HasPrefix(lower, "match(") ||
+		strings.HasPrefix(lower, "split(") || strings.HasPrefix(lower, "replace(") ||
+		strings.HasPrefix(lower, "substring(") || strings.HasPrefix(lower, "array(") {
+		return false
+	}
+	if isDataAttr(seg) {
+		return false // evalRule 已原生支持裸 data-* 属性
+	}
+	// 纯 CSS 标识符（字母开头，只能含字母数字连字符下划线）才可能是属性名；
+	// 含 . # [ ] : > 空格 等结构符的段是元素选择器，不是属性。
+	for i, r := range seg {
+		if i == 0 {
+			if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r == '_') {
+				return false
+			}
+			continue
+		}
+		if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' ||
+			r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func (e *Engine) setFetchParams(rule *Rule) {

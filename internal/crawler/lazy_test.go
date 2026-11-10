@@ -32,7 +32,7 @@ func TestResolveLazyStringResult(t *testing.T) {
 
 // 规则脚本常用 `let html=...` / `const x=...` 开头。同一个引擎第二次执行同一条
 // 脚本时，直接跑在共享 VM 的全局作用域里会命中
-// "Identifier 'html' has already been declared"（360影视详情第二次就挂）。
+// "Identifier 'html' has already been declared"（某影视源详情第二次就挂）。
 func TestResolveLazyRepeatedRunsDoNotCollide(t *testing.T) {
 	e := New()
 	if err := e.Load(`var rule={lazy:"js:let base=input.url.split('?')[0]; input=base"}`); err != nil {

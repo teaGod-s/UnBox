@@ -85,7 +85,7 @@ func resolveExt(base *url.URL, ext any) any {
 }
 
 // restoreNonASCII 把 url.URL.String() 对非 ASCII 字节做的百分号编码还原成原文。
-// 配置里的中文文件名（如 360影视.js）通常原样书写，保留转义会让上层拼路径时对不上。
+// 配置里的中文文件名（如 某影视源.js）通常原样书写，保留转义会让上层拼路径时对不上。
 // 只还原 >= 0x80 的字节，%20、%2F 这类 ASCII 转义保持原样，避免改变路径语义。
 func restoreNonASCII(s string) string {
 	if !strings.Contains(s, "%") {

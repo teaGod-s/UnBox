@@ -8,7 +8,7 @@ import (
 	"github.com/dop251/goja"
 )
 
-// drpy2 脚本普遍引用 jsp 全局（jsp.pdfh/pdfa/pd），如百忙无果二级:
+// drpy2 脚本普遍引用 jsp 全局（jsp.pdfh/pdfa/pd），如某影视源二级:
 //
 //	pdfh=jsp.pdfh; pdfa=jsp.pdfa; pd=jsp.pd;
 //	actual=pdfh(html,".vt-txt&&Text")        → "双人大逃杀"

@@ -7,7 +7,7 @@ import (
 )
 
 // drpy2 脚本的详情/搜索动作在手动组装 VOD 字段后，常调 setResult(d) 收尾
-// （百忙无果二级 `...d.map(...).join("#"); setResult(d)`）。setResult 接收
+// （某影视源二级 `...d.map(...).join("#"); setResult(d)`）。setResult 接收
 // 播放项数组 [{title,url,...}]，在 VOD.vod_play_url 为空时用 title$url 兜底生成。
 func TestSetResultHelper(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

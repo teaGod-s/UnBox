@@ -15,12 +15,12 @@
 2026-10-17 对真实 drpy2 / drpyS / ESM 脚本做了逆向与原型验证，结论需要修正：
 
 - **drpy2 站点脚本本身不是 ES Module**。我们抽样的 60+ 个真实 `ext` 脚本
-  （`360影视.js`、`ddys.js` 等）全部是 `var rule = {...}`，0 个 `import`/`export`。
+  （`某影视站.js`、`ddys.js` 等）全部是 `var rule = {...}`，0 个 `import`/`export`。
   当前引擎**已经能加载并解析它们**。
 - 真正的 bug 是 Provider 选错了脚本源：drpy2 站点的 `api` 指向
   `drpy2.min.js`（引擎库，ESM），站点规则在 `ext` 指向的 `.js` 里；当前
   `tvbox.Spider` 只加载 `site.API`，所以永远加载到引擎库并报 ESM 错误。
-- **真正的 ESM 脚本**（`聚合短剧.js`、`bili_open.js`、`lf_search3_min.js`）
+- **真正的 ESM 脚本**（`某短剧站.js`、`bili_open.js`、`lf_search3_min.js`）
   需要模块加载器；实测其依赖的 TVBox 资源（cheerio、crypto-js、cat.js、
   模板、gbk）全部能在 goja 中运行。
 
@@ -30,10 +30,10 @@
 
 | 脚本 | 形态 | 当前引擎 |
 |---|---|---|
-| `360影视.js`、`ddys.js` | drpy2 `var rule` | ✅ `Load OK`，`rule` 解析成功 |
+| `某影视站.js`、`ddys.js` | drpy2 `var rule` | ✅ `Load OK`，`rule` 解析成功 |
 | `apple.js`、`荐片.js` | FongMi js0 `export default` + async | ✅ `Load OK`，动作函数提升为全局 |
 | `drpy2.min.js` | ESM（4 个 import） | ❌ `ErrESModuleUnsupported` |
-| `聚合短剧.js` | `import './lib/crypto-js.js'` + `export function __jsEvalReturn` | ❌ `ErrESModuleUnsupported` |
+| `某短剧站.js` | `import './lib/crypto-js.js'` + `export function __jsEvalReturn` | ❌ `ErrESModuleUnsupported` |
 | `bili_open.js` | `import {Crypto,jinja2,_} from 'assets://.../cat.js'` | ❌ `ErrESModuleUnsupported` |
 | `lf_search3_min.js` | 混淆后的 `import`（`\x61...`） | ❌ 原始 `SyntaxError`（未触发友好提示） |
 
@@ -44,7 +44,7 @@
 | 脚本 | 结果 |
 |---|---|
 | `drpy2.min.js` 引擎库 | ✅ 导出 `init/home/homeVod/category/detail/play/search/DRPY` |
-| `聚合短剧.js` | ✅ 导出 `__jsEvalReturn` |
+| `某短剧站.js` | ✅ 导出 `__jsEvalReturn` |
 | `bili_open.js` | ✅ 导出 `__jsEvalReturn` |
 | `lf_search3_min.js` | ✅ 导出 `init/home/homeVod/category/detail/play/search` |
 | cheerio / crypto-js / cat.js / 模板 / gbk | ✅ goja 可执行；`cheerio.load`、`CryptoJS.MD5`、`Crypto/jinja2/_` 均可用 |
@@ -78,7 +78,7 @@ REA 静态分析：对 8 个代表脚本执行 `analyze_javascript_application`�
 4. **资源只内置许可证允许的**：
    - 内置：cheerio（MIT）、crypto-js（MIT）。
    - 不内置：`cat.js`（FongMi/TV，GPL-3.0）、`模板.js` / `gbk.js`
-     （hjdhnx/drpy 未声明 License）。
+     （某规则仓库/drpy 未声明 License）。
    - `cat.js` 的 `Crypto`/`jinja2`/`_` 用自有 shim 提供；`模板.js`/`gbk.js`
      仅在运行 drpy2 引擎库时需要，M7 不把「执行 drpy2 引擎库」作为主线。
 5. **drpy2 主线仍走现有 Go 解释器**（M5.3），不加载 `drpy2.min.js`。
@@ -91,7 +91,7 @@ REA 静态分析：对 8 个代表脚本执行 `analyze_javascript_application`�
 ### 4.1 M7.1 Provider 选源
 
 ```
-config.Site{API: "./dr/lib/drpy2.min.js", Ext: "./dr/js/360影视.js"}
+config.Site{API: "./dr/lib/drpy2.min.js", Ext: "./dr/js/某影视站.js"}
   → config.ResolveRelativeURLs（解析 Ext 相对路径）
   → tvbox.Spider.ensureLoaded
   → spiderScriptURL(site)：drpy2 引擎库 + ext=.js → 用 Ext
@@ -142,7 +142,7 @@ config.Site{API: "./dr/lib/drpy2.min.js", Ext: "./dr/js/360影视.js"}
 - `Site.ExtString()`；`ResolveRelativeURLs` 解析字符串型 `Site.Ext`。
 - `spiderScriptURL(site)`：drpy2 引擎库 + `ext` 为 `.js` 时用 `ext`。
 - 改进错误提示：区分「引擎库被当成站点脚本」与「真正的 ESM 语法」。
-- **验收**：`360影视.js` / `ddys.js` 通过 `Spider` Provider 加载；单元测试覆盖
+- **验收**：`某影视站.js` / `ddys.js` 通过 `Spider` Provider 加载；单元测试覆盖
   选源逻辑；`go test ./...` 全绿。
 
 ### M7.2 ESM 加载器（3–5 天）
@@ -150,7 +150,7 @@ config.Site{API: "./dr/lib/drpy2.min.js", Ext: "./dr/js/360影视.js"}
 - 语法扫描/改写、模块解析、缓存、IIFE、UMD。
 - 内置 cheerio / crypto-js（MIT）；`assets://` 映射。
 - `__jsEvalReturn` 提升。
-- **验收**：`聚合短剧.js`、`lf_search3_min.js` 加载成功；单元测试覆盖
+- **验收**：`某短剧站.js`、`lf_search3_min.js` 加载成功；单元测试覆盖
   default/named/namespace/side-effect、export 四种形态、Unicode 标识符、
   混淆字符串、IIFE 隔离、UMD。
 
@@ -165,7 +165,7 @@ config.Site{API: "./dr/lib/drpy2.min.js", Ext: "./dr/js/360影视.js"}
 
 - drpy2：真实配置的 `api=drpy2.min.js` + `ext=站点.js`，跑通分类/列表/
   搜索/详情/播放。
-- ESM：`聚合短剧` / `荐片` / `lf_search3_min` 至少各 1 个真实站点。
+- ESM：`某短剧站` / `荐片` / `lf_search3_min` 至少各 1 个真实站点。
 - 记录到 `docs/2026-10-17-m7-acceptance.md`。
 
 ## 6. 非目标
@@ -187,8 +187,8 @@ config.Site{API: "./dr/lib/drpy2.min.js", Ext: "./dr/js/360影视.js"}
 | cheerio.min.js | 官方 npm `cheerio@1.0.0-rc.12`，esbuild 0.25.0 打包 | MIT；bundle 内 parse5/htmlparser2/domutils/css-select 等为 MIT/BSD-2/ISC | 可内置，附 LICENSE.cheerio.txt + LICENSE.bundled-deps.txt |
 | crypto-js.js | brix/crypto-js | MIT（GitHub 标 NOASSERTION，需附原文） | 可内置，附 LICENSE |
 | cat.js | FongMi/TV `quickjs/src/main/assets/js/lib/cat.js` | GPL-3.0 | **不内置**，用自有 shim |
-| 模板.js | hjdhnx/drpy | 未声明 | 不内置；需要时运行时抓取或自实现 |
-| gbk.js | hjdhnx/drpy | 未声明 | 不内置；需要时运行时抓取或自实现 |
+| 模板.js | 某规则仓库/drpy | 未声明 | 不内置；需要时运行时抓取或自实现 |
+| gbk.js | 某规则仓库/drpy | 未声明 | 不内置；需要时运行时抓取或自实现 |
 | 站点脚本 | 各配置源 | 各作者 | 运行时下载，不随 UnBox 分发 |
 
 ## 8. 风险与对策
@@ -205,8 +205,8 @@ config.Site{API: "./dr/lib/drpy2.min.js", Ext: "./dr/js/360影视.js"}
 
 ## 9. 证据附录
 
-- 真实脚本样本：`360影视.js`、`ddys.js`、`apple.js`、`荐片.js`、
-  `聚合短剧.js`、`bili_open.js`、`lf_search3_min.js`、`drpy2.min.js`。
+- 真实脚本样本：`某影视站.js`、`ddys.js`、`apple.js`、`荐片.js`、
+  `某短剧站.js`、`bili_open.js`、`lf_search3_min.js`、`drpy2.min.js`。
 - 当前引擎测试结果见 §2.1；原型结果见 §2.2。
 - REA：`analyze_javascript_application`（8 文件、89,251 AST 节点、0 parse
   failure；父证据 `ev_f209f5b7…`，摘要 `ev_91da9fc2…`）。

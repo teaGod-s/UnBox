@@ -8,17 +8,17 @@ import (
 	"testing"
 )
 
-// wangouRuleHTML 模拟 wangou 的模块化页面：分类列表（title 属性在 a 上、
+// 某影视源RuleHTML 模拟 某影视源 的模块化页面：分类列表（title 属性在 a 上、
 // 图片 data-src、广告项混入）、详情页（多演员/多段简介/线路/选集）。
-const wangouRuleHTML = `<html><body>
+const 某影视源RuleHTML = `<html><body>
 <div class="module-items">
   <div class="module-item"><a title="片名A" href="/d/1.html"><div class="module-item-pic"><img data-src="/img/a.jpg"></div><div class="module-item-text">更新至12集</div></a></div>
   <div class="module-item"><a title="片名B" href="/d/2.html"><div class="module-item-pic"><img data-src="/img/b.jpg"></div><div class="module-item-text">全20集</div></a></div>
-  <div class="module-item">饭太硬推广</div>
+  <div class="module-item">某推荐源推广</div>
 </div>
 </body></html>`
 
-const wangouDetailHTML = `<html><body>
+const 某影视源DetailHTML = `<html><body>
 <div class="video-info-main">
   <div class="video-info-actor">主演：张甲</div>
   <div class="video-info-actor">主演：李乙</div>
@@ -34,21 +34,21 @@ const wangouDetailHTML = `<html><body>
 </div>
 </body></html>`
 
-// wangouSearchHTML 模拟搜索结果列表（.module-search-item 结构）。
-const wangouSearchHTML = `<html><body>
+// 某影视源SearchHTML 模拟搜索结果列表（.module-search-item 结构）。
+const 某影视源SearchHTML = `<html><body>
 <div class="module-items">
   <div class="module-search-item"><h3><a href="/d/1.html">片名A</a></h3><img class="lazyload" data-src="/img/a.jpg"><div class="video-info"><a>更新A</a></div></div>
 </div>
 </body></html>`
 
-// wangouRule 与 /tmp/xyq/wangou.json 同字段集合。
-func wangouRule(base string) *XYQ {
+// 某影视源Rule 与 /tmp/xyq/某影视源.json 同字段集合。
+func 某影视源Rule(base string) *XYQ {
 	return &XYQ{
 		HomeURL:         base,
 		CategoryURL:     base + "/vodshow/{cateId}--{by}------{catePg}---{year}.html",
 		CategoryNames:   "电影&剧集",
 		CategoryIDs:     "1&2",
-		CategoryArray:   ".module-items&&.module-item:not(:matches(饭太硬|公众号))",
+		CategoryArray:   ".module-items&&.module-item:not(:matches(某推荐源|公众号))",
 		CatTitle:        "a&&title",
 		CatLink:         "a&&href",
 		CatPic:          ".module-item-pic&&img&&data-src",
@@ -79,28 +79,28 @@ func xyqFixture(t *testing.T) (*XYQHikerEngine, *httptest.Server) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.Contains(r.URL.Path, "vodsearch"):
-			_, _ = w.Write([]byte(wangouSearchHTML))
+			_, _ = w.Write([]byte(某影视源SearchHTML))
 		case strings.Contains(r.URL.Path, "vodshow"):
-			_, _ = w.Write([]byte(wangouRuleHTML))
+			_, _ = w.Write([]byte(某影视源RuleHTML))
 		case strings.Contains(r.URL.Path, "detail1") || strings.Contains(r.URL.Path, "detail2"):
-			_, _ = w.Write([]byte(wangouDetailHTML))
+			_, _ = w.Write([]byte(某影视源DetailHTML))
 		default:
-			_, _ = w.Write([]byte(wangouRuleHTML))
+			_, _ = w.Write([]byte(某影视源RuleHTML))
 		}
 	})
 	srv := httptest.NewServer(mux)
-	return NewXYQHikerEngine(wangouRule(srv.URL), NewClient(nil)), srv
+	return NewXYQHikerEngine(某影视源Rule(srv.URL), NewClient(nil)), srv
 }
 
-// 解析真实规则（wangou 是 JSONC：带 // 注释）。
+// 解析真实规则（某影视源 是 JSONC：带 // 注释）。
 func TestParseXYQJSONC(t *testing.T) {
 	const raw = `{
-  "规则名": "玩偶哥哥",
+  "规则名": "某影视站",
   // "DEBUG":"1",
   "分类名称": "电影&剧集",
   "分类名称替换词": "1&2",
   "分类链接": "https://wogg.net/vodshow/{cateId}--{by}------{catePg}---{year}.html",
-  "分类列表数组规则": ".module-items&&.module-item:not(:matches(饭太硬|公众号))"
+  "分类列表数组规则": ".module-items&&.module-item:not(:matches(某推荐源|公众号))"
 }`
 	r, err := ParseXYQ([]byte(raw))
 	if err != nil {
@@ -200,8 +200,8 @@ func TestXYQDetail(t *testing.T) {
 	}
 }
 
-// 无选集时应保留线路名（wangou 的 :matches 过滤条件与页面分享链接格式不符）。
-// 选集规则全部不匹配时不能连线路名一起清空（wangou 的 :matches 过滤条件
+// 无选集时应保留线路名（某影视源 的 :matches 过滤条件与页面分享链接格式不符）。
+// 选集规则全部不匹配时不能连线路名一起清空（某影视源 的 :matches 过滤条件
 // 与页面分享链接格式不符就是这种情形）。
 func TestXYQDetailKeepsSourcesWhenNoEpisodes(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -258,7 +258,7 @@ func TestXYQDetailMarkedExtraction(t *testing.T) {
 	}
 }
 
-// JSON 响应（yingsou 模式）：搜索截取模式 0，列表数组/标题/链接是 JSON 路径，
+// JSON 响应（某搜索源 模式）：搜索截取模式 0，列表数组/标题/链接是 JSON 路径，
 // POST 请求体里 {wd} 替换。
 func TestXYQSearchJSONResponse(t *testing.T) {
 	var gotBody, gotMethod, gotCT string

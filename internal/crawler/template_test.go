@@ -186,7 +186,7 @@ func TestDrpyPlayURLTemplate(t *testing.T) {
 	}
 }
 
-// 听海/库里等音乐规则的 playerContent 返回 {url:[清晰度,地址,...]} 数组
+// 某音乐源/另一音乐源等音乐规则的 playerContent 返回 {url:[清晰度,地址,...]} 数组
 // （多清晰度列表）。VodPlay 应从数组里取第一个真实媒体地址，而不是因
 // 数组无法解码为 string 而报错（否则 Resolve 把 rid 裸 ID 当播放地址）。
 func TestDrpyPlayArrayURL(t *testing.T) {

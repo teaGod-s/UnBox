@@ -9,7 +9,7 @@
 ## 2. 数据来源（方案 B3）
 
 - 榜单数据由**离线导出脚本**生成 JSON，发布在仓库 raw 地址（常量可改）：
-  `https://raw.githubusercontent.com/teaGod-s/UnBox/master/docs/donors.json`
+  `https://raw.example.com/teaGod-s/UnBox/master/docs/donors.json`
 - **凭据不进入客户端**：爱发电 OpenAPI 需要 `user_id` + `token` 签名，这两个值只在本机通过环境变量
   （`AFDIAN_USER_ID` / `AFDIAN_TOKEN`）提供给导出脚本，不写入仓库、不编进应用。
 - 应用侧：**远程拉取优先 → 写本地缓存 → 失败回退内置快照**，界面始终有内容。

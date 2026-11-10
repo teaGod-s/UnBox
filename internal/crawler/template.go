@@ -387,7 +387,7 @@ func decodeActionValue(value goja.Value, target any) error {
 
 // playURLFromEnvelope 提取 play()/playerContent() 返回信封里的播放地址。
 //
-// 绝大多数规则返回 {url:"https://..."} 单字符串；音乐类规则（听海/库里等）
+// 绝大多数规则返回 {url:"https://..."} 单字符串；音乐类规则（某音乐源/另一音乐源等）
 // 返回 {url:["FLAC无损","https://...","HQ高品质","https://...",...]} 的
 // 多清晰度数组。数组形态按「标签/地址交替」约定，取第一个 http(s) 地址，
 // 不能因数组无法解码为 string 而整体报错。
@@ -543,7 +543,7 @@ func exportDetail(value goja.Value) (*Detail, error) {
 
 // lenientDetailFromJSON 把详情 JSON 解成 Detail，兼容三种信封形态：
 // 数组、{list:[…]}、字段直铺。JS 脚本（二级 js:）常把数字直接赋给字符串字段
-// （如博看听书 `VOD.vod_name = data.list[0].id`，id=5690048），直接 json.Unmarshal
+// （如某听书源 `VOD.vod_name = data.list[0].id`，id=5690048），直接 json.Unmarshal
 // 到 Detail 的 string 字段会报 "cannot unmarshal number"。JS 语义里 number 赋给
 // string 字段本应转成十进制字符串，这里先递归把数字值规范化再解码。
 // 返回 flow 非空表示解析失败（错误说明）。
@@ -573,7 +573,7 @@ func lenientDetailFromJSON(b []byte) (*Detail, string) {
 
 // coerceDetailNumbers 把 JSON 里所有 JSON 数字转成字符串值（保持十进制，无科学计数法）。
 //
-// 详情字段在 JS 语义里基本是字符串；脚本给字符串字段赋数字（博看听书 id）时，
+// 详情字段在 JS 语义里基本是字符串；脚本给字符串字段赋数字（某听书源 id）时，
 // 规范化后 json.Unmarshal 到 string 字段才能成功。整数字符串不经过 float64 中转，
 // 直接用 []byte 文本，避免 9000000000000 这类大整数丢精度。
 func coerceDetailNumbers(b []byte) []byte {
@@ -616,7 +616,7 @@ func joinURL(host, path string) string {
 	}
 	base, err := url.Parse(host)
 	if err != nil {
-		// 规则 host 可能是 URL 编码混淆形式（芒果 `https://pianku.api.%6d%67%74%76.com`，
+		// 规则 host 可能是 URL 编码混淆形式（某影视源 `https://api.example.com`，
 		// `%6d%67%74%76`=mgtv）：Go 的 url.Parse 对 host 段的 %XX 报 invalid URL
 		// escape。此时把 host 段解码后再解析，否则解析失败返回相对路径，请求会被
 		// resolveRequestURL 打到脚本基址 → 站点反爬/空响应。

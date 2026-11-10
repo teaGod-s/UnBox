@@ -27,7 +27,7 @@
 - **M5.3 dr_py 方言适配已完成**（已合入 master，merge commit `4aa0367a`）：
   - 支持 `var rule` 的 `class_parse`、`url`/`searchUrl` 占位、`muban` 覆盖、`json:`/`js:` 内联规则、`lazy` 和 GBK 解码。
   - 保留 M5.1 FongMi `export default` 动作分发路径，并补齐真实 dr_py 常用的 `fetch`/`request`/`fetch_params`、`buildUrl`、`urlDeal`、`print` 语义。
-  - 公开 `hjdhnx/dr_py` 的 `360影视.js` 真实验收通过：分类 4 个、一级列表 35 条、搜索“重器” 8 条、详情与播放地址解析成功。
+  - 公开 `某规则仓库/dr_py` 的 `某影视站.js` 真实验收通过：分类 4 个、一级列表 35 条、搜索“重器” 8 条、详情与播放地址解析成功。
   - 代码提交：`c54c23cd`、`30b3cd27`、`69119f3e`、`83bf134d`、`641a0df6`、`94922abd`、`386a7774`、`1be06d6b`、`24c6315b`；真实源校准为 `6274940e`、`77c5d8f3`、`832903e0`。
   - 最终验证：`go test ./... -count=1`、`go vet ./...`、`CGO_ENABLED=1 go build ./...`、`gofmt` 全部通过。
 
@@ -60,10 +60,10 @@
     `docs/superpowers/specs/2026-10-17-unbox-js-esm-drpy2-design.md`、
     `docs/superpowers/plans/2026-10-17-unbox-js-esm-drpy2.md`。
   - **验收结果**（详见 `docs/2026-10-17-m7-acceptance.md`）：三条真实脚本首轮均未跑通
-    完整链路——`360影视.js` 因引擎未实现 `fyfilter` 占位导致列表 URL 非法；
-    `聚合短剧.js` 加载成功但运行时缺 `console`；`lf_search3_min.js` 因
+    完整链路——`某影视站.js` 因引擎未实现 `fyfilter` 占位导致列表 URL 非法；
+    `某短剧站.js` 加载成功但运行时缺 `console`；`lf_search3_min.js` 因
     `maskNonCode` 把正则里的 `//` 当注释、漏改末尾 `export default` 而编译失败。
-    **Task 10 已修复后两处**：注入 `console` shim（`聚合短剧.js` 恢复 9 个分类），
+    **Task 10 已修复后两处**：注入 `console` shim（`某短剧站.js` 恢复 9 个分类），
     并把 `maskNonCode` 升级为识别「正则字面量 / 嵌套模板字面量 / 无空格
     `export default{`」（`lf_search3_min.js` 恢复编译加载）。修复后两条脚本均能加载
     并进入分类阶段，但仍有新暴露的 `setTimeout` 未定义与既有 `fyfilter` 缺口。
@@ -78,11 +78,11 @@
     执行测试。**M7.3 已补齐**：`cat.js` 自有 shim（`Crypto`/`_`/`jinja2`）、
     `gbk.js` shim、drpy2 `fyfilter`/`filter_url` 展开、`init(ext)`/`init(cfg)`
     双形态、UA 常量（`PC_UA` 等）与 `http`/`req` 相对路径解析。
-    `聚合短剧.js` 的 `filterOptions` 解码失败根因是内置 crypto-js 被按 CommonJS
+    `某短剧站.js` 的 `filterOptions` 解码失败根因是内置 crypto-js 被按 CommonJS
     包装执行、未挂 `globalThis.CryptoJS`，已修复（真实脚本可解出筛选表）。
   - **后续补齐**：筛选 UI 已实现（见 AGENTS.md）；`fyfilter`/`filter_url` 展开、
     `cat.js`/`gbk.js` 自有 shim 已落地；2026-10-30 又修掉 drpy2 两个语义缺口
-    （id 字段 `$` 连接与详情拆分、规则脚本函数作用域），`360影视.js` 的搜索→详情→
+    （id 字段 `$` 连接与详情拆分、规则脚本函数作用域），`某影视站.js` 的搜索→详情→
     剧集解析链路现已跑通。
   - **仍待办**：`setInterval` 未注入；上游未声明许可证的 `模板.js` 不随包分发。
     M7 的真实站点覆盖率仍在持续补充。
@@ -146,7 +146,7 @@
     5s→15s、超时错误带 mpv stderr；**无 GPU 的 Linux（WSLg 无 render 权限）自动退回
     `--vo=x11 --hwdec=no`**，修掉 `vo_x11_init: Assertion` 崩溃；切页不再等待暂停 IPC 应答。
   - **drpy 语义对齐**（`f0cab9b5`、`318b4f17`）：列表 id 字段 `a+b` 按 `$` 连接、详情按
-    `$` 拆分 `fyclass`/真实 id（修 360影视「搜得到点不进去」）；规则脚本包 IIFE 执行，
+    `$` 拆分 `fyclass`/真实 id（修 某影视站「搜得到点不进去」）；规则脚本包 IIFE 执行，
     重复打开详情不再撞 `let` 重声明。
   - **播放失败可读性**（`fda0e8cf`）：平台播放页（B站/腾讯/爱奇艺…）提前识别并说明原因，
     准备阶段失败也会自动换下一条线路（修 `switchSource` 用旧 token 比 `isCurrent` 导致
@@ -163,15 +163,15 @@
 
 - **drpy2 / ESM 兼容实现与验收**（2026-10-17）：抽 60+ 个真实 drpy2 `ext` 脚本，
   确认全部是 `var rule`、0 个 import/export；Provider 已改为加载 `ext` 站点规则。
-  真正的 ESM 脚本（`聚合短剧`、`bili_open`、`lf_search3_min`）由新的纯 Go 模块
+  真正的 ESM 脚本（`某短剧站`、`bili_open`、`lf_search3_min`）由新的纯 Go 模块
   加载器处理（改写 import/export + 内置 cheerio/crypto-js + `__jsEvalReturn` 提升）。
-  真实站点验收未全通过：`360影视.js` 缺 `fyfilter` 占位、`聚合短剧.js` 缺 `console`、
+  真实站点验收未全通过：`某影视站.js` 缺 `fyfilter` 占位、`某短剧站.js` 缺 `console`、
   `lf_search3_min.js` 触发“正则被当注释”的掩码限制；详见
   `docs/2026-10-17-m7-acceptance.md`。Task 10 已修复 `console` 与正则/模板掩码，
   Task 11 已补 `setTimeout`/`clearTimeout` shim，Task 12 又修复
   `export async function`、嵌套 `__jsEvalReturn`、drpy2 引擎识别与 ext query，
   并改用官方 MIT cheerio bundle。剩余缺口：M7.3 `cat.js` shim、
-  drpy2 `fyfilter` 展开与 `聚合短剧.js` 的 `filterOptions` 解码。
+  drpy2 `fyfilter` 展开与 `某短剧站.js` 的 `filterOptions` 解码。
 
 - **JAR（`csp_`）兼容调研**（2026-10-17）：下载并逆向 8 个真实 JAR，确认全部为普通
   DEX、无加壳；`jadx` 可读，但 JVM 转换不稳（`dex2jar` + `-noverify` 可跑通 AList，
@@ -368,7 +368,7 @@
   后更新 Repository secret `AFDIAN_TOKEN`（若 `user_id` 同时变化则一并更新
   `AFDIAN_USER_ID`），再手动触发 workflow。轮换后必须同步更新 Secret，否则定时任务会开始失败。
 - 应用按三级链路取得榜单：远端 raw
-  `https://raw.githubusercontent.com/teaGod-s/UnBox/master/docs/donors.json` → `store.kv`
+  `https://raw.example.com/teaGod-s/UnBox/master/docs/donors.json` → `store.kv`
   缓存键 `donations.cache`（TTL 6 小时）→ 内置快照
   `internal/shell/donors_snapshot.json`。网络、HTTP 或 JSON 解析等任何失败都静默降级；
   `donors.yml` 每次刷新和 `release.yml` 打包前都会从 `docs/donors.json` 同步快照。
@@ -461,7 +461,7 @@
   Task 11 已注入同步最小 `setTimeout` shim 与 no-op `clearTimeout`（`setInterval`
   仍未注入）；Task 12 修复 `export async function`、嵌套 `__jsEvalReturn`、drpy2
   引擎库识别/ext query，并替换为官方 MIT cheerio bundle（许可证随包分发）。
-  已补齐：drpy2 `fyfilter`/`filter_url` 展开、`聚合短剧.js` 的 `filterOptions`
+  已补齐：drpy2 `fyfilter`/`filter_url` 展开、`某短剧站.js` 的 `filterOptions`
   解码、M7.3 自有 `cat.js`/`gbk.js` shim、10-30 的 id `$` 语义与规则脚本作用域修复。
   仍待补：`setInterval` shim；上游未声明许可证的 `模板.js`。详见
   `docs/superpowers/specs/2026-10-17-unbox-js-esm-drpy2-design.md`。

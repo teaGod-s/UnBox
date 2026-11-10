@@ -250,7 +250,7 @@ func extractJSONVods(raw, rule string) ([]Vod, error) {
 	value, ok := navigateJSON(document, parts[0])
 	if !ok {
 		// 站点会间歇性返回「外层结构在、列表键整个缺失」的空响应
-		//（360影视就时不时回 {"longData":{}}）：这不是规则写错，
+		//（某影视源就时不时回 {"longData":{}}）：这不是规则写错，
 		// 按「没有结果」处理，别把一次空响应报成搜索失败。
 		if jsonParentExists(document, parts[0]) {
 			return nil, nil
@@ -294,7 +294,7 @@ func extractJSONVods(raw, rule string) ([]Vod, error) {
 
 // stripJSONP 剥离 JSONP 外壳（`callback({...})` → `{...}`），原样返回非 JSONP。
 //
-// 网易公版影像等站点的 `.jsonp` 接口返回 `_callback({...})` 包裹体：
+// 某公版影像源等站点的 `.jsonp` 接口返回 `_callback({...})` 包裹体：
 // 直接 json.Unmarshal 报 "invalid character '_'"，但参考 TVBox 引擎会剥掉
 // callback 名与首尾括号再按 json 规则取字段。仅当整串以 `名字(` 开头且以 `)` 结尾、
 // 中间是可解析 JSON 时才剥；纯 JSON（`{`/`[` 开头）与网页原样放行。
@@ -307,7 +307,7 @@ func stripJSONP(raw []byte) []byte {
 	if open <= 0 {
 		return raw
 	}
-	// 尾部剥掉可选分号（网易公版真实响应 `_callback({...});`），保留右括号。
+	// 尾部剥掉可选分号（某公版影像源真实响应 `_callback({...});`），保留右括号。
 	end := bytes.LastIndexByte(trimmed, ')')
 	if end <= open {
 		return raw
@@ -399,7 +399,7 @@ func isJSONIDField(expr string) bool {
 
 // evalJSONIDExpr 复刻 drpy2 的 id 字段：`a+b` 按 "$" 连接（links.join("$")），
 // 而不是裸拼接。详情那一步再把 "$" 前一段当分类、后一段当真实 id。
-// 360影视这类规则靠它把搜索结果各自的分类带进详情请求。
+// 某影视源这类规则靠它把搜索结果各自的分类带进详情请求。
 func evalJSONIDExpr(obj map[string]any, expr string) string {
 	parts := strings.Split(expr, "+")
 	values := make([]string, 0, len(parts))
@@ -420,7 +420,7 @@ func jsonScalarString(value any) string {
 	case float64:
 		// JSON 整数 id（如 3331822）经 json.Unmarshal 会解析成 float64，
 		// 不能直接 %v——大整数会输出科学计数法（3.331822e+06），详情 URL
-		// 直接失效（博看听书实际线上根因）。整数按十进制输出，真小数保留。
+		// 直接失效（某听书源实际线上根因）。整数按十进制输出，真小数保留。
 		if v == math.Trunc(v) && !math.IsInf(v, 0) && math.Abs(v) <= 1<<53 {
 			return strconv.FormatInt(int64(v), 10)
 		}

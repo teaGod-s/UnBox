@@ -8,19 +8,24 @@ import (
 	"time"
 )
 
-// 真实 tinghai.js 端到端：detail -> play 解真实媒体地址。需联网：
+// 真实音乐源规则端到端：detail -> play 解真实媒体地址。需联网：
+// 规则脚本地址经 SMOKE_RULE_URL 环境变量传入，不硬编码在代码里。
 //
-//	UNBOX_ACCEPTANCE=1 go test ./internal/crawler/ -run TestTinghaiE2E -v
+//	UNBOX_ACCEPTANCE=1 SMOKE_RULE_URL=<规则地址> go test ./internal/crawler/ -run TestTinghaiE2E -v
 func TestTinghaiE2E(t *testing.T) {
 	if os.Getenv("UNBOX_ACCEPTANCE") != "1" {
 		t.Skip("UNBOX_ACCEPTANCE=1 开启")
+	}
+	ruleURL := os.Getenv("SMOKE_RULE_URL")
+	if ruleURL == "" {
+		t.Skip("SMOKE_RULE_URL 未设置，跳过真实规则端到端")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	e := New()
 	e.SetContext(ctx)
-	if err := e.LoadFromURL(ctx, "https://g.blfrp.cn/https://raw.githubusercontent.com/tushen6/Tomorrow/master/JS/tinghai.js"); err != nil {
+	if err := e.LoadFromURL(ctx, ruleURL); err != nil {
 		t.Fatalf("加载脚本失败: %v", err)
 	}
 	if err := e.Init(); err != nil {
@@ -30,7 +35,7 @@ func TestTinghaiE2E(t *testing.T) {
 	if err != nil || len(classes) == 0 {
 		t.Fatalf("分类: %v %v", classes, err)
 	}
-	t.Logf("听海分类[0]=%q (共%d)", classes[0].TypeName, len(classes))
+	t.Logf("某音乐源分类[0]=%q (共%d)", classes[0].TypeName, len(classes))
 
 	// 在分类里找一个歌单并进详情
 	items, err := e.VodCategory(classes[0].TypeID, 1)
@@ -56,7 +61,7 @@ func TestTinghaiE2E(t *testing.T) {
 	src := strings.Split(detail.VodPlayFrom, "$$$")[0]
 	t.Logf("首集 name=%q url=%q", epName, epURL)
 	if !strings.Contains(epURL, "&&") {
-		t.Fatalf("听海剧集 URL 应为 rid&&pic&&pic 形态，得 %q", epURL)
+		t.Fatalf("某音乐源剧集 URL 应为 rid&&pic&&pic 形态，得 %q", epURL)
 	}
 
 	playURL, err := e.VodPlay(src, epURL)

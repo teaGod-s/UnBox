@@ -2,9 +2,10 @@ package crawler
 
 import "testing"
 
-// rule.Host 可能出现 URL 编码形式（芒果规则写 `https://pianku.api.%6d%67%74%76.com`，
-// `%6d%67%74%76`=mgtv）。Go 的 url.Parse 对 host 里的 %XX 报 invalid URL escape，
-// joinURL 若解析失败就返回相对路径，请求被 resolveRequestURL 打到脚本基址 → 站点反爬/空响应。
+// rule.Host 可能出现 URL 编码形式（某影视源规则把 host 段用 %XX 编码，
+// 如 `pianku.api.%6d%67%74%76.com` 实为 `pianku.api.mgtv.com`）。Go 的
+// url.Parse 对 host 里的 %XX 报 invalid URL escape，joinURL 若解析失败就返回
+// 相对路径，请求被 resolveRequestURL 打到脚本基址 → 站点反爬/空响应。
 // joinURL 必须能解码编码 host 并拼出正确绝对 URL。
 func TestJoinURLEncodedHost(t *testing.T) {
 	cases := []struct {

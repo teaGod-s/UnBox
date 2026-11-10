@@ -10,7 +10,7 @@ import (
 
 // jsoup 选择器引擎：实现 XYQHiker 规则用到的 JSoup 链式子集。
 //
-// 规则形如 ".module-items&&.module-item:not(:matches(饭太硬|公众号))"，
+// 规则形如 ".module-items&&.module-item:not(:matches(某推荐源|公众号))"，
 // 以 && 分段，每段是一个选择器步或取值步：
 //
 //   - 选择器步：如 .module-item-pic、img、a。支持 goquery 的 CSS 子集，
@@ -342,7 +342,7 @@ func selectionWrap(sel []*goquery.Selection) *goquery.Selection {
 //
 // goquery（cascadia）能解析 `a[href^="#playlist"]`，但对 `a[href^=#playlist]`
 // （值以 # 开头且未加引号）解析失败返回空集——`#` 会被当作非法字符。
-// 真实 JSoup 规则（如看影网线路列表 array "body&&a[href^=#playlist]"）
+// 真实 JSoup 规则（如某影视源线路列表 array "body&&a[href^=#playlist]"）
 // 常写不带引号的形态，须在交给 goquery 前规范化：`[attr^=value]` →
 // `[attr^="value"]`，但已带引号（含引号内的合/引号）的保持原样。
 func normalizeAttrSelector(sel string) string {

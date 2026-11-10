@@ -81,8 +81,8 @@ func (e *Engine) installHelpers() {
 	}
 	_ = e.vm.Set("fetch", fetch)
 	_ = e.vm.Set("request", fetch)
-	// jsp 是 drpy2 脚本的 jQuery 风格选择器 shim：极多脚本（百忙无果、芒果、
-	// 博看听书等）在详情/解析里写 `pdfh=jsp.pdfh; pdfa=jsp.pdfa; pd=jsp.pd;`。
+	// jsp 是 drpy2 脚本的 jQuery 风格选择器 shim：极多脚本（某影视源、某影视源、
+	// 某听书源等）在详情/解析里写 `pdfh=jsp.pdfh; pdfa=jsp.pdfa; pd=jsp.pd;`。
 	// 三个函数都是 (html, selector) → 结果：pdfh 取第一个匹配值（字符串），
 	// pdfa 返回全部匹配值（数组），pd 同 pdfh 取第一个。选择器语法与 evalRule
 	// 完全一致（p:eq(3)、&&Text、&&Html、&&src、data-* 等）。
@@ -93,7 +93,7 @@ func (e *Engine) installHelpers() {
 	})
 	// setResult 是 drpy2 FongMi 脚本详情/搜索动作的收尾原语：接收播放项数组
 	// [{title,url,...}]，在 VOD.vod_play_url 为空时按 title$url（# 连接）兜底
-	// 生成。百忙无果等脚本手动设置 VOD.vod_play_url 后仍会调 setResult(d)，
+	// 生成。某影视源等脚本手动设置 VOD.vod_play_url 后仍会调 setResult(d)，
 	// 已有值时不再覆盖（保持脚本既设值优先）。
 	_ = e.vm.Set("setResult", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {

@@ -24,7 +24,7 @@ UnBox 此前将其判定为「编译 dex，纯 Go 不可行」并整类排除（
 
 ### 2.1 样本与配置
 
-聚合源（`https://gh-proxy.com/https://raw.githubusercontent.com/noimank/tvbox/main/tvboxmuti.json`）
+聚合源（`https://某反代/https://raw.example.com/某规则仓库/tvbox/main/某多线聚合.json`）
 展开后 14 个下游配置：7 个是 JSON（5 个可严格解析，2 个带 `//` 注释）、
 3 个是 HTML/反爬页、2 个是加密十六进制、1 个 404、1 个空响应。
 在 5 个可严格解析的配置中，可统计的 646 个站点里：
@@ -231,7 +231,7 @@ config.Site{API:csp_XBPQ, Ext:"./XBPQ/x.json"}
 
 ## 8. 证据附录
 
-- 聚合源配置：`tvboxmuti.json`（14 个下游 URL）。
+- 聚合源配置：`某多线聚合.json`（14 个下游 URL）。
 - 8 个 JAR 的 SHA-256：
   `9cd4cea8…`（candymuj）、`f19afc0f…`（fongmi）、`646c5449…`（gao）、
   `2faba4b3…`（hecheng）、`0e622ce7…`（pg）、`c81eedda…`（xs）、

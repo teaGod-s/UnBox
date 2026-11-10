@@ -185,7 +185,7 @@ func (e *XYQHikerEngine) Browse(ctx context.Context, cat string, page int) (prov
 		return provider.Page{}, err
 	}
 	// 分类截取模式 "0"：JSON 响应，列表数组是 JSON 路径，字段是 JSON 键。
-	// （如戏曲多多 getcollabellist: list/name/ddurl/pic，此前缺失此分支导致
+	// （如某站点 getcollabellist: list/name/ddurl/pic，此前缺失此分支导致
 	// Browse 恒为 0 项）
 	if e.rule.CategoryMode == "0" {
 		items, jerr := e.parseJSONItemsFields(raw,
@@ -250,7 +250,7 @@ func splitMethodSuffix(raw string) (url string, post bool) {
 
 func (e *XYQHikerEngine) Detail(ctx context.Context, id string) (Vod, error) {
 	// 分类/搜索给出的链接可能本身就是可播放媒体（JSON 截取模式的
-	// 分类片单链接直接是 mp4/m3u8 直链，如戏曲多多 ddurl），或规则声明
+	// 分类片单链接直接是 mp4/m3u8 直链，如某站点 ddurl），或规则声明
 	// 链接是否直接播放=是。此时不能再去 fetch（会把整个视频下载回来，
 	// 4MB+ 直接超限报错），应直接作为可播放剧集返回。
 	if looksLikeMediaURL(id) || isDirectPlayOn(e.rule.DirectPlay) {
@@ -273,7 +273,7 @@ func (e *XYQHikerEngine) Detail(ctx context.Context, id string) (Vod, error) {
 	name := firstNonEmpty(h1Text(raw), titleTag(raw))
 	pic := ""
 	// 详情页海报优先按「分类片单图片」规则在整页提取（真实 XYQHiker 站点的
-	// 详情页复用列表图片字段，如去看吧动漫的 ".fed-list-pics&&data-original"），
+	// 详情页复用列表图片字段，如某动漫站的 ".fed-list-pics&&data-original"），
 	// 而不是硬编码某个站点特有结构。
 	if strings.TrimSpace(e.rule.CatPic) != "" {
 		if vals := jsoupExtractFirst(doc, e.rule.CatPic); len(vals) > 0 && vals[0] != "" {
@@ -371,8 +371,8 @@ func (e *XYQHikerEngine) Resolve(ctx context.Context, epURL string) (player.Stre
 }
 
 // cipherCloudFrom 判断播放页是否为「url 密文 + 云播源」的加密链路。
-// dev云播（vxdev）、vx云播（xgvxcd）等 player_aaaa.url 是密文，靠第三方
-// 云解析（yun.92cj.com 等）+ 混淆 JS 换取真实 m3u8。能识别出 from 时返回
+// dev云播（某云播源）、vx云播（某云播源）等 player_aaaa.url 是密文，靠第三方
+// 云解析（example.com 等）+ 混淆 JS 换取真实 m3u8。能识别出 from 时返回
 // 源名（以给出明确报错），否则返回空串。
 func cipherCloudFrom(page string) string {
 	// 只认 MacPlayer 播放器里的 url 字段，避免误配普通页面 JSON。
@@ -389,7 +389,7 @@ func cipherCloudFrom(page string) string {
 }
 
 // macPlayerField 提取 MacPlayer 播放器变量（player_aaaa）里的字段值。
-// 播放器 JSON 用 {\"flag\":\"play\",\"url\":\"...\",\"from\":\"vxdev\"...}
+// 播放器 JSON 用 {\"flag\":\"play\",\"url\":\"...\",\"from\":\"某云播源\"...}
 // 结构，值可能带 \\/ 转义。定位 field\\":\\" 之后到下一个 \\" 为止。
 func macPlayerField(page, field string) string {
 	marker := `"` + field + `":"`
@@ -719,7 +719,7 @@ func reverseStrings(s []string) {
 }
 
 // xyqReverseEnabled 判断「是否反转选集序列」是否为真值。
-// 真实规则取值是 0/1/否/是 的混合（动漫巴士/七新影视/农民影视写 "1"），
+// 真实规则取值是 0/1/否/是 的混合（某动漫站/某影视站/某影视站写 "1"），
 // 不能只认「是」——它代表页面按最新在前降序，需要翻转为升序展示。
 func xyqReverseEnabled(v string) bool {
 	switch strings.ToLower(strings.TrimSpace(v)) {

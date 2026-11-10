@@ -873,7 +873,7 @@ func TestCheckSubscriptionContentRejectsWebPage(t *testing.T) {
 	}
 }
 
-// 真实场景（如饭太硬 `http://www.饭太硬.cc/tv`）：URL 实际返回一张 100×100
+// 真实场景（如某推荐源 `http://www.某推荐源.cc/tv`）：URL 实际返回一张 100×100
 // 的 JPEG 图片而非订阅配置。旧实现没有二进制识别，图片既不命中网页嗅探，
 // 又被 isPlaylist 当作 TXT 播放列表，于是点播导入误报「直播播放列表」、
 // 直播导入误报「没有可用频道」——两个互相矛盾的错误。
@@ -966,9 +966,9 @@ func TestRestoreSubscriptionResolvesRelativeURLs(t *testing.T) {
 
 	// 直接构造「带相对 api/ext 的终端配置」，模拟旧版把它原样存进快照。
 	cfgs := []*config.Config{{
-		SourceURL: "https://gh-proxy.com/raw.githubusercontent.com/noimank/tvbox/main/tvbox.json",
+		SourceURL: "https://gh-proxy.com/raw.githubusercontent.com/repo-a/tvbox/main/tvbox.json",
 		Sites: []config.Site{
-			{Key: "drpy", Name: "drpy站", Type: config.SiteTypeSpider, API: "./lib/drpy2.min.js", Ext: "./js/聚合短剧.js"},
+			{Key: "drpy", Name: "drpy站", Type: config.SiteTypeSpider, API: "./lib/drpy2.min.js", Ext: "./js/site-a.js"},
 			{Key: "cms", Name: "CMS站", Type: config.SiteTypeCMS, API: "http://x/api.php"},
 		},
 		Lives: config.LiveList{{Name: "g1", URL: "./list.txt"}},
@@ -988,12 +988,12 @@ func TestRestoreSubscriptionResolvesRelativeURLs(t *testing.T) {
 	if !ok {
 		t.Fatalf("恢复后 drpy 应为 Spider，实际 %T", svc2.vods["drpy"])
 	}
-	const wantScript = "https://gh-proxy.com/raw.githubusercontent.com/noimank/tvbox/main/js/聚合短剧.js"
+	const wantScript = "https://gh-proxy.com/raw.githubusercontent.com/repo-a/tvbox/main/js/site-a.js"
 	if got := sp.ScriptURL(); got != wantScript {
 		t.Fatalf("恢复后脚本地址 = %q，期望 %q", got, wantScript)
 	}
 	if len(svc2.liveSources) != 1 ||
-		svc2.liveSources[0].URL != "https://gh-proxy.com/raw.githubusercontent.com/noimank/tvbox/main/list.txt" {
+		svc2.liveSources[0].URL != "https://gh-proxy.com/raw.githubusercontent.com/repo-a/tvbox/main/list.txt" {
 		t.Fatalf("恢复后直播源 = %+v", svc2.liveSources)
 	}
 }

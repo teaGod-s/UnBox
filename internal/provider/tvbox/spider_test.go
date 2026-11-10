@@ -75,8 +75,8 @@ func TestSpiderScriptURL(t *testing.T) {
 	}{
 		{
 			name: "drpy2 用 ext",
-			site: config.Site{API: "https://x/dr/lib/drpy2.min.js", Ext: "https://x/dr/js/360影视.js"},
-			want: "https://x/dr/js/360影视.js",
+			site: config.Site{API: "https://x/dr/lib/drpy2.min.js", Ext: "https://x/dr/js/某影视源.js"},
+			want: "https://x/dr/js/某影视源.js",
 		},
 		{
 			name: "带 query 的 drpy2 用 ext",

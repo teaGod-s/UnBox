@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// 八仙源完整冒烟：`a?id=1` → 主仓库 d.php → 23 条线路 b.php?id=N（内容为
+// 某聚合源源完整冒烟：`a?id=1` → 主仓库 d.php → 23 条线路 b.php?id=N（内容为
 // `\njhSPAyzn**e` 前缀 + base64 编码的站点配置）→ 每条线路的站点逐个
 // Home/Browse/Search 冒烟，统计引擎 bug / 站点侧 / 可播。
 //
@@ -70,7 +70,7 @@ func TestSmokeBaxianFull(t *testing.T) {
 		t.Logf("线路 %s 站点 %d 个", name, len(sites))
 		all = append(all, sites...)
 	}
-	t.Logf("八仙源全部站点共 %d 个（线路解码失败 %d 条）", len(all), failed)
+	t.Logf("某聚合源源全部站点共 %d 个（线路解码失败 %d 条）", len(all), failed)
 
 	// 去重（不同线路可能有同名同 api 站点）
 	var dedup []smokeSite
@@ -91,7 +91,7 @@ func TestSmokeBaxianFull(t *testing.T) {
 		}
 		return
 	}
-	runSmoke(t, "八仙源", dedup)
+	runSmoke(t, "某聚合源源", dedup)
 }
 
 // baxianField 从配置文本里提取首个命名字段。
@@ -104,7 +104,7 @@ func baxianField(raw, pattern string) string {
 	return m[1]
 }
 
-// encodeQuery 把 URL 的查询参数按 UTF-8 编码（主仓库 ?b=八仙 的中文参数
+// encodeQuery 把 URL 的查询参数按 UTF-8 编码（主仓库 ?b=某聚合源 的中文参数
 // 不编码会收到 HTTP 400）。
 func encodeQuery(raw string) string {
 	u, err := url.Parse(raw)
@@ -116,7 +116,7 @@ func encodeQuery(raw string) string {
 	return u.String()
 }
 
-// baxianDecode 解开八仙线路的 base64 封装。线路体统一为
+// baxianDecode 解开某聚合源线路的 base64 封装。线路体统一为
 // `\njhSPAyzn**e`（`\n` + 8 字符 + `**` = 11 字节前缀，其后紧跟 base64，
 // 该 11 字节不含 base64 首字符，base64 从第 11 字节起）后接**带 padding 的
 // 标准 base64**（StdEncoding）。部分线路 base64 段内已含 padding。

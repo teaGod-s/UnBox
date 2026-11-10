@@ -143,7 +143,7 @@ func normalizeModuleSource(src string) string {
 //
 // 规则脚本普遍以 `let html=...` / `const x=...` 开头，而引擎按站点复用同一个
 // VM：第二次执行同一条脚本时，顶层 let/const 会撞上
-// "Identifier 'html' has already been declared"（360影视详情第二次就报这个）。
+// "Identifier 'html' has already been declared"（某影视源详情第二次就报这个）。
 // drpy2 用函数内的直接 eval 执行规则，let/const 天然不落到全局；这里用 IIFE
 // 还原同样的作用域，同时把脚本想交回的 input / VOD 作为返回值带出来
 // （脚本也常用 `var input = ...`，那种写法只活在函数作用域里，靠全局读不到）。

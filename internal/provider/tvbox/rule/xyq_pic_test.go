@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// 动漫巴士：分类片单图片 ".lazy&&data-bg"，data-bg 属性必须在取值属性表里。
+// 某动漫站：分类片单图片 ".lazy&&data-bg"，data-bg 属性必须在取值属性表里。
 func TestXYQBrowseDataBG(t *testing.T) {
 	const page = `<html><body><div class="v_list">
 <li><div class="lazy" data-bg="https://cdn.example.com/pic/a.jpg"></div><a title="甲" href="/d/1.html">甲</a></li>
@@ -35,7 +35,7 @@ func TestXYQBrowseDataBG(t *testing.T) {
 	}
 }
 
-// 去看吧动漫：详情页海报按「分类片单图片」规则提取。
+// 某动漫站：详情页海报按「分类片单图片」规则提取。
 // 真实结构为 <a class="fed-list-pics" data-original="...">，data-original 在 a 自身。
 func TestXYQDetailPicFromRule(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

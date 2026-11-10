@@ -116,7 +116,7 @@ func TestExtractDetailJSFetchReturnsContent(t *testing.T) {
 // drpy2 的列表规则里，id 字段写 `a+b` 时是 links.join("$")（源码 search/一级 两处），
 // 不是裸拼接：详情那一步会把 "$" 前一段当分类（fyclass）、后一段当真实 id。
 // 裸拼接会让 ?cat=fyclass&id=fyid 这类规则拿到「分类+id 粘在一起」的串，
-// 站点直接拒绝（360影视就是这么挂的：data 为 null，详情 JS 报 title of undefined）。
+// 站点直接拒绝（某影视源就是这么挂的：data 为 null，详情 JS 报 title of undefined）。
 func TestJSONListJoinsIDFieldWithDollar(t *testing.T) {
 	raw := `{"data":{"rows":[{"cat_id":"1","en_id":"abc","titleTxt":"忍者神龟","cover":"c","cat_name":"电影","description":"d"}]}}`
 	vods, err := extractJSONVods(raw, "json:data.rows;titleTxt;cover;cat_name;cat_id+en_id;description")

@@ -32,7 +32,7 @@ go test ./internal/provider/tvbox -count=1
 
 ## 真实规则验收
 
-规则：`https://raw.githubusercontent.com/yw88075/tvbox/main/XBPQ/6080.json`
+规则：`https://raw.example.com/某规则仓库/tvbox/main/XBPQ/6080.json`
 （README 中给出的 XBPQ 示例，2026-11-03 抓取）。
 
 ```text
@@ -52,15 +52,15 @@ browse: Get "https://www.6080yy1.com/vodshow/1--------1---.html": EOF
 
 ## 真实聚合源验收（2026-11-03）
 
-源：`https://gh-proxy.com/https://raw.githubusercontent.com/noimank/tvbox/main/tvboxmuti.json`
+源：`https://某反代/https://raw.example.com/某规则仓库/tvbox/main/某多线聚合.json`
 
 展开结果：7 个终端配置、743 个站点；其中 `csp_XBPQ` 共 **114 个**，全部是
 M6.1 新增支持范围：
 
 | 线路 | XBPQ 站点数 |
 |---|---:|
-| 🚀1-心魔在线 | 94 |
-| 🚀5-Clun在线 | 20 |
+| 🚀1-某在线源 | 94 |
+| 🚀5-某线路 | 20 |
 
 其余 `csp_` 类（如 `csp_XYQHiker`）仍按「待定」处理，不在 M6.1 范围。
 
@@ -70,13 +70,13 @@ M6.1 新增支持范围：
 
 | 阶段 | 数量 | 说明 |
 |---|---:|---|
-| 列表解析成功 | 1 | 冷曦影视（心魔在线），126 条列表 |
+| 列表解析成功 | 1 | 冷曦影视（某在线源），126 条列表 |
 | 页面无匹配条目 | 34 | 域名停靠 / 反爬页 / JS Cookie 挑战，HTTP 200 但没有影片节点 |
 | 请求失败 | 78 | 连接失败、超时、401/403/404/5xx 等站点侧问题 |
-| 规则无可展示分类 | 1 | 布卡影视（Clun在线） |
+| 规则无可展示分类 | 1 | 布卡影视（某线路） |
 | 规则解析失败 | 0 | 修复后全部规则可解析 |
 
-### 完整链路（冷曦影视 / 心魔在线）
+### 完整链路（冷曦影视 / 某在线源）
 
 ```text
 sections=5 first=电影(movie)
@@ -94,7 +94,7 @@ stream kind=hls url=https://hn.bfvvs.com/play/dBB849Yd/index.m3u8
 
 ### 本机新增站点清单
 
-心魔在线（94）：FREEOK、大米星球、看一看、朴樱影视、人人筷子、小鸭看看、6080、
+某在线源（94）：FREEOK、大米星球、看一看、朴樱影视、人人筷子、小鸭看看、6080、
 CHNNETFILX、兰花影视、TVB云播、野荷塘、锐行加速、无心影视、极速影院、看剧吧、
 花花、番茄影视、大豆高清、饭团、干饭影视、电影蜜蜂、追剧TU、熊猫影视、ok影院、
 起飞影视、皮皮影视、电影先生、美奇影视、139影视、子子影视、土豪影视、101影视、
@@ -103,11 +103,11 @@ CHNNETFILX、兰花影视、TVB云播、野荷塘、锐行加速、无心影视�
 歪片星球、爱看影院、秋霞影视、西瓜影视、假低端、鸭奈非4K、NIKETV、批哩㕷哩、
 映迷影院、看了么、酷茶影视、野菊花电影网、首播影视、libvio、voflix、兄弟影视、
 落攻阁、莫扎兔、蓝光影院、影渣渣、白嫖影视、圣城影视、冷曦影视、奇优影视、
-音范丝、app影院、全能影视、北川影视、小狗影院、我爱跟剧、四个圈影视、光棍影视、
+某站、某站、某影视站、某站、某站、某站、某站、某站、
 金曼TV、6v电影、91美剧、八戒影院、在线之家、奈落影院、555、万博剧院、久久美剧网、
 人人美剧、米爱影视、美剧天堂、美剧窝、ppxdm动漫。
 
-Clun在线（20）：一帆影视、人人影视、全网看、农民影视、喝茶影视、大白鲨、奇迹影视、
+某线路（20）：一帆影视、人人影视、全网看、农民影视、喝茶影视、大白鲨、奇迹影视、
 小镇影视、布卡影视、星辰影院、来看点播、欧乐影视、毒舌影视、熊猫影视、狐狸君、
 瓜籽影院、秀儿影院、策弛影视、茶杯狐影视、飞快影视。
 
@@ -167,20 +167,20 @@ Clun在线（20）：一帆影视、人人影视、全网看、农民影视、�
 
 ### 真实站点端到端
 
-规则取自已发布的聚合源（`gaotianliuyun/gao`、`xyq254245/xyqonlinerule`）。
+规则取自已发布的聚合源（`某规则仓库/gao`、`某规则仓库/xyqonlinerule`）。
 联网验收：`UNBOX_ACCEPTANCE=1 go test ./internal/provider/tvbox/rule/ -run TestAcceptance -v`
 
 | 站点 | 类名 | 覆盖语法 | 结果 |
 |---|---|---|---|
-| 玩偶哥哥 wogg.net | `csp_XYQHikerAL` | 完整 JSoup（`:not(:matches)`、`||`、`,N`）、线路/选集链 | PASS：6 分类、70 列表项、线路名取出 |
-| 河马短剧 kuaikaw.cn | `csp_XYQHiker` | `[firstPage=` 翻页、`img&&alt` 片名 | PASS：1 分类、10 列表项 |
-| 去看吧动漫 qkan8.com | `csp_XYQHiker` | `:has()` 过滤、JSON 搜索模式 | PASS：7 分类、48 列表项 |
+| 某JSoup站 某站域名 | `csp_XYQHikerAL` | 完整 JSoup（`:not(:matches)`、`||`、`,N`）、线路/选集链 | PASS：6 分类、70 列表项、线路名取出 |
+| 某短剧站 某站域名 | `csp_XYQHiker` | `[firstPage=` 翻页、`img&&alt` 片名 | PASS：1 分类、10 列表项 |
+| 某动漫站 某站域名 | `csp_XYQHiker` | `:has()` 过滤、JSON 搜索模式 | PASS：7 分类、48 列表项 |
 
 其余采样站点因站点侧环境未通过，与引擎无关：
 
-- 影搜 / 哔嘀影视：TLS handshake / 证书链不被本机信任（curl 同失败）；
-- 兔小贝：`/subject/{id}` 规则与站点当前结构不符（HTTP 404）；
-- 低端影视：站点要求访问密码；动漫巴士/农民影视等：DNS / 超时 / 连接失败。
+- 某搜索站 / 某影视站：TLS handshake / 证书链不被本机信任（curl 同失败）；
+- 某儿歌站：`/subject/{id}` 规则与站点当前结构不符（HTTP 404）；
+- 某影视站：站点要求访问密码；某动漫站/农民影视等：DNS / 超时 / 连接失败。
 
 ### 已知限制
 

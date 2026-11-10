@@ -9,7 +9,7 @@ import (
 )
 
 // fixtureHTML 模拟一个典型 JSoup 链式规则站点的布局：
-// 顶部有混入的「饭太硬/公众号」推荐模块（真实 wangou 规则用
+// 顶部有混入的「某推荐源/公众号」推荐模块（真实 某影视源 规则用
 // :not(:matches(...)) 过滤掉），列表项把片名放在 title 属性、图片在 data-src。
 // 另有详情页结构（多演员 / 多段简介），用于 ,N / ,-1 索引测试。
 const fixtureHTML = `<html><head><title>标题</title></head><body>
@@ -17,7 +17,7 @@ const fixtureHTML = `<html><head><title>标题</title></head><body>
   <div class="module-item" sub="1"><a title="片名A" href="/a"><div class="module-item-pic"><img data-src="/pic/a.jpg"></div><div class="module-item-text">更新A</div></a></div>
   <div class="module-item" sub="2"><a title="片名B" href="/b"><div class="module-item-pic"><img data-src="/pic/b.jpg"></div><div class="module-item-text">更新B</div></a></div>
 </div>
-<div class="module-item">饭太硬广告</div>
+<div class="module-item">某推荐源广告</div>
 <div class="module-item">公众号推广</div>
 <div class="video-info-main">
   <div class="video-info-actor">主演：张三</div>
@@ -39,7 +39,7 @@ func jsoupDoc(t *testing.T, html string) *goquery.Document {
 // 且用 :not(:matches(...)) 过滤掉广告项。
 func TestJsoupArrayChain(t *testing.T) {
 	doc := jsoupDoc(t, fixtureHTML)
-	got := jsoupExtractFirst(doc, ".module-items&&.module-item:not(:matches(饭太硬|公众号))")
+	got := jsoupExtractFirst(doc, ".module-items&&.module-item:not(:matches(某推荐源|公众号))")
 	// 应该命中 A、B 两个列表项：广告的 .module-item 全部被滤掉
 	if len(got) != 2 {
 		t.Fatalf("切片数组规则 = %d 项，期望 2：%v", len(got), got)
@@ -76,7 +76,7 @@ func TestJsoupChainText(t *testing.T) {
 	}
 }
 
-// ,1 索引：取第 2 个命中的演员节点再继续（真实 wangou 详情规则）。
+// ,1 索引：取第 2 个命中的演员节点再继续（真实 某影视源 详情规则）。
 func TestJsoupChainIndexSuffix(t *testing.T) {
 	doc := jsoupDoc(t, fixtureHTML)
 	got := jsoupExtractFirst(doc, ".video-info-main&&.video-info-actor,1&&Text")
@@ -85,7 +85,7 @@ func TestJsoupChainIndexSuffix(t *testing.T) {
 	}
 }
 
-// ,-1 索引：负数从末尾数，-1 = 最后一段简介（真实 wangou 详情规则）。
+// ,-1 索引：负数从末尾数，-1 = 最后一段简介（真实 某影视源 详情规则）。
 func TestJsoupChainLastIndex(t *testing.T) {
 	doc := jsoupDoc(t, fixtureHTML)
 	got := jsoupExtractFirst(doc, ".video-info-content&&p,-1&&Text")
@@ -114,7 +114,7 @@ func TestJsoupChainEmptyRule(t *testing.T) {
 // :matches 正过滤：只保留文本匹配的节点。
 func TestJsoupChainMatchesFilter(t *testing.T) {
 	doc := jsoupDoc(t, fixtureHTML)
-	got := jsoupExtractFirst(doc, ".module-item:matches(饭太硬|公众号)")
+	got := jsoupExtractFirst(doc, ".module-item:matches(某推荐源|公众号)")
 	if len(got) != 2 {
 		t.Fatalf(":matches 应命中 2 个广告项，得 %d：%v", len(got), got)
 	}

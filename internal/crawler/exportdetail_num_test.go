@@ -2,7 +2,7 @@ package crawler
 
 import "testing"
 
-// 二级 js: 脚本把数字直接赋给 VOD 的字符串字段（如博看听书
+// 二级 js: 脚本把数字直接赋给 VOD 的字符串字段（如某听书源
 // `VOD.vod_name = data.list[0].id`，id=5690048）时，JSON 里出现数字值，
 // 直接 json.Unmarshal 到 Detail 的 string 字段会报
 // "cannot unmarshal number into Go struct field ... of type string"。

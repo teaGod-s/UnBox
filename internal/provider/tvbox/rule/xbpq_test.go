@@ -54,10 +54,10 @@ func xbpqFixture(t *testing.T) (*XBPQEngine, *httptest.Server) {
 	return NewXBPQEngine(rule, NewClient(nil)), srv
 }
 
-// XBPQ 规则文件是 JSONC：真实文件（养生堂.json 等）里夹着整行
+// XBPQ 规则文件是 JSONC：真实文件（某知识站.json 等）里夹着整行
 // `// "播放链接前缀": "..."` 注释。ParseXBPQ 必须像 ParseXYQ 那样先剥
-// 注释，否则 json.Unmarshal 报 `invalid character '/'`，八仙源
-// csp_XBPQ 站（养生堂/wget.la、jsdmirror 外链）全部加载失败。
+// 注释，否则 json.Unmarshal 报 `invalid character '/'`，某聚合源源
+// csp_XBPQ 站（某知识站/wget.la、jsdmirror 外链）全部加载失败。
 func TestParseXBPQJSONC(t *testing.T) {
 	raw := []byte(`{
     "首页": "0",

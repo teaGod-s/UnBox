@@ -1563,7 +1563,7 @@ Expected: 全部无输出/通过。
 从真实 XBPQ 站点取 1–2 条规则（示例；M6.1 只验证 GET 搜索）：
 
 ```bash
-curl -sSL 'https://raw.githubusercontent.com/yw88075/tvbox/main/XBPQ/6080.json' -o /tmp/6080.json
+curl -sSL 'https://raw.example.com/某规则仓库/tvbox/main/XBPQ/6080.json' -o /tmp/6080.json
 ```
 
 用一个临时 Go 测试或 `go run` 小程序加载规则并调用：

@@ -124,8 +124,8 @@ func filterValueString(value any) string {
 // 支持两种 jinja 形态：
 //   - 纯键 `{{fl.year}}`：键缺失渲染空串（与原行为一致）。
 //   - 「或默认值」`{{fl.year or "all"}}`：键有值用值，键缺失用 or 后的默认值
-//     （去掉引号）。百忙无果等规则的 filter_url 写成 `year={{fl.year or "all"}}`，
-//     不展开会把整段字面量带进请求 → 芒果等站点返回空 JSON。
+//     （去掉引号）。某影视源等规则的 filter_url 写成 `year={{fl.year or "all"}}`，
+//     不展开会把整段字面量带进请求 → 某影视源等站点返回空 JSON。
 func renderFilterTemplate(tmpl string, values map[string]string) string {
 	if !strings.Contains(tmpl, "{{") {
 		return tmpl

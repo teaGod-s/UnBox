@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// MacPlayer 播放页的 url 带 \/ 转义（看影网/360影视等），旧 findMediaURL
+// MacPlayer 播放页的 url 带 \/ 转义（某影视源/某影视源等），旧 findMediaURL
 // 直接匹配不到 → Resolve 把播放页 URL 原样交出，编排层也解析失败，
 // 报「播放页中未找到真实播放地址」。macPlayerURL 应解码转义后取到 m3u8。
 func TestXYQResolveMacPlayerEscapedURL(t *testing.T) {

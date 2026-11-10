@@ -113,7 +113,7 @@ func TestResolverReportsUpstreamStatus(t *testing.T) {
 }
 
 // 平台页面（B站/腾讯/爱奇艺…）的播放页要登录/会员，抓 HTML 拿不到流地址。
-// 360影视的各条线路就是这类链接，早识别早报清楚原因，别白等一次 10s 抓取。
+// 某影视源的各条线路就是这类链接，早识别早报清楚原因，别白等一次 10s 抓取。
 func TestResolverRejectsPlatformPages(t *testing.T) {
 	cases := map[string]string{
 		"https://www.bilibili.com/bangumi/play/ep6584850":           "B站",

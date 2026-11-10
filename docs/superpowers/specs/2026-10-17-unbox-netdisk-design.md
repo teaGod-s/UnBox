@@ -188,9 +188,9 @@ config.Site{API:csp_AList, Ext:"./json/alist.json"}
 - Quark/UC 优先，再 Ali/115；需要 token 设置页、安全存储、直链刷新、代理。
 - 或继续用 AList 兜底，不单独实现。
 
-> **2026-11-08 实测（`csp_Duopan`/八仙 源码）：** 从
+> **2026-11-08 实测（`csp_Duopan`/某聚合源 源码）：** 从
 > `https://xn--cnq85d.52011.top/a?id=1` 抓到的「Duopan.jar」实为 **APK**
-> （签名 `tv.nxog.top_ysc`），`classes.dex` 内为 CatVod spider：
+> （签名 `tv.nxog.example.com_ysc`），`classes.dex` 内为 CatVod spider：
 > `com/github/catvod/spider/{Wogg,Bili,Push,Init}`，用 okhttp3 + gson。
 > 其核心是**多网盘分享解析 SDK**：Quark/UC 走 `drive-pc.quark.cn`/
 > `pc-api.uc.cn/1/clouddrive/file/sort`（需 cookie + shareid），Ali 走
@@ -232,7 +232,7 @@ config.Site{API:csp_AList, Ext:"./json/alist.json"}
 - `pg.jar`：SHA-256 `0e622ce7…`；REA 归档证据 `ev_63cf65ae…`。
 - 类结构：`Wogg extends Push`、`Wobg extends Wogg`、`QuarkShare extends Quark` 等
   （jadx 1.4.7 反编译）。
-- `csp_Duopan`（八仙）实测：APK，`classes.dex` 内 Wogg 调 Quark/Ali/百度/123 盘
+- `csp_Duopan`（某聚合源）实测：APK，`classes.dex` 内 Wogg 调 Quark/Ali/百度/123 盘
   分享 API（okhttp3+gson+AES），见 §M8.4 结论。
 - ext 样本：`gao_alist.json`、`gao_webdav.json`、`candy_alist.json`、
   `token.json`、`*share.txt`（格式见 §2.2/§2.3）。

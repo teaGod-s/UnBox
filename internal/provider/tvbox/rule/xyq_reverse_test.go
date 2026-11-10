@@ -9,7 +9,7 @@ import (
 )
 
 // 是否反转选集序列 的真实取值：0/1/否/是。引擎此前只认「是」，规则写 "1"
-// 的站（动漫巴士/七新影视/农民影视）被忽略反转 → 剧集以页面原始顺序展示，
+// 的站（某动漫站/某影视站/某影视站）被忽略反转 → 剧集以页面原始顺序展示，
 // 用户看到「集数顺序反了」。真值集合必须覆盖 1/y/true。
 func TestXYQReverseTrueValues(t *testing.T) {
 	for _, v := range []string{"1", "是", "y", "Y", "true", "TRUE"} {
@@ -27,7 +27,7 @@ func TestXYQReverseTrueValues(t *testing.T) {
 // 端到端：规则声明反转=1 时，选集顺序应被翻转为桌面正序。
 func TestXYQDetailReverseWithOne(t *testing.T) {
 	// 详情页给降序（最新在前），规则声明要反转成升序。
-	// 选集行结构与 wangou 一致：.play-row 内 .btn-down div 包 <a><h4>。
+	// 选集行结构与 某影视源 一致：.play-row 内 .btn-down div 包 <a><h4>。
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`<html><body>
 <div class="module-player-list">

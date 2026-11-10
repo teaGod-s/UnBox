@@ -15,37 +15,36 @@ import (
 	"time"
 )
 
-// js/drpy2 站点完整播放链路冒烟：对主订阅（tvboxmuti）子源里 api 指向 .js
-// 脚本的站点，逐个走 Load → Init → 分类 → 列表 → 详情 → play 首集。
+// js/drpy2 站点完整播放链路冒烟：对子源里 api 指向 .js 脚本的站点，
+// 逐个走 Load → Init → 分类 → 列表 → 详情 → play 首集。
 // 与 rule 包的规则型冒烟互补，覆盖 drpy2/drpyS JS 引擎侧的播放层 bug。
 //
-// 用法：UNBOX_ACCEPTANCE=1 go test ./internal/crawler/ -run TestSmokeJS -v -count=1 -timeout 3600s
+// 用法：UNBOX_ACCEPTANCE=1 SMOKE_SUBS_JSON='[...]' go test ./internal/crawler/ -run TestSmokeJS -v -count=1 -timeout 3600s
 
 var smokeJSONCRe = regexp.MustCompile(`(?m)^\s*//.*$`)
+
+// smokeSubs 读取 SMOKE_SUBS_JSON 环境变量（JSON 字符串数组）作为冒烟子源
+// 列表；未设置返回空（由调用方决定跳过）。不把实际地址写死在代码里。
+func smokeSubs(t *testing.T) []string {
+	t.Helper()
+	raw := os.Getenv("SMOKE_SUBS_JSON")
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var subs []string
+	if err := json.Unmarshal([]byte(raw), &subs); err != nil {
+		t.Fatalf("SMOKE_SUBS_JSON 解析失败: %v", err)
+	}
+	return subs
+}
 
 func TestSmokeJS(t *testing.T) {
 	if os.Getenv("UNBOX_ACCEPTANCE") != "1" {
 		t.Skip("UNBOX_ACCEPTANCE=1 开启")
 	}
-	subs := []string{
-		"https://gh-proxy.com/raw.githubusercontent.com/ytadiao/ytadiao/main/1.json",
-		"https://gh-proxy.com/raw.githubusercontent.com/gaotianliuyun/gao/master/js.json",
-		"https://clun.top/box.json",
-		"https://clun.top/js/jddyy.js",
-	}
-	_ = subs
-
-	// 收集 tvboxmuti 14 子源里的 js 站（api 以 .js 结尾）。
-	// 只拉常规可达的子源，避免整棵聚合递归。
-	direct := []string{
-		"https://gh-proxy.com/raw.githubusercontent.com/yw88075/tvbox/main/yw.json",
-		"https://clun.top/box.json",
-		"https://gh-proxy.org/https:/raw.githubusercontent.com/xyq254245/xyqonlinerule/main/XYQTVBox.json",
-		"https://gh-proxy.com/raw.githubusercontent.com/gaotianliuyun/gao/master/js.json",
-		"https://gh-proxy.com/raw.githubusercontent.com/gaotianliuyun/gao/master/XYQ.json",
-		"https://gh-proxy.com/https://raw.githubusercontent.com/yoursmile66/TVBox/main/XC.json",
-		"https://www.wya6.cn/tv/yc.json",
-		"https://gitlab.com/noimank/tvbox/-/raw/main/tvbox1.json",
+	direct := smokeSubs(t)
+	if len(direct) == 0 {
+		t.Skip("SMOKE_SUBS_JSON 未设置，跳过冒烟")
 	}
 	var jsJobs []jsSite
 	for _, rawURL := range direct {

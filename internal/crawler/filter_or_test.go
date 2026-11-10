@@ -7,7 +7,7 @@ import "testing"
 //	year={{fl.year or "all"}}&sort={{fl.sort or "all"}}
 //
 // 键缺失（如规则只有 filter 没有 filter_def）时取 or 后的默认值 all，
-// 不能把整段 {{...}} 字面量原样带进请求（百忙无果线上根因：芒果接口收到
+// 不能把整段 {{...}} 字面量原样带进请求（某影视源线上根因：某影视源接口收到
 // 未展开模板 URL 返回空 JSON → "unexpected end of JSON input"）。
 func TestRenderFilterTemplateOrDefault(t *testing.T) {
 	tmpl := `year={{fl.year or "all"}}&sort={{fl.sort or "all"}}&chargeInfo={{fl.chargeInfo or "all"}}`

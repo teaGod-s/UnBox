@@ -55,7 +55,7 @@ func (r *Resolver) Resolve(ctx context.Context, stream player.Stream) (player.St
 		return stream, nil
 	}
 	// 平台播放页（B站/腾讯/爱奇艺…）要登录和会员，HTML 里没有可直接播放的地址。
-	// 规则站（如 360影视）常常把这类页面原样透传，早识别早报清楚，别白等一次抓取。
+	// 规则站（如 某影视源）常常把这类页面原样透传，早识别早报清楚，别白等一次抓取。
 	if platform := platformPageName(u); platform != "" {
 		return player.Stream{}, fmt.Errorf("该线路指向%s平台页面，需要平台会员或解析服务，无法直接播放", platform)
 	}

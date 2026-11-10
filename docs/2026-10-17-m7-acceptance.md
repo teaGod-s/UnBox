@@ -8,7 +8,7 @@ CGO 开启；宿主机**缺少 GTK4 / WebKitGTK 开发包**（`pkg-config --exis
 
 > **后续状态（2026-10-31）**：本文件是 10-17 那次验收的原始记录，保留不改。当时的
 > 缺口后续都已处理：`fyfilter`/`filter_url` 展开、`cat.js`/`gbk.js` 自有 shim、
-> `360影视.js` 的 id `$` 语义与规则脚本作用域（10-30 修复后搜索→详情→剧集链路跑通）。
+> `某影视站.js` 的 id `$` 语义与规则脚本作用域（10-30 修复后搜索→详情→剧集链路跑通）。
 > 仍缺 `setInterval` 注入与上游未声明许可证的 `模板.js`。现状见 `docs/HANDOFF.md`
 > 「本轮大扫除」。
 
@@ -17,7 +17,7 @@ CGO 开启；宿主机**缺少 GTK4 / WebKitGTK 开发包**（`pkg-config --exis
 均记录在下方，未修改验收测试、未伪造成功。
 
 > **Task 10 后续修复（2026-10-17）**：上述三处失败中的两处已在 Task 10 修复——
-> `console` shim（`聚合短剧.js` 恢复分类）与 `maskNonCode` 的「正则字面量 + 嵌套
+> `console` shim（`某短剧站.js` 恢复分类）与 `maskNonCode` 的「正则字面量 + 嵌套
 > 模板字面量 + 无空格 `export default{`」识别（`lf_search3_min.js` 恢复编译加载）。
 > 修复后两条脚本均能加载并进入分类阶段，但仍有新的运行时缺口（`setTimeout`）与
 > 既有 `fyfilter` 缺口，详见 2.2/2.3 的更新结果与第 4 节待办。未声称完整验收。
@@ -43,7 +43,7 @@ CGO 开启；宿主机**缺少 GTK4 / WebKitGTK 开发包**（`pkg-config --exis
 >   `UnBox-<ver>-windows-<arch>-licenses.tar.gz`）；
 > - drpy2 引擎库识别放宽（`drpy2.1.min.js`、`?v=`、`#`），ext 带 query 也能选中；
 > - 真实脚本复跑结果与 Task 11 一致：`lf_search3_min.js` 仍卡在脚本自身的 3000ms
->   Netflix 请求超时；`360影视.js` 仍卡在 `fyfilter`；`聚合短剧.js` 仍能取 9 个分类、
+>   Netflix 请求超时；`某影视站.js` 仍卡在 `fyfilter`；`某短剧站.js` 仍能取 9 个分类、
 >   列表返回 0 条（`filterOptions 解码失败`）。**M7 仍未完整验收。**
 
 ## 1. 验证命令
@@ -99,14 +99,14 @@ go test ./internal/provider/tvbox -run 'TestSpiderScriptURL|TestSpiderESMJsEvalR
 
 结果：两项均 PASS。
 
-- `TestSpiderScriptURL` 覆盖 `api=.../drpy2.min.js` + `ext=.../360影视.js` → 实际选择
+- `TestSpiderScriptURL` 覆盖 `api=.../drpy2.min.js` + `ext=.../某影视站.js` → 实际选择
   `ext`（含带 query 的 api、非 js ext、无 ext 等分支）。
 - `TestSpiderESMJsEvalReturn` 用 `httptest` 覆盖 ESM `export function __jsEvalReturn`
   的加载与动作提升。
 
 ## 2. 真实站点验收结果
 
-### 2.1 drpy2：`360影视.js`（`var rule`）
+### 2.1 drpy2：`某影视站.js`（`var rule`）
 
 ```bash
 UNBOX_REAL_JS_PATH=/tmp/drpy-research/scripts/drpy2_360.js \
@@ -145,13 +145,13 @@ url:'https://api.web.360kan.com/v1/filter/list?catid=fyclassfyfilter'
 `fyfilter` / 分类筛选占位**（`filter` / `filter_url` 也未实现），含该占位的站点
 无法取到一级列表。这属于 M7 之后需补的 drpy2 方言能力。
 
-选源本身已由 `TestSpiderScriptURL` 验证：drpy2 站点加载的是 `ext`（`360影视.js`），
+选源本身已由 `TestSpiderScriptURL` 验证：drpy2 站点加载的是 `ext`（`某影视站.js`），
 不是 `api`（`drpy2.min.js`）。
 
-### 2.2 ESM：`聚合短剧.js`
+### 2.2 ESM：`某短剧站.js`
 
 ```bash
-UNBOX_REAL_JS_URL='https://clun.top/js/聚合短剧.js' UNBOX_REAL_SEARCH=测试 \
+UNBOX_REAL_JS_URL='https://clun.example.com/js/某短剧站.js' UNBOX_REAL_SEARCH=测试 \
   go test ./internal/crawler -run TestRealCrawlerAcceptance -count=1 -v
 ```
 
@@ -191,7 +191,7 @@ Task 10 注入最小 `console` shim（`log/info/warn/error/debug` 映射到日�
 首选按 URL 运行：
 
 ```bash
-UNBOX_REAL_JS_URL='https://raw.githubusercontent.com/gaotianliuyun/gao/master/lib/lf_search3_min.js' \
+UNBOX_REAL_JS_URL='https://raw.example.com/某规则仓库/gao/master/lib/lf_search3_min.js' \
   go test ./internal/crawler -run TestRealCrawlerAcceptance -count=1 -v
 ```
 
@@ -205,12 +205,12 @@ UNBOX_REAL_JS_URL='https://raw.githubusercontent.com/gaotianliuyun/gao/master/li
 TLS 握手超时，关闭 HTTP/2 后同一 URL 可下载：
 
 ```bash
-GODEBUG=http2client=0 UNBOX_REAL_JS_URL='https://raw.githubusercontent.com/gaotianliuyun/gao/master/lib/lf_search3_min.js' \
+GODEBUG=http2client=0 UNBOX_REAL_JS_URL='https://raw.example.com/某规则仓库/gao/master/lib/lf_search3_min.js' \
   go test ./internal/crawler -run TestRealCrawlerAcceptance -count=1 -v
 ```
 
 ```
-模块 https://raw.githubusercontent.com/gaotianliuyun/gao/master/lib/lf_search3_min.js 编译失败:
+模块 https://raw.example.com/某规则仓库/gao/master/lib/lf_search3_min.js 编译失败:
 SyntaxError: SyntaxError: (anonymous): Line 1:363339 Unexpected reserved word (and 5 more errors)
 ```
 
@@ -282,7 +282,7 @@ VodClasses 失败: GoError: req 请求失败: Get "https://www.netflix.com/tudum
 | 脚本 | 加载 | 分类 | 列表 | 详情 | 播放 | 阻塞点 |
 |---|---|---|---|---|---|---|
 | `drpy2_360.js` | ✅ `rule` 解析 | ✅ 4 个 | ❌ | 未执行 | 未执行 | `fyfilter` 占位未实现 → `catid=2fyfilter` 被 API 拒绝 |
-| `聚合短剧.js` | ✅ ESM + crypto-js | ✅（修复后 9 个） | ❌ 0 条 | 未执行 | 未执行 | 修复后：`filterOptions 解码失败`（筛选参数为空）；原 `console` 缺失已修复 |
+| `某短剧站.js` | ✅ ESM + crypto-js | ✅（修复后 9 个） | ❌ 0 条 | 未执行 | 未执行 | 修复后：`filterOptions 解码失败`（筛选参数为空）；原 `console` 缺失已修复 |
 | `lf_search3_min.js` | ✅（修复后） | ⚠️ 进入请求阶段 | ❌ | 未执行 | 未执行 | Task 11 修复 `setTimeout`；新阻塞点：脚本自身 3000ms 请求超时 `<` 本机访问 Netflix 榜单约 5s |
 
 ## 4. 后续待办（按优先级）
@@ -296,9 +296,9 @@ VodClasses 失败: GoError: req 请求失败: Get "https://www.netflix.com/tudum
    展开，至少支持「无筛选值 → 空串」，否则大量 drpy2 站点的列表模板不可用。
 3. **M7.3 `cat.js` shim**：仍待办；当前不内置 GPL-3.0 的 cat.js，`bili_open.js`
    这类强依赖 `Crypto`/`jinja2`/`_` 的脚本需要自有 shim 才能完整运行。
-4. **`聚合短剧.js` 筛选参数**：`filterOptions 解码失败` 导致列表返回空，需排查
+4. **`某短剧站.js` 筛选参数**：`filterOptions 解码失败` 导致列表返回空，需排查
    分类筛选参数的解码/传递链路。
-5. 网络：Go 客户端访问 `raw.githubusercontent.com` 的 HTTP/2 TLS 握手在本次环境
+5. 网络：Go 客户端访问 `raw.example.com` 的 HTTP/2 TLS 握手在本次环境
    超时，`GODEBUG=http2client=0` 可绕过；属本机网络环境问题，不是爬虫代码问题。
 
 ## 5. 许可证

@@ -155,7 +155,7 @@ Release 挂载产物。
 - [x] M7.2 ES Module 加载器（import/export、assets://、`__jsEvalReturn`）
 - [x] M7.3 `cat.js` 自有 shim（不内置 GPL 资源）+ `gbk.js` shim + `fyfilter` 展开
 - [ ] M7.4 drpy2 / ESM 真实站点验收（首轮报告的 `fyfilter`、`console`、掩码、
-  `360影视` 详情与播放链路均已修复；仍缺 `setInterval` shim 与上游未声明许可证的
+  `某影视站` 详情与播放链路均已修复；仍缺 `setInterval` shim 与上游未声明许可证的
   `模板.js`，见 `docs/2026-10-17-m7-acceptance.md` 与 HANDOFF「近期更新」）
 - [ ] M8.1 AList 原生 Provider（多盘、公开/私有、搜索）
 - [ ] M8.2 WebDAV 原生 Provider（PROPFIND + Basic Auth）

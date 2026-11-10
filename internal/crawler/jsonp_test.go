@@ -6,7 +6,7 @@ import (
 )
 
 // json: 列表规则碰到 JSONP 响应（`_callback({...})`）必须剥壳再解析。
-// 网易公版影像 active.163.com 的 `.jsonp` 接口返回
+// 某公版影像源 api.example.com 的 `.jsonp` 接口返回
 // `_callback({"status":"success","list":[...]})`，原 TVBox 引擎会剥掉
 // callback 包裹；本引擎此前直接 json.Unmarshal → "invalid character '_'"。
 func TestExtractJSONVodsJSONP(t *testing.T) {
@@ -14,7 +14,7 @@ func TestExtractJSONVodsJSONP(t *testing.T) {
 		{"id":1931,"cover_pic":"http://a.jpg","title":"黑猫","media_type":"film"},
 		{"id":1932,"cover_pic":"http://b.jpg","title":"白狗","media_type":"film"}
 	]})`
-	// 规则：json:list;title;cover_pic;media_type;id —— 与网易公版影像脚本一致。
+	// 规则：json:list;title;cover_pic;media_type;id —— 与某公版影像源脚本一致。
 	fieldRule := "list;title;cover_pic;media_type;id"
 	vods, err := extractJSONVods(raw, "json:"+fieldRule)
 	if err != nil {
@@ -36,7 +36,7 @@ func TestExtractJSONVodsJSONP(t *testing.T) {
 	}
 }
 
-// 网易公版的真实响应末尾带分号：`_callback({...});` —— stripJSONP 必须容忍。
+// 某公版影像源的真实响应末尾带分号：`_callback({...});` —— stripJSONP 必须容忍。
 func TestExtractJSONVodsJSONPTrailingSemi(t *testing.T) {
 	raw := `_callback({"status":"success","list":[{"id":1931,"cover_pic":"http://a.jpg","title":"黑猫","media_type":"film"}]});`
 	vods, err := extractJSONVods(raw, "json:list;title;cover_pic;media_type;id")

@@ -180,7 +180,7 @@ type XBPQ struct {
 }
 
 // ParseXBPQ 解析规则 JSON；规则是 JSONC（可能含整行 // 注释，如真实文件
-// 养生堂.json 里的 `// "播放链接前缀"`），先剥注释再解析，与 ParseXYQ 一致。
+// 某知识站.json 里的 `// "播放链接前缀"`），先剥注释再解析，与 ParseXYQ 一致。
 func ParseXBPQ(data []byte) (*XBPQ, error) {
 	clean := stripJSONCComments(data)
 	var r XBPQ

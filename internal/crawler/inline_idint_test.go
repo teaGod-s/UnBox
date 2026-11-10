@@ -4,7 +4,7 @@ import "testing"
 
 // JSON 列表里的整数 id（3331822）经 jsonScalarString 必须保持整数形式，
 // 否则 float64 的 %v 会输出科学计数法 3.331822e+06，详情 URL（album_id=…）
-// 直接失效（博看听书实际线上根因）。
+// 直接失效（某听书源实际线上根因）。
 func TestJSONScalarStringIntID(t *testing.T) {
 	cases := []struct {
 		name  string

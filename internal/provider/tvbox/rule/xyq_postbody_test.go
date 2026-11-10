@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-// 真实规则（斗鱼直播）的 POST请求数据 是对象 {"sk":"{wd}","offset":0,...}，
+// 真实规则（某直播源直播）的 POST请求数据 是对象 {"sk":"{wd}","offset":0,...}，
 // 不是字符串。XYQ.PostBody 是 FlexString，直接 Unmarshal 不会把整站规则判废，
 // 对象形态会被序列化成紧凑 JSON 字符串。
 func TestParseXYQPostBodyObject(t *testing.T) {
 	const raw = `{
-  "规则名": "斗鱼直播",
+  "规则名": "某直播源直播",
   "首页推荐链接": "https://www.douyu.com",
   "搜索链接": "https://api.example/search",
   "POST请求数据": {"sk": "{wd}", "offset": 0, "limit": 20}
@@ -44,7 +44,7 @@ func TestParseXYQPostBodyObject(t *testing.T) {
 	}
 }
 
-// 字符串形态（影搜等）不能回归。
+// 字符串形态（某搜索源等）不能回归。
 func TestParseXYQPostBodyString(t *testing.T) {
 	const raw = `{"首页推荐链接":"https://x.com","搜索链接":"https://x/s;post","POST请求数据":"{\"key\":\"{wd}\"}"}`
 	r, err := ParseXYQ([]byte(raw))

@@ -16,7 +16,7 @@ func TestResolveRelativeURLs(t *testing.T) {
 			{Key: "jar-class", API: "csp_WexAppV7Guard"},
 			{Key: "asset", API: "assets://js/lib/cheerio.min.js"},
 			{Key: "empty", API: ""},
-			{Key: "drpy2-ext", Ext: "./dr/js/360影视.js"},
+			{Key: "drpy2-ext", Ext: "./dr/js/某影视源.js"},
 			{Key: "json-ext", Ext: `{"a":1}`},
 			{Key: "object-ext", Ext: map[string]any{"a": 1}},
 			{Key: "absolute-ext", Ext: "https://cdn.example.com/x/%E4%B8%AD.js"},
@@ -46,7 +46,7 @@ func TestResolveRelativeURLs(t *testing.T) {
 	for _, site := range cfg.Sites {
 		switch site.Key {
 		case "drpy2-ext":
-			if site.ExtString() != "https://cfg.example.com/feed/dr/js/360影视.js" {
+			if site.ExtString() != "https://cfg.example.com/feed/dr/js/某影视源.js" {
 				t.Errorf("ext 未解析: %v", site.Ext)
 			}
 		case "json-ext":

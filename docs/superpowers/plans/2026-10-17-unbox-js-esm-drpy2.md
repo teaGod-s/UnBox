@@ -63,7 +63,7 @@
 在 `TestResolveRelativeURLs` 的 `Sites` 里增加：
 
 ```go
-{Key: "drpy2-ext", Ext: "./dr/js/360影视.js"},
+{Key: "drpy2-ext", Ext: "./dr/js/某影视站.js"},
 {Key: "json-ext", Ext: `{"a":1}`},
 {Key: "object-ext", Ext: map[string]any{"a": 1}},
 ```
@@ -74,7 +74,7 @@
 for _, site := range cfg.Sites {
 	switch site.Key {
 	case "drpy2-ext":
-		if site.ExtString() != "https://cfg.example.com/feed/dr/js/360影视.js" {
+		if site.ExtString() != "https://cfg.example.com/feed/dr/js/某影视站.js" {
 			t.Errorf("ext 未解析: %v", site.Ext)
 		}
 	case "json-ext":
@@ -165,8 +165,8 @@ func TestSpiderScriptURL(t *testing.T) {
 	cases := []struct{ name string; site config.Site; want string }{
 		{
 			name: "drpy2 用 ext",
-			site: config.Site{API: "https://x/dr/lib/drpy2.min.js", Ext: "https://x/dr/js/360影视.js"},
-			want: "https://x/dr/js/360影视.js",
+			site: config.Site{API: "https://x/dr/lib/drpy2.min.js", Ext: "https://x/dr/js/某影视站.js"},
+			want: "https://x/dr/js/某影视站.js",
 		},
 		{
 			name: "带 query 的 drpy2 用 ext",
@@ -789,13 +789,13 @@ git commit -m "feat(crawler): 实现 ESM import/export 改写"
 
 ```bash
 mkdir -p internal/crawler/assets
-curl -sSL https://raw.githubusercontent.com/FongMi/TV/fongmi/quickjs/src/main/assets/js/lib/cheerio.min.js \
+curl -sSL https://raw.example.com/FongMi/TV/fongmi/quickjs/src/main/assets/js/lib/cheerio.min.js \
   -o internal/crawler/assets/cheerio.min.js
-curl -sSL https://raw.githubusercontent.com/FongMi/TV/fongmi/quickjs/src/main/assets/js/lib/crypto-js.js \
+curl -sSL https://raw.example.com/FongMi/TV/fongmi/quickjs/src/main/assets/js/lib/crypto-js.js \
   -o internal/crawler/assets/crypto-js.js
-curl -sSL https://raw.githubusercontent.com/cheeriojs/cheerio/main/LICENSE \
+curl -sSL https://raw.example.com/cheeriojs/cheerio/main/LICENSE \
   -o internal/crawler/assets/LICENSE.cheerio.txt
-curl -sSL https://raw.githubusercontent.com/brix/crypto-js/develop/LICENSE \
+curl -sSL https://raw.example.com/brix/crypto-js/develop/LICENSE \
   -o internal/crawler/assets/LICENSE.crypto-js.txt
 ```
 
@@ -1295,19 +1295,19 @@ UNBOX_REAL_JS_PATH=/tmp/drpy-research/scripts/drpy2_360.js \
   go test ./internal/crawler -run TestRealCrawlerAcceptance -count=1 -v
 ```
 
-或用真实配置里的 `api=drpy2.min.js` + `ext=360影视.js`，确认 Provider 实际加载
+或用真实配置里的 `api=drpy2.min.js` + `ext=某影视站.js`，确认 Provider 实际加载
 的是 `ext`。
 
 ESM：
 
 ```bash
-UNBOX_REAL_JS_URL=https://clun.top/js/聚合短剧.js \
+UNBOX_REAL_JS_URL=https://clun.example.com/js/某短剧站.js \
 UNBOX_REAL_SEARCH=测试 \
   go test ./internal/crawler -run TestRealCrawlerAcceptance -count=1 -v
 ```
 
 ```bash
-UNBOX_REAL_JS_URL=https://raw.githubusercontent.com/gaotianliuyun/gao/master/lib/lf_search3_min.js \
+UNBOX_REAL_JS_URL=https://raw.example.com/某规则仓库/gao/master/lib/lf_search3_min.js \
   go test ./internal/crawler -run TestRealCrawlerAcceptance -count=1 -v
 ```
 
@@ -1337,7 +1337,7 @@ git commit -m "docs: 同步 M7 drpy2/ESM 兼容进度与验收结果"
 
 - 注入 `console` shim（`log/info/warn/error/debug` → 日志）。
 - `maskNonCode` 识别正则字面量、嵌套模板字面量、无空格 `export default{`。
-- 结果：`聚合短剧.js` 恢复 9 个分类；`lf_search3_min.js` 恢复编译加载。
+- 结果：`某短剧站.js` 恢复 9 个分类；`lf_search3_min.js` 恢复编译加载。
 
 ### Task 11: setTimeout / clearTimeout shim
 

@@ -2,10 +2,10 @@ package crawler
 
 import "testing"
 
-// 芒果列表规则 `json:data.hitDocs;title;img;updateInfo||rightCorner.text;playPartId`
+// 某影视源列表规则 `json:data.hitDocs;title;img;updateInfo||rightCorner.text;playPartId`
 // 的 id 段是 playPartId（站点字段名）。canonicalVodField 与 isJSONIDField、
 // setVodField 必须把它当 id 处理，否则列表项 VodID 为空 → 详情 URL 失效
-// （百忙无果线上根因之一）。
+// （某影视源线上根因之一）。
 func TestPlayPartID(t *testing.T) {
 	if !isJSONIDField("playPartId") {
 		t.Fatal("isJSONIDField(playPartId) 应为 true")
@@ -19,7 +19,7 @@ func TestPlayPartID(t *testing.T) {
 	if !isJSONIDField("id") {
 		t.Fatal("isJSONIDField(id) 应为 true")
 	}
-	// vid 是 TVBox 通用 id 字段（网易公版影像规则 `json:list;…;vid`）。
+	// vid 是 TVBox 通用 id 字段（某公版影像源规则 `json:list;…;vid`）。
 	if !isJSONIDField("vid") {
 		t.Fatal("isJSONIDField(vid) 应为 true")
 	}

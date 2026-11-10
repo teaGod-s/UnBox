@@ -2,6 +2,7 @@ package rule
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -18,19 +19,45 @@ import (
 // 各阶段不报错且产出非空，以容忍站点内容漂移。
 func acceptanceEnabled() bool { return os.Getenv("UNBOX_ACCEPTANCE") == "1" }
 
-// 真实规则地址（来自用户订阅中的 gaotianliuyun/gao 仓库，走 gh-proxy）。
+// 真实站点端到端验收的规则地址经环境变量 ACCEPTANCE_RULES_JSON 注入，
+// 不在代码里写死任何实际地址。格式：JSON 对象 {"<key>": "<规则URL>"}。
+//
+//	ACCEPTANCE_RULES_JSON='{"wangou":"https://example.com/wangou.json",...}' \
+//	  UNBOX_ACCEPTANCE=1 go test ./internal/provider/tvbox/rule/ -run TestAcceptance -v -count=1
+var acceptanceRules = func() map[string]string {
+	m := map[string]string{}
+	raw := os.Getenv("ACCEPTANCE_RULES_JSON")
+	if raw == "" {
+		return m
+	}
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return m
+	}
+	return m
+}()
+
+// accURL 返回某个验收样例的规则地址；未配置时跳过该测试。
+func accURL(t *testing.T, key string) string {
+	t.Helper()
+	u := acceptanceRules[key]
+	if u == "" {
+		t.Skipf("ACCEPTANCE_RULES_JSON 未配置样例 %q，跳过", key)
+	}
+	return u
+}
+
 const (
-	accWangou     = "https://gh-proxy.com/raw.githubusercontent.com/gaotianliuyun/gao/master/XYQHiker/玩偶哥哥.json"
-	accYingsou    = "https://gh-proxy.com/raw.githubusercontent.com/gaotianliuyun/gao/master/XYQHiker/影搜.json"
-	accBidi       = "https://gh-proxy.com/raw.githubusercontent.com/gaotianliuyun/gao/master/XYQHiker/哔嘀影视.json"
-	accHema       = "https://gh-proxy.com/raw.githubusercontent.com/gaotianliuyun/gao/master/XYQHiker/河马短剧.json"
-	accTuxibaobei = "https://gh-proxy.com/raw.githubusercontent.com/gaotianliuyun/gao/master/XYQHiker/兔小贝2.json"
-	accDDYS       = "https://gh-proxy.org/https:/raw.githubusercontent.com/xyq254245/xyqonlinerule/main/XYQHiker/低端影视.json"
-	accBuman      = "https://gh-proxy.org/https:/raw.githubusercontent.com/xyq254245/xyqonlinerule/main/XYQHiker/动漫巴士.json"
-	accQkan       = "https://gh-proxy.org/https:/raw.githubusercontent.com/xyq254245/xyqonlinerule/main/XYQHiker/去看吧动漫.json"
+	accWangou     = "wangou"
+	accYingsou    = "yingsou"
+	accBidi       = "bidi"
+	accHema       = "hema"
+	accTuxibaobei = "tuxiaobei"
+	accDDYS       = "ddys"
+	accBuman      = "buman"
+	accQkan       = "qkan"
 )
 
-// 玩偶哥哥（csp_XYQHikerAL，完整 JSoup 站点）：分类→列表→详情→选集。
+// 样例A（csp_XYQHikerAL，完整 JSoup 站点）：分类→列表→详情→选集。
 func TestAcceptanceWangou(t *testing.T) {
 	if !acceptanceEnabled() {
 		t.Skip("跳过真实站点验收（设置 UNBOX_ACCEPTANCE=1 开启）")
@@ -38,7 +65,7 @@ func TestAcceptanceWangou(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	eng, err := NewEngine(ctx, "csp_XYQHikerAL", accWangou)
+	eng, err := NewEngine(ctx, "csp_XYQHikerAL", accURL(t, accWangou))
 	if err != nil {
 		t.Fatalf("加载规则失败: %v", err)
 	}
@@ -68,7 +95,7 @@ func TestAcceptanceWangou(t *testing.T) {
 	}
 }
 
-// 影搜（csp_XYQHiker，搜索-only + JSON 响应 + POST）。
+// 样例B（csp_XYQHiker，搜索-only + JSON 响应 + POST）。
 func TestAcceptanceYingsou(t *testing.T) {
 	if !acceptanceEnabled() {
 		t.Skip("跳过真实站点验收（设置 UNBOX_ACCEPTANCE=1 开启）")
@@ -76,7 +103,7 @@ func TestAcceptanceYingsou(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	eng, err := NewEngine(ctx, "csp_XYQHiker", accYingsou)
+	eng, err := NewEngine(ctx, "csp_XYQHiker", accURL(t, accYingsou))
 	if err != nil {
 		t.Fatalf("加载规则失败: %v", err)
 	}
@@ -87,10 +114,10 @@ func TestAcceptanceYingsou(t *testing.T) {
 	if len(items) == 0 {
 		t.Fatal("JSON 搜索返回空")
 	}
-	t.Logf("影搜结果: %d 项，首项=%q id=%q", len(items), items[0].Title, items[0].ID)
+	t.Logf("样例B结果: %d 项，首项=%q id=%q", len(items), items[0].Title, items[0].ID)
 }
 
-// 哔嘀影视（:has() / || / !前缀 / bing 搜索）。
+// 样例C（:has() / || / !前缀 / bing 搜索）。
 func TestAcceptanceBidi(t *testing.T) {
 	if !acceptanceEnabled() {
 		t.Skip("跳过真实站点验收（设置 UNBOX_ACCEPTANCE=1 开启）")
@@ -98,7 +125,7 @@ func TestAcceptanceBidi(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	eng, err := NewEngine(ctx, "csp_XYQHiker", accBidi)
+	eng, err := NewEngine(ctx, "csp_XYQHiker", accURL(t, accBidi))
 	if err != nil {
 		t.Fatalf("加载规则失败: %v", err)
 	}
@@ -106,16 +133,16 @@ func TestAcceptanceBidi(t *testing.T) {
 	if err != nil || len(secs) == 0 {
 		t.Fatalf("Home = %d 项, %v", len(secs), err)
 	}
-	t.Logf("哔嘀分类数: %d", len(secs))
+	t.Logf("样例C分类数: %d", len(secs))
 
 	page, err := eng.Browse(ctx, secs[0].ID, 1)
 	if err != nil {
 		t.Fatalf("Browse 失败: %v", err)
 	}
-	t.Logf("哔嘀列表: %d 项", len(page.Items))
+	t.Logf("样例C列表: %d 项", len(page.Items))
 }
 
-// 河马短剧（React 应用类站点，img&&alt 取片名）。
+// 样例D（React 应用类站点，img&&alt 取片名）。
 func TestAcceptanceHema(t *testing.T) {
 	if !acceptanceEnabled() {
 		t.Skip("跳过真实站点验收（设置 UNBOX_ACCEPTANCE=1 开启）")
@@ -123,7 +150,7 @@ func TestAcceptanceHema(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	eng, err := NewEngine(ctx, "csp_XYQHiker", accHema)
+	eng, err := NewEngine(ctx, "csp_XYQHiker", accURL(t, accHema))
 	if err != nil {
 		t.Fatalf("加载规则失败: %v", err)
 	}
@@ -131,19 +158,19 @@ func TestAcceptanceHema(t *testing.T) {
 	if err != nil || len(secs) == 0 {
 		t.Fatalf("Home = %d 项, %v", len(secs), err)
 	}
-	t.Logf("河马分类: %v", secNames(secs))
+	t.Logf("样例D分类: %v", secNames(secs))
 
 	page, err := eng.Browse(ctx, secs[0].ID, 1)
 	if err != nil {
 		t.Fatalf("Browse 失败: %v", err)
 	}
 	if len(page.Items) == 0 {
-		t.Fatal("河马 Browse 返回空列表")
+		t.Fatal("样例D Browse 返回空列表")
 	}
-	t.Logf("河马列表: %d 项，首项=%q", len(page.Items), page.Items[0].Title)
+	t.Logf("样例D列表: %d 项，首项=%q", len(page.Items), page.Items[0].Title)
 }
 
-// 兔小贝2（儿歌站：44 分类、mip-img&&src 图片、mip-search-video 选集）。
+// 样例E2（儿歌站：44 分类、mip-img&&src 图片、mip-search-video 选集）。
 func TestAcceptanceTuxiaobei(t *testing.T) {
 	if !acceptanceEnabled() {
 		t.Skip("跳过真实站点验收（设置 UNBOX_ACCEPTANCE=1 开启）")
@@ -151,7 +178,7 @@ func TestAcceptanceTuxiaobei(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	eng, err := NewEngine(ctx, "csp_XYQHiker", accTuxibaobei)
+	eng, err := NewEngine(ctx, "csp_XYQHiker", accURL(t, accTuxibaobei))
 	if err != nil {
 		t.Fatalf("加载规则失败: %v", err)
 	}
@@ -159,19 +186,19 @@ func TestAcceptanceTuxiaobei(t *testing.T) {
 	if err != nil || len(secs) == 0 {
 		t.Fatalf("Home = %d 项, %v", len(secs), err)
 	}
-	t.Logf("兔小贝分类数: %d", len(secs))
+	t.Logf("样例E分类数: %d", len(secs))
 
 	page, err := eng.Browse(ctx, secs[0].ID, 1)
 	if err != nil {
 		t.Fatalf("Browse 失败: %v", err)
 	}
 	if len(page.Items) == 0 {
-		t.Fatal("兔小贝 Browse 返回空列表")
+		t.Fatal("样例E Browse 返回空列表")
 	}
-	t.Logf("兔小贝列表: %d 项，首项=%q", len(page.Items), page.Items[0].Title)
+	t.Logf("样例E列表: %d 项，首项=%q", len(page.Items), page.Items[0].Title)
 }
 
-// 低端影视（[firstPg=...] 变体分类链接、detail 为 XPath 模式 / 空线路）。
+// 样例F（[firstPg=...] 变体分类链接、detail 为 XPath 模式 / 空线路）。
 func TestAcceptanceDDYS(t *testing.T) {
 	if !acceptanceEnabled() {
 		t.Skip("跳过真实站点验收（设置 UNBOX_ACCEPTANCE=1 开启）")
@@ -179,7 +206,7 @@ func TestAcceptanceDDYS(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	eng, err := NewEngine(ctx, "csp_XYQHiker", accDDYS)
+	eng, err := NewEngine(ctx, "csp_XYQHiker", accURL(t, accDDYS))
 	if err != nil {
 		t.Fatalf("加载规则失败: %v", err)
 	}
@@ -187,19 +214,19 @@ func TestAcceptanceDDYS(t *testing.T) {
 	if err != nil || len(secs) == 0 {
 		t.Fatalf("Home = %d 项, %v", len(secs), err)
 	}
-	t.Logf("低端影视分类: %v", secNames(secs))
+	t.Logf("样例F分类: %v", secNames(secs))
 
 	page, err := eng.Browse(ctx, secs[0].ID, 1)
 	if err != nil {
 		t.Fatalf("Browse 失败: %v", err)
 	}
 	if len(page.Items) == 0 {
-		t.Fatal("低端影视 Browse 返回空列表")
+		t.Fatal("样例F Browse 返回空列表")
 	}
-	t.Logf("低端影视列表: %d 项，首项=%q", len(page.Items), page.Items[0].Title)
+	t.Logf("样例F列表: %d 项，首项=%q", len(page.Items), page.Items[0].Title)
 }
 
-// 动漫巴士（a&&title!在线观看 去前缀、[firstPage] 分类链接）。
+// 某动漫站（a&&title!在线观看 去前缀、[firstPage] 分类链接）。
 func TestAcceptanceDongmanBus(t *testing.T) {
 	if !acceptanceEnabled() {
 		t.Skip("跳过真实站点验收（设置 UNBOX_ACCEPTANCE=1 开启）")
@@ -207,7 +234,7 @@ func TestAcceptanceDongmanBus(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	eng, err := NewEngine(ctx, "csp_XYQHiker", accBuman)
+	eng, err := NewEngine(ctx, "csp_XYQHiker", accURL(t, accBuman))
 	if err != nil {
 		t.Fatalf("加载规则失败: %v", err)
 	}
@@ -215,19 +242,19 @@ func TestAcceptanceDongmanBus(t *testing.T) {
 	if err != nil || len(secs) == 0 {
 		t.Fatalf("Home = %d 项, %v", len(secs), err)
 	}
-	t.Logf("动漫巴士分类: %v", secNames(secs))
+	t.Logf("某动漫站分类: %v", secNames(secs))
 
 	page, err := eng.Browse(ctx, secs[0].ID, 1)
 	if err != nil {
 		t.Fatalf("Browse 失败: %v", err)
 	}
 	if len(page.Items) == 0 {
-		t.Fatal("动漫巴士 Browse 返回空列表")
+		t.Fatal("某动漫站 Browse 返回空列表")
 	}
-	t.Logf("动漫巴士列表: %d 项，首项=%q", len(page.Items), page.Items[0].Title)
+	t.Logf("某动漫站列表: %d 项，首项=%q", len(page.Items), page.Items[0].Title)
 }
 
-// 去看吧动漫（JSON 搜索模式 + XPath 详情）。
+// 样例G（JSON 搜索模式 + XPath 详情）。
 func TestAcceptanceQkan(t *testing.T) {
 	if !acceptanceEnabled() {
 		t.Skip("跳过真实站点验收（设置 UNBOX_ACCEPTANCE=1 开启）")
@@ -235,7 +262,7 @@ func TestAcceptanceQkan(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	eng, err := NewEngine(ctx, "csp_XYQHiker", accQkan)
+	eng, err := NewEngine(ctx, "csp_XYQHiker", accURL(t, accQkan))
 	if err != nil {
 		t.Fatalf("加载规则失败: %v", err)
 	}
@@ -243,16 +270,16 @@ func TestAcceptanceQkan(t *testing.T) {
 	if err != nil || len(secs) == 0 {
 		t.Fatalf("Home = %d 项, %v", len(secs), err)
 	}
-	t.Logf("去看吧动漫分类: %v", secNames(secs))
+	t.Logf("样例G分类: %v", secNames(secs))
 
 	page, err := eng.Browse(ctx, secs[0].ID, 1)
 	if err != nil {
 		t.Fatalf("Browse 失败: %v", err)
 	}
 	if len(page.Items) == 0 {
-		t.Fatal("去看吧动漫 Browse 返回空列表")
+		t.Fatal("样例G Browse 返回空列表")
 	}
-	t.Logf("去看吧动画列表: %d 项，首项=%q", len(page.Items), page.Items[0].Title)
+	t.Logf("样例G列表: %d 项，首项=%q", len(page.Items), page.Items[0].Title)
 }
 
 func secNames(secs []provider.Section) []string {
@@ -280,7 +307,7 @@ func contentSnippet(s string) string {
 	return s
 }
 
-// 去看吧动漫：XPath/标记截取详情链路（详情是否Jsoup写法=0）。
+// 样例G：XPath/标记截取详情链路（详情是否Jsoup写法=0）。
 func TestAcceptanceQkanDetail(t *testing.T) {
 	if !acceptanceEnabled() {
 		t.Skip("跳过真实站点验收（设置 UNBOX_ACCEPTANCE=1 开启）")
@@ -288,7 +315,7 @@ func TestAcceptanceQkanDetail(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	eng, err := NewEngine(ctx, "csp_XYQHiker", accQkan)
+	eng, err := NewEngine(ctx, "csp_XYQHiker", accURL(t, accQkan))
 	if err != nil {
 		t.Fatalf("加载规则失败: %v", err)
 	}
@@ -306,7 +333,7 @@ func TestAcceptanceQkanDetail(t *testing.T) {
 	}
 }
 
-// 河马短剧：选集完整链路（a:not(:has(img)) 伪类 + 字段首段自匹配 +
+// 样例D：选集完整链路（a:not(:has(img)) 伪类 + 字段首段自匹配 +
 // 选集全文提取）。
 func TestAcceptanceHemaDetail(t *testing.T) {
 	if !acceptanceEnabled() {
@@ -315,7 +342,7 @@ func TestAcceptanceHemaDetail(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	eng, err := NewEngine(ctx, "csp_XYQHiker", accHema)
+	eng, err := NewEngine(ctx, "csp_XYQHiker", accURL(t, accHema))
 	if err != nil {
 		t.Fatalf("加载规则失败: %v", err)
 	}

@@ -48,14 +48,15 @@ UnBox 支持两类点播源，导入方式一致（设置页粘贴地址即可�
 
 | 类型                | 结构                                | 支持的站点                                                          |
 |---------------------|-------------------------------------|---------------------------------------------------------------------|
-| **TVBox 单线路源**  | 顶层直接含 `sites` 数组             | type=1 CMS JSON、type=3 爬虫（`http` drpy 服务 / `.js` FongMi js0 / drpy2 / ESM）、`csp_AList` / `csp_WebDAV`、`csp_XBPQ`（规则型 JAR） |
+| **TVBox 单线路源**  | 顶层直接含 `sites` 数组             | type=1 CMS JSON、type=3 爬虫（`http` drpy 服务 / `.js` FongMi js0 / drpy2 / ESM）、`csp_AList` / `csp_WebDAV`、`csp_XBPQ` / `csp_XYQHiker`（规则型 JAR） |
 | **FongMi 多线路源** | `storeHouse` → `urls[]` → 配置 三层 | 点播页可切换线路；每条线路内部与单线路源同构                        |
 
-> `csp_` JAR 站点按「Go 规则引擎」路线接入：`csp_XBPQ` 已支持（M6.1），
-> `csp_XYQHiker` 纳入 M6.2 计划；其余 `csp_` 长尾与 xpath（type=0）暂不支持。
+> `csp_` JAR 站点按「Go 规则引擎」路线接入：`csp_XBPQ`（M6.1）与
+> `csp_XYQHiker`（M6.2）均已支持；其余 `csp_` 长尾与 xpath（type=0）暂不支持。
 > `.js` 爬虫已支持 FongMi js0、drpy2（加载 `ext` 站点规则）与 ES Module
-> （import/export、`assets://`、`__jsEvalReturn`）；drpy2 的 `fyfilter`/筛选与
-> `cat.js` 依赖脚本仍有缺口，见「已知限制」。网盘源先支持 AList/WebDAV
+> （import/export、`assets://`、`__jsEvalReturn`），`fyfilter`/`filter_url` 与
+> 筛选 UI 均已打通；仅依赖 `setInterval` 的脚本与未声明许可证的 `模板.js`
+> 仍有缺口，见「已知限制」。网盘源先支持 AList/WebDAV
 > （M8.1/M8.2），云盘分享解析与 Wogg/Wobg 暂不支持。详见「已知限制」。
 
 ## 🖥️ 安装
@@ -148,7 +149,7 @@ Release 挂载产物。
 
 - [ ] Windows / macOS 完整实测与收尾
 - [x] M6.1 `csp_XBPQ` 规则引擎（分类/列表/详情/搜索/播放）
-- [ ] M6.2 `csp_XYQHiker` 规则引擎
+- [x] M6.2 `csp_XYQHiker` 规则引擎（JSoup 链 / 简单 XPath / JSONC 容错 / firstPage 翻页）
 - [ ] M6.3 `csp_` 长尾按收益逐类扩展
 - [ ] M6.4 可选远程 spider 桥（有明确需求再做）
 - [x] M7.1 修复 drpy2 站点选源（加载 `ext` 规则脚本）
@@ -165,9 +166,9 @@ Release 挂载产物。
 ## ⚠️ 已知限制
 
 - FongMi多线路源中基于 `csp_` JAR 的站点：JAR 本身是 Android DEX，不能直接用 Go
-  执行；但 `csp_XBPQ` 的 `ext` 是明文规则 JSON，已按 Go 规则引擎接入（M6.1）。
-  其余 `csp_` 长尾（含 `csp_XYQHiker`，计划 M6.2）与 xpath（type=0）暂不支持。
-  不使用内嵌 JVM/ART，也不执行下载的 JAR。
+  执行；但 `csp_XBPQ` 与 `csp_XYQHiker` 的 `ext` 是明文规则 JSON，已按 Go 规则引擎
+  接入（M6.1 / M6.2），不下载、不执行 JAR。其余 `csp_` 长尾与 xpath（type=0）
+  暂不支持。
 - `.js` 爬虫：FongMi js0、drpy2（`var rule`，Provider 加载 `ext`）与 ES Module
   已支持，`cat.js` / `gbk.js` 走自有 shim（不内置 GPL 资源），drpy2 的
   `fyfilter`/`filter_url` 与筛选 UI 均已打通。仍有限制：脚本若依赖

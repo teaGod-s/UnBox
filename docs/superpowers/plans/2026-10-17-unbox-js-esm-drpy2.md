@@ -789,13 +789,13 @@ git commit -m "feat(crawler): 实现 ESM import/export 改写"
 
 ```bash
 mkdir -p internal/crawler/assets
-curl -sSL https://raw.example.com/FongMi/TV/fongmi/quickjs/src/main/assets/js/lib/cheerio.min.js \
+curl -sSL https://raw.githubusercontent.com/FongMi/TV/fongmi/quickjs/src/main/assets/js/lib/cheerio.min.js \
   -o internal/crawler/assets/cheerio.min.js
-curl -sSL https://raw.example.com/FongMi/TV/fongmi/quickjs/src/main/assets/js/lib/crypto-js.js \
+curl -sSL https://raw.githubusercontent.com/FongMi/TV/fongmi/quickjs/src/main/assets/js/lib/crypto-js.js \
   -o internal/crawler/assets/crypto-js.js
-curl -sSL https://raw.example.com/cheeriojs/cheerio/main/LICENSE \
+curl -sSL https://raw.githubusercontent.com/cheeriojs/cheerio/main/LICENSE \
   -o internal/crawler/assets/LICENSE.cheerio.txt
-curl -sSL https://raw.example.com/brix/crypto-js/develop/LICENSE \
+curl -sSL https://raw.githubusercontent.com/brix/crypto-js/develop/LICENSE \
   -o internal/crawler/assets/LICENSE.crypto-js.txt
 ```
 

@@ -298,7 +298,7 @@ VodClasses 失败: GoError: req 请求失败: Get "https://www.netflix.com/tudum
    这类强依赖 `Crypto`/`jinja2`/`_` 的脚本需要自有 shim 才能完整运行。
 4. **`某短剧站.js` 筛选参数**：`filterOptions 解码失败` 导致列表返回空，需排查
    分类筛选参数的解码/传递链路。
-5. 网络：Go 客户端访问 `raw.example.com` 的 HTTP/2 TLS 握手在本次环境
+5. 网络：Go 客户端访问 `raw.githubusercontent.com` 的 HTTP/2 TLS 握手在本次环境
    超时，`GODEBUG=http2client=0` 可绕过；属本机网络环境问题，不是爬虫代码问题。
 
 ## 5. 许可证

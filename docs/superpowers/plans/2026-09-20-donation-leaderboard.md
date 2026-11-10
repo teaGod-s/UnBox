@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - 爱发电 `user_id` / `token` 只经环境变量提供给导出脚本，**不得**写入仓库或编入应用。
-- 远端地址常量可配置，默认 `https://raw.example.com/teaGod-s/UnBox/master/docs/donors.json`。
+- 远端地址常量可配置，默认 `https://raw.githubusercontent.com/teaGod-s/UnBox/master/docs/donors.json`。
 - 缓存默认 6 小时；拉取/解析失败一律回退，不向用户报错。
 - 界面**不展示金额**；`anonymous: true` 显示默认头像 + 「热心网友」，不露 ID 与头像。
 - 排序：以**后端**为准——后端按金额降序、同额按昵称稳定排序；前端只做字段归一化并**原样保留后端顺序**（前端模型不含金额，自行排序会退化成按昵称排序）。

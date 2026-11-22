@@ -143,3 +143,136 @@ func TestSendEventPositionDropsWhenFull(t *testing.T) {
 	ch <- player.Event{Kind: player.EventPosition}          // 占满
 	sendEvent(ch, player.Event{Kind: player.EventPosition}) // 应丢弃而非阻塞
 }
+
+// waitMediaReady 测试：媒体未就绪时阻塞，就绪信号到达后放行。
+func TestWaitMediaReadyWaitsForSignal(t *testing.T) {
+	p := &mpvProc{}
+	p.lifecycleMu.Lock()
+	p.ready = make(chan struct{})
+	p.lifecycleMu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		p.waitMediaReady()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("媒体未就绪时 waitMediaReady 不应立即返回")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	p.lifecycleMu.Lock()
+	close(p.ready)
+	p.lifecycleMu.Unlock()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("就绪信号到达后 waitMediaReady 未放行")
+	}
+}
+
+// waitMediaReady 测试：已就绪时立即返回，不做多余等待。
+func TestWaitMediaReadyReturnsWhenAlreadyReady(t *testing.T) {
+	p := &mpvProc{}
+	p.lifecycleMu.Lock()
+	p.ready = make(chan struct{})
+	close(p.ready)
+	p.lifecycleMu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		p.waitMediaReady()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("已就绪时 waitMediaReady 应立即返回")
+	}
+}
+
+// waitMediaReady 测试：死源等不到就绪时，到上限照常放行（交给 send 如实报错）。
+func TestWaitMediaReadyTimesOut(t *testing.T) {
+	old := seekReadyTimeout
+	seekReadyTimeout = 20 * time.Millisecond
+	defer func() { seekReadyTimeout = old }()
+
+	p := &mpvProc{}
+	p.lifecycleMu.Lock()
+	p.ready = make(chan struct{})
+	p.lifecycleMu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		p.waitMediaReady()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("等不到就绪时应超时放行")
+	}
+}
+
+// Seek 测试：媒体未就绪时 seek 不发命令，就绪后才发（用 readLoop 注入 file-loaded）。
+func TestSeekWaitsForMediaReadyViaReadLoop(t *testing.T) {
+	p := &mpvProc{
+		conn:      &recordingConn{writes: make(chan string, 16)},
+		responses: make(chan response, 16),
+		events:    make(chan player.Event, 64),
+		session:   1,
+	}
+	p.lifecycleMu.Lock()
+	p.ready = make(chan struct{})
+	ready := p.ready
+	p.lifecycleMu.Unlock()
+
+	// 先备好成功应答，再放行 seek：避免 send 等 15s 应答超时拖慢测试。
+	p.responses <- response{session: 1, data: []byte(`{"error":"success"}`)}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = p.Seek(30) // 应等 file-loaded 后发送
+	}()
+
+	// 就绪信号未到：seek 命令不应出现在连接写入里。
+	select {
+	case w := <-p.conn.(*recordingConn).writes:
+		t.Fatalf("媒体未就绪时不应写入 seek 命令，got %q", w)
+	case <-time.After(30 * time.Millisecond):
+	}
+
+	// 注入 file-loaded 事件等价于关闭 ready（readLoop 的行为）。
+	p.lifecycleMu.Lock()
+	close(ready)
+	p.lifecycleMu.Unlock()
+
+	// 就绪后 seek 命令才应写出发送。
+	select {
+	case w := <-p.conn.(*recordingConn).writes:
+		if !strings.Contains(w, `"seek"`) {
+			t.Fatalf("就绪后应写入 seek 命令，got %q", w)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("就绪后 seek 未写出")
+	}
+
+	wg.Wait()
+}
+
+// recordingConn 记录写入的命令行；读取立即 EOF，供 seek 走到 send 后不挂死。
+type recordingConn struct {
+	writes chan string // 非缓冲消费：每条 Write 记入后由测试读取
+}
+
+func (c *recordingConn) Write(p []byte) (int, error) {
+	c.writes <- string(p)
+	return len(p), nil
+}
+func (recordingConn) Read(p []byte) (int, error) { return 0, io.ErrClosedPipe }
+func (recordingConn) Close() error               { return nil }

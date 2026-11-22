@@ -32,6 +32,12 @@ const ipcConnectTimeout = 5 * time.Second
 // 摊回 15s，并靠 buildArgs 里的 --network-timeout=15 保证最坏等待有上限。
 var cmdResponseTimeout = 15 * time.Second
 
+// seekReadyTimeout 是首次 seek 等待 mpv 媒体就绪（file-loaded）的上限。
+// mpv 在文件加载完成前执行 seek 会回 error running command（WSL/慢源常见），
+// 就绪后立即发。死源/加载失败等不到就绪时，到上限照发 seek，不做无限等待。
+// 用 var 而非 const，便于测试缩短等待验证超时兜底。
+var seekReadyTimeout = 5 * time.Second
+
 // response 是 readLoop 路由给 send 的一条命令应答，携带会话代际，
 // 供 send 丢弃跨会话串味的迟到应答。
 type response struct {
@@ -55,6 +61,11 @@ type mpvProc struct {
 	sendMu    sync.Mutex    // 串行化命令：保证任一时刻只有一条命令在飞
 	responses chan response // readLoop 路由来的命令应答（带会话代际）
 	events    chan player.Event
+
+	// ready 是媒体就绪信号：mpv 加载完文件（收到 file-loaded 事件）后关闭，
+	// 此后 seek 等依赖媒体的命令才被接受。由 lifecycleMu 守护：
+	// Load 每建新会话就重建，旧会话迟到的 file-loaded 关的是旧的 channel。
+	ready chan struct{}
 
 	stateMu sync.Mutex
 	state   player.State
@@ -132,13 +143,17 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	p.wait = w
 	p.conn = conn
 	p.ipcPath = ipcPath
+	// 新会话的媒体就绪信号从零开始：旧会话若已 file-loaded，其 ready 已关闭，
+	// 不能让新会话直接跳过等待（新 URL 还没加载完成时 seek 会被 mpv 拒绝）。
+	p.ready = make(chan struct{})
+	ready := p.ready
 	p.lifecycleMu.Unlock()
 	p.stateMu.Lock()
 	p.state = player.State{Playing: player.StatePlaying, Duration: -1, Volume: 80}
 	p.paused = false
 	p.stateMu.Unlock()
 
-	go p.readLoop(conn, sess)
+	go p.readLoop(conn, sess, ready)
 
 	// 观察位置、缓存暂停状态与用户暂停。观察失败不影响播放，故忽略错误。
 	// pause 只用来屏蔽暂停期间的缓存事件，不会自己映射成缓冲信号。
@@ -233,8 +248,29 @@ func buildArgs(s player.Stream, ipcPath string, wid uintptr) []string {
 
 func (p *mpvProc) Play() error  { return p.send("set_property", "pause", false) }
 func (p *mpvProc) Pause() error { return p.send("set_property", "pause", true) }
+
+// Seek 跳转到指定秒。首次 seek（断点续播、跳片头片尾）在 mpv 媒体未就绪时
+// 会被拒（error running command），这里先等 file-loaded 信号再发命令；
+// 等不到就绪（死源/加载失败）时到 seekReadyTimeout 上限照发，交由 mpv 应答
+// 如实反馈，不静默吞错误。
 func (p *mpvProc) Seek(sec float64) error {
+	p.waitMediaReady()
 	return p.send("seek", sec, "absolute")
+}
+
+// waitMediaReady 等本会话 mpv 媒体就绪（ready 关闭）。无会话（未 Load）时
+// 直接放行，让 send 自己报「尚未 Load」；已就绪时立即返回。
+func (p *mpvProc) waitMediaReady() {
+	p.lifecycleMu.Lock()
+	ready := p.ready
+	p.lifecycleMu.Unlock()
+	if ready == nil {
+		return
+	}
+	select {
+	case <-ready:
+	case <-time.After(seekReadyTimeout):
+	}
 }
 func (p *mpvProc) SetVolume(v int) error {
 	if err := p.send("set_property", "volume", v); err != nil {
@@ -369,8 +405,9 @@ func (p *mpvProc) send(args ...any) error {
 // readLoop 是连接上唯一的读取者。mpv 连接建立后不会主动发握手行，命令
 // 应答与异步事件在同一流上交错，必须由单一 reader 分路，否则多个带预读
 // 的 reader（bufio.Reader/Scanner）会互相抢字节。
-// conn/sess 由 Load 传入并固定，保证每条命令应答都标上本会话代际。
-func (p *mpvProc) readLoop(conn io.ReadWriteCloser, sess int64) {
+// conn/sess/ready 由 Load 传入并固定：每条命令应答都标上本会话代际，
+// 媒体就绪事件只关本会话的 ready channel（避免误关新会话）。
+func (p *mpvProc) readLoop(conn io.ReadWriteCloser, sess int64, ready chan struct{}) {
 	sc := bufio.NewScanner(conn)
 	// 单行可能较长（如音轨/字幕列表），给足缓冲：起始 64KB、上限 1MB，
 	// 避免 ReadBytes 默认 4096B 缓冲触顶误杀读循环。
@@ -382,6 +419,15 @@ func (p *mpvProc) readLoop(conn io.ReadWriteCloser, sess int64) {
 		}
 		_ = json.Unmarshal(line, &probe)
 		if probe.Event != "" {
+			// 媒体加载完成：seek 等依赖媒体的命令从此可用。mpv 在 seek/切流
+			// 后可能重发 file-loaded，故同一 channel 只关一次。
+			if probe.Event == "file-loaded" {
+				select {
+				case <-ready:
+				default:
+					close(ready)
+				}
+			}
 			if paused, ok := parsePauseProperty(line); ok {
 				// 用户主动暂停：只更新状态，不产生任何播放信号。
 				p.stateMu.Lock()

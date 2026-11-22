@@ -319,11 +319,11 @@ func (c *Controller) probeHLSCodec(ctx context.Context, stream player.Stream) (s
 	if !strings.Contains(text, "#EXT-X-STREAM-INF") {
 		return "", nil
 	}
-	idx := strings.Index(text, "CODECS=")
-	if idx < 0 {
+	_, after, ok := strings.Cut(text, "CODECS=")
+	if !ok {
 		return "", nil
 	}
-	return text[idx:], nil
+	return after, nil
 }
 
 func isHEVC(codec string) bool { return regexp.MustCompile(`(?i)(hvc1|hev1|hevc)`).MatchString(codec) }

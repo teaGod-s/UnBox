@@ -37,7 +37,7 @@ func parseBiliComposite(raw string) (aid, cid string, qualities []string, ok boo
 	if !isDigits(aid) || !isDigits(cid) {
 		return "", "", nil, false
 	}
-	for _, q := range strings.Split(parts[2], ":") {
+	for q := range strings.SplitSeq(parts[2], ":") {
 		if q != "" {
 			qualities = append(qualities, q)
 		}

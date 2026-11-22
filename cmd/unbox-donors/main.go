@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
@@ -13,7 +14,7 @@ import (
 	"math"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -391,11 +392,11 @@ func normalizeDonorsWithDiagnostics(sponsors []rawSponsor, stderr io.Writer) []D
 		donors = append(donors, donor)
 	}
 
-	sort.SliceStable(donors, func(i, j int) bool {
-		if donors[i].Amount == donors[j].Amount {
-			return donors[i].Name < donors[j].Name
+	slices.SortStableFunc(donors, func(a, b Donor) int {
+		if a.Amount == b.Amount {
+			return cmp.Compare(a.Name, b.Name)
 		}
-		return donors[i].Amount > donors[j].Amount
+		return cmp.Compare(b.Amount, a.Amount)
 	})
 	return donors
 }

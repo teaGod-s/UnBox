@@ -1,13 +1,14 @@
 package crawler
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -465,7 +466,7 @@ func rewriteModule(vm *goja.Runtime, src, baseURL string) (string, error) {
 		if !addModuleEdit(&edits, idx[0], idx[1], "") {
 			continue
 		}
-		for _, item := range strings.Split(m[1], ",") {
+		for item := range strings.SplitSeq(m[1], ",") {
 			item = strings.TrimSpace(item)
 			if item == "" {
 				continue
@@ -478,7 +479,7 @@ func rewriteModule(vm *goja.Runtime, src, baseURL string) (string, error) {
 		}
 	}
 
-	sort.Slice(edits, func(i, j int) bool { return edits[i].start > edits[j].start })
+	slices.SortFunc(edits, func(a, b moduleEdit) int { return cmp.Compare(b.start, a.start) })
 	for _, e := range edits {
 		src = src[:e.start] + e.text + src[e.end:]
 	}

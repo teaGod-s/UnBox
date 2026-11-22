@@ -177,8 +177,8 @@ func decodeDataPlay(page string) string {
 		return raw
 	}
 	// base64 里 "http" 的前缀是 aHR0c；从它开始解，天然跳过 SXn 之类的混淆前缀。
-	if i := strings.Index(raw, "aHR0c"); i >= 0 {
-		raw = raw[i:]
+	if _, tail, ok := strings.Cut(raw, "aHR0c"); ok {
+		raw = "aHR0c" + tail
 	}
 	if u := decodeBase64(raw); strings.HasPrefix(u, "http") {
 		return u

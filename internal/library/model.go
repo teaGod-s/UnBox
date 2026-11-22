@@ -69,7 +69,7 @@ func displayName(path string) string {
 
 // asciiOnly 判断 s 是否只含 ASCII 字符。
 func asciiOnly(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] >= 0x80 {
 			return false
 		}

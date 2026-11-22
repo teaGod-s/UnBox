@@ -148,13 +148,11 @@ func (r *Resolver) Resolve(ctx context.Context, ref string) ([]*Config, error) {
 	sem := make(chan struct{}, resolveWorkerLimit)
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		sem <- struct{}{}
 		defer func() { <-sem }()
 		r.walk(ctx, ref, 0, "", st, sem, &wg)
-	}()
+	})
 	wg.Wait()
 
 	return st.finish(r.MaxDepth, ref)
@@ -262,11 +260,9 @@ func (r *Resolver) walk(ctx context.Context, ref string, depth int, sourceName s
 
 // spawn 为一个子节点起一个 goroutine，受 sem 与 wg 约束。
 func (r *Resolver) spawn(ctx context.Context, ref string, depth int, sourceName string, st *resolveState, sem chan struct{}, wg *sync.WaitGroup) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		sem <- struct{}{}
 		defer func() { <-sem }()
 		r.walk(ctx, ref, depth, sourceName, st, sem, wg)
-	}()
+	})
 }

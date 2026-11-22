@@ -255,8 +255,8 @@ func (e *XYQHikerEngine) Detail(ctx context.Context, id string) (Vod, error) {
 	// 4MB+ 直接超限报错），应直接作为可播放剧集返回。
 	if looksLikeMediaURL(id) || isDirectPlayOn(e.rule.DirectPlay) {
 		name := id
-		if i := strings.LastIndexByte(id, '/'); i >= 0 {
-			name = id[i+1:]
+		if _, after, ok := strings.CutLast(id, "/"); ok {
+			name = after
 		}
 		return Vod{
 			ID:       id,
@@ -393,12 +393,11 @@ func cipherCloudFrom(page string) string {
 // 结构，值可能带 \\/ 转义。定位 field\\":\\" 之后到下一个 \\" 为止。
 func macPlayerField(page, field string) string {
 	marker := `"` + field + `":"`
-	i := strings.Index(page, marker)
-	if i < 0 {
+	_, after, ok := strings.Cut(page, marker)
+	if !ok {
 		return ""
 	}
-	start := i + len(marker)
-	rest := page[start:minInt(len(page), start+1024)]
+	rest := after[:min(len(after), 1024)]
 	var b strings.Builder
 	for j := 0; j < len(rest); j++ {
 		if rest[j] == '"' {
@@ -420,26 +419,18 @@ func macPlayerField(page, field string) string {
 func macPlayerURL(page string) string {
 	// 先定位播放器变量整体（playerXXXX={"…" 到其后的 "url":"…"}），
 	// 避免误配普通 JSON。
-	i := strings.Index(page, `"url":"`)
-	if i < 0 {
+	_, rest, ok := strings.Cut(page, `"url":"`)
+	if !ok {
 		return ""
 	}
 	// 从该位置的 url 值里解码转义后再匹配媒体地址。
-	rest := page[i+len(`"url":"`) : minInt(len(page), i+len(`"url":"`)+2048)]
+	rest = rest[:min(len(rest), 2048)]
 	for _, esc := range []struct{ a, b string }{
 		{`\/`, "/"}, {`\"`, `"`}, {`\\`, `\`}, {`\n`, "\n"},
 	} {
 		rest = strings.ReplaceAll(rest, esc.a, esc.b)
 	}
 	return mediaURLRe.FindString(rest)
-}
-
-// minInt 返回两整数较小者（供 macPlayerURL 截断用）。
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // parseHTMLItems 解析一个 HTML 列表（分类首页与搜索共用）。
@@ -686,17 +677,15 @@ func xyqExpandURL(tpl, cat string, page int) string {
 func (e *XYQHikerEngine) resolveCategoryURL(cat string, page int) string {
 	tpl := e.rule.CategoryURL
 	firstURL := ""
-	if i := strings.Index(tpl, "[firstPage="); i >= 0 {
-		rest := tpl[i+len("[firstPage="):]
-		if j := strings.Index(rest, "]"); j >= 0 {
-			firstURL = strings.TrimSpace(rest[:j])
-			tpl = strings.TrimSpace(tpl[:i] + rest[j+1:])
+	if before, after, ok := strings.Cut(tpl, "[firstPage="); ok {
+		if head, tail, found := strings.Cut(after, "]"); found {
+			firstURL = strings.TrimSpace(head)
+			tpl = strings.TrimSpace(before + tail)
 		}
-	} else if i := strings.Index(tpl, "[firstPg="); i >= 0 {
-		rest := tpl[i+len("[firstPg="):]
-		if j := strings.Index(rest, "]"); j >= 0 {
-			firstURL = strings.TrimSpace(rest[:j])
-			tpl = strings.TrimSpace(tpl[:i] + rest[j+1:])
+	} else if before, after, ok := strings.Cut(tpl, "[firstPg="); ok {
+		if head, tail, found := strings.Cut(after, "]"); found {
+			firstURL = strings.TrimSpace(head)
+			tpl = strings.TrimSpace(before + tail)
 		}
 	}
 	if firstURL != "" && page <= 1 {

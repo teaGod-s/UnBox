@@ -104,11 +104,10 @@ func localPath(ref string) string {
 // ASCII 字母、ASCII 数字、加号、减号、点号。不符合规范的 ref 返回
 // ("", false) 以作为裸路径处理。
 func unsupportedScheme(ref string) (string, bool) {
-	i := strings.Index(ref, "://")
-	if i <= 0 {
+	scheme, _, ok := strings.Cut(ref, "://")
+	if !ok || scheme == "" {
 		return "", false
 	}
-	scheme := ref[:i]
 
 	// 验证 scheme 首字符必须是 ASCII 字母
 	if !isASCIILetter(scheme[0]) {

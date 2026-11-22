@@ -41,7 +41,7 @@ var jsoupKnownAttrs = map[string]bool{
 
 // stepIsExtract 判断整段（含 || 备选）是否为取值步。
 func stepIsExtract(step string) bool {
-	for _, alt := range strings.Split(step, "||") {
+	for alt := range strings.SplitSeq(step, "||") {
 		if isExtractAlt(strings.TrimSpace(alt)) {
 			return true
 		}
@@ -67,7 +67,7 @@ func jsoupSelectOn(base *goquery.Selection, rule string) *goquery.Selection {
 		return nil
 	}
 	nodes := base
-	for _, raw := range strings.Split(rule, "&&") {
+	for raw := range strings.SplitSeq(rule, "&&") {
 		step := strings.TrimSpace(raw)
 		if step == "" {
 			continue
@@ -149,7 +149,7 @@ func selfMatch(node *goquery.Selection, step string) *goquery.Selection {
 	if node == nil || node.Length() != 1 {
 		return nil
 	}
-	for _, a := range strings.Split(step, "||") {
+	for a := range strings.SplitSeq(step, "||") {
 		a = strings.TrimSpace(a)
 		if a == "" || isExtractAlt(a) {
 			continue
@@ -225,8 +225,8 @@ func jsoupStep(base *goquery.Selection, step string) (*goquery.Selection, []stri
 // isExtractAlt 判断单个备选（已按 || 拆开）是否为取值步。
 func isExtractAlt(alt string) bool {
 	head := alt
-	if i := strings.Index(alt, "!"); i >= 0 {
-		head = strings.TrimSpace(alt[:i])
+	if before, _, ok := strings.Cut(alt, "!"); ok {
+		head = strings.TrimSpace(before)
 	}
 	lower := strings.ToLower(head)
 	return lower == "text" || lower == "html" || lower == "owntext" ||
@@ -237,9 +237,9 @@ func isExtractAlt(alt string) bool {
 func applyExtract(base *goquery.Selection, alt string) []string {
 	prefix := ""
 	head := alt
-	if i := strings.Index(alt, "!"); i >= 0 {
-		head = strings.TrimSpace(alt[:i])
-		prefix = strings.TrimSpace(alt[i+1:])
+	if before, after, ok := strings.Cut(alt, "!"); ok {
+		head = strings.TrimSpace(before)
+		prefix = strings.TrimSpace(after)
 	}
 	var vals []string
 	lower := strings.ToLower(head)
@@ -374,12 +374,12 @@ func normalizeAttrInner(inner string) string {
 	// 找操作符（^= $= *= ~= |= =）。值部分可能为：(1) 带引号已合法；
 	// (2) 裸标识符/URL 片段含 # $ . / 等，需补引号。
 	for _, op := range []string{"^=", "$=", "*=", "~=", "|=", "="} {
-		pos := strings.Index(inner, op)
-		if pos < 0 {
+		name, val, found := strings.Cut(inner, op)
+		if !found {
 			continue
 		}
-		name := strings.TrimSpace(inner[:pos])
-		val := strings.TrimSpace(inner[pos+len(op):])
+		name = strings.TrimSpace(name)
+		val = strings.TrimSpace(val)
 		if val == "" {
 			return name + op + val
 		}

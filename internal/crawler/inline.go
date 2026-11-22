@@ -165,8 +165,8 @@ func setDetailField(detail *Detail, field, value string) {
 }
 
 func canonicalDetailField(expr string) string {
-	for _, part := range strings.Split(expr, "+") {
-		for _, candidate := range strings.Split(part, "||") {
+	for part := range strings.SplitSeq(expr, "+") {
+		for candidate := range strings.SplitSeq(part, "||") {
 			name := strings.ToLower(strings.TrimSpace(candidate))
 			switch name {
 			case "title", "name", "vod_name", "id", "url", "vod_id", "cover", "pic", "image", "vod_pic", "description", "desc", "content", "vod_content", "year", "vod_year", "area", "vod_area", "cat_name", "type_name", "type", "remarks", "remark", "vod_remarks", "play_from", "vod_play_from", "play_url", "vod_play_url":
@@ -185,7 +185,10 @@ func applyMubanDetail(rule *Rule, values map[string]any) {
 		if !strings.Contains(key, ".二级.") {
 			continue
 		}
-		field := key[strings.LastIndexByte(key, '.')+1:]
+		field := ""
+		if _, after, ok := strings.CutLast(key, "."); ok {
+			field = after
+		}
 		value := jsonScalarString(raw)
 		switch strings.ToLower(strings.TrimSpace(field)) {
 		case "title", "name":
@@ -339,11 +342,11 @@ func responseHead(raw string) string {
 // jsonParentExists 判断列表路径的上一级是否解析得出来。
 // 用来区分「规则路径写错」（上级也不存在）和「站点返回了空列表」（只有叶子缺失）。
 func jsonParentExists(document any, path string) bool {
-	index := strings.LastIndex(path, ".")
-	if index <= 0 {
+	before, _, ok := strings.CutLast(path, ".")
+	if !ok || before == "" {
 		return false
 	}
-	_, ok := navigateJSON(document, path[:index])
+	_, ok = navigateJSON(document, before)
 	return ok
 }
 
@@ -352,7 +355,7 @@ func navigateJSON(value any, path string) (any, bool) {
 	if path == "" {
 		return value, true
 	}
-	for _, segment := range strings.Split(path, ".") {
+	for segment := range strings.SplitSeq(path, ".") {
 		segment = strings.TrimSpace(segment)
 		if segment == "" {
 			continue
@@ -374,7 +377,7 @@ func evalJSONExpr(obj map[string]any, expr string) string {
 	var out strings.Builder
 	for _, part := range parts {
 		value := ""
-		for _, candidate := range strings.Split(part, "||") {
+		for candidate := range strings.SplitSeq(part, "||") {
 			if v, ok := navigateJSON(obj, strings.TrimSpace(candidate)); ok {
 				value = jsonScalarString(v)
 				if value != "" {
@@ -459,8 +462,8 @@ func setVodField(vod *Vod, field, value string) {
 }
 
 func canonicalVodField(expr string) string {
-	for _, part := range strings.Split(expr, "+") {
-		for _, candidate := range strings.Split(part, "||") {
+	for part := range strings.SplitSeq(expr, "+") {
+		for candidate := range strings.SplitSeq(part, "||") {
 			name := strings.ToLower(strings.TrimSpace(candidate))
 			switch name {
 			case "title", "name", "vod_name", "titletxt", "titlealias", "cover", "pic", "image", "vod_pic", "cover_pic", "coverpic", "id", "url", "vod_id", "cat_id", "en_id", "play_part_id", "playpartid", "vid", "description", "desc", "content", "vod_content", "cat_name", "type_name", "type", "remarks", "remark", "vod_remarks":
@@ -507,7 +510,10 @@ func applyMubanList(rule *Rule, kind string, values map[string]any) {
 	}
 	for key, raw := range values {
 		if strings.Contains(key, "."+kind+".") {
-			field := key[strings.LastIndexByte(key, '.')+1:]
+			field := ""
+			if _, after, ok := strings.CutLast(key, "."); ok {
+				field = after
+			}
 			applyMubanField(rule, field, raw)
 			continue
 		}

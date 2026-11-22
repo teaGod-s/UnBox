@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"mime"
 	"net"
 	"net/http"
@@ -377,14 +378,7 @@ func cloneStream(stream player.Stream) player.Stream {
 }
 
 func cloneStringMap(values map[string]string) map[string]string {
-	if values == nil {
-		return nil
-	}
-	clone := make(map[string]string, len(values))
-	for key, value := range values {
-		clone[key] = value
-	}
-	return clone
+	return maps.Clone(values)
 }
 
 func (p *Proxy) cleanupLocked(now time.Time) {

@@ -1029,9 +1029,7 @@ func collectChannels(ctx context.Context, lives []config.Live, progress func(don
 	var done atomic.Int64
 	var wg sync.WaitGroup
 	for i, lv := range jobs {
-		wg.Add(1)
-		go func(i int, lv config.Live) {
-			defer wg.Done()
+		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			if chs, err := live.FetchLive(ctx, lv, fetcher); err == nil {
@@ -1040,7 +1038,7 @@ func collectChannels(ctx context.Context, lives []config.Live, progress func(don
 			if progress != nil {
 				progress(int(done.Add(1)), len(jobs))
 			}
-		}(i, lv)
+		})
 	}
 	wg.Wait()
 
@@ -1542,16 +1540,14 @@ func (s *ShellService) vodSearchAll(q string, token uint64) ([]VodItem, error) {
 	var inflight atomic.Int64
 	var wg sync.WaitGroup
 	for _, p := range providers {
-		wg.Add(1)
-		go func(site string, pv provider.Provider) {
-			defer wg.Done()
+		wg.Go(func() {
 			// 站点脚本是远端不可信代码，一次 panic（如 goja 对对象调 String）
 			// 只能让该站点失败，不能让整个搜索/应用闪退。
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("全站搜索站点 %q 内部错误，已跳过: %v", site, r)
+					log.Printf("全站搜索站点 %q 内部错误，已跳过: %v", p.site, r)
 					n := int(done.Add(1))
-					s.emitSearchProgress(searchID, token, q, Progress{Stage: "search", Message: fmt.Sprintf("%d/%d · %s 异常跳过", n, total, displaySiteName(site)), Done: n, Total: total})
+					s.emitSearchProgress(searchID, token, q, Progress{Stage: "search", Message: fmt.Sprintf("%d/%d · %s 异常跳过", n, total, displaySiteName(p.site)), Done: n, Total: total})
 				}
 			}()
 			sem <- struct{}{}
@@ -1560,9 +1556,9 @@ func (s *ShellService) vodSearchAll(q string, token uint64) ([]VodItem, error) {
 				done.Add(1)
 				return
 			}
-			if s.searchSiteSkipped(site, time.Now()) { // 上次超时，短时内不再白等
+			if s.searchSiteSkipped(p.site, time.Now()) { // 上次超时，短时内不再白等
 				n := int(done.Add(1))
-				emitProgress(Progress{Stage: "search", Message: fmt.Sprintf("%d/%d · 跳过 %s（上次超时）", n, total, displaySiteName(site)), Done: n, Total: total})
+				emitProgress(Progress{Stage: "search", Message: fmt.Sprintf("%d/%d · 跳过 %s（上次超时）", n, total, displaySiteName(p.site)), Done: n, Total: total})
 				return
 			}
 			// 单站点超时：慢/死站点最多占一个线程 siteSearchTimeout，
@@ -1573,14 +1569,14 @@ func (s *ShellService) vodSearchAll(q string, token uint64) ([]VodItem, error) {
 			live := int(inflight.Add(1))
 			defer inflight.Add(-1)
 			n := int(done.Load())
-			emitProgress(Progress{Stage: "search", Message: fmt.Sprintf("%d/%d · %d 线程 · %s", n, total, live, displaySiteName(site)), Done: n, Total: total})
+			emitProgress(Progress{Stage: "search", Message: fmt.Sprintf("%d/%d · %d 线程 · %s", n, total, live, displaySiteName(p.site)), Done: n, Total: total})
 			startSearch := time.Now()
-			items, err := pv.Search(siteCtx, q)
+			items, err := p.pv.Search(siteCtx, q)
 			elapsed := time.Since(startSearch)
 			if err == nil {
 				v := toVodItems(items)
 				for i := range v {
-					v[i].Site = site
+					v[i].Site = p.site
 				}
 				mu.Lock()
 				out = append(out, v...)
@@ -1591,14 +1587,14 @@ func (s *ShellService) vodSearchAll(q string, token uint64) ([]VodItem, error) {
 			emitProgress(Progress{Stage: "search", Message: fmt.Sprintf("%d/%d · %d 线程", finished, total, live), Done: finished, Total: total})
 			// 慢站点记日志：全站搜索的耗时基本都在这几台上。
 			if elapsed > 2*time.Second {
-				log.Printf("全站搜索站点 %q 耗时 %s（结果 %d 条）", site, elapsed.Round(time.Millisecond), len(items))
+				log.Printf("全站搜索站点 %q 耗时 %s（结果 %d 条）", p.site, elapsed.Round(time.Millisecond), len(items))
 			}
 			// 吃满超时的站点短时列入跳过名单：下一次全站搜索不再为它白等。
 			if elapsed >= siteSearchTimeout {
-				s.markSearchSiteDead(site, time.Now().Add(searchDeadSkipFor))
-				log.Printf("全站搜索站点 %q 达到超时上限，%s 内跳过该站点", site, searchDeadSkipFor)
+				s.markSearchSiteDead(p.site, time.Now().Add(searchDeadSkipFor))
+				log.Printf("全站搜索站点 %q 达到超时上限，%s 内跳过该站点", p.site, searchDeadSkipFor)
 			}
-		}(p.site, p.pv)
+		})
 	}
 	wg.Wait()
 	// 名单落盘：应用重启后第一次全站搜索也能直接跳过这批死站点。
@@ -1831,11 +1827,11 @@ func latestReleaseByRedirect(client *http.Client, pageURL string) (tag, htmlURL 
 	}
 	final := resp.Request.URL
 	const marker = "/releases/tag/"
-	index := strings.Index(final.Path, marker)
-	if index < 0 {
+	_, tail, ok := strings.Cut(final.Path, marker)
+	if !ok {
 		return "", "", false, nil
 	}
-	tag = strings.TrimSuffix(final.Path[index+len(marker):], "/")
+	tag = strings.TrimSuffix(tail, "/")
 	if tag == "" {
 		return "", "", false, nil
 	}
@@ -1888,7 +1884,7 @@ func compareVersion(a, b string) int {
 	}
 	as := strings.Split(trim(a), ".")
 	bs := strings.Split(trim(b), ".")
-	for i := 0; i < len(as) && i < len(bs); i++ {
+	for i := range min(len(as), len(bs)) {
 		ai, _ := strconv.Atoi(as[i])
 		bi, _ := strconv.Atoi(bs[i])
 		if ai != bi {

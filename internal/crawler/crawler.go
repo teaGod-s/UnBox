@@ -133,8 +133,8 @@ func normalizeModuleSource(src string) string {
 	// 无法靠正则区分。真实爬虫若在字符串里含 "await "，需升级到 goja 原生
 	// Promise 处理（M5.1 真实爬虫验收时校准）。
 	src = stripAsyncAwait(src)
-	if index := strings.LastIndex(src, "export default"); index >= 0 {
-		src = src[:index] + "var __crawler_exports = " + src[index+len("export default"):]
+	if before, after, ok := strings.CutLast(src, "export default"); ok {
+		src = before + "var __crawler_exports = " + after
 	}
 	return src
 }

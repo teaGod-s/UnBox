@@ -60,8 +60,8 @@ func normalizeHost(host string) string {
 	if h == "" {
 		return ""
 	}
-	if i := strings.LastIndex(h, ":"); i > 0 && !strings.Contains(h[i+1:], "]") {
-		h = h[:i]
+	if before, after, ok := strings.CutLast(h, ":"); ok && before != "" && !strings.Contains(after, "]") {
+		h = before
 	}
 	return strings.Trim(h, "[]")
 }
@@ -91,7 +91,7 @@ func NewClient(timeout time.Duration) *http.Client {
 // Do 执行请求；遇到瞬时网络错误时重试一次。
 func Do(client *http.Client, req *http.Request) (*http.Response, error) {
 	var lastErr error
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		attemptReq, err := requestForAttempt(req, attempt)
 		if err != nil {
 			return nil, lastErr
@@ -122,7 +122,7 @@ func Do(client *http.Client, req *http.Request) (*http.Response, error) {
 // ErrBodyTooLarge（不重试）。
 func DoReadAll(client *http.Client, req *http.Request, limit int64) (*http.Response, []byte, error) {
 	var lastErr error
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		attemptReq, err := requestForAttempt(req, attempt)
 		if err != nil {
 			return nil, nil, lastErr
@@ -232,8 +232,7 @@ func IsTransient(err error) bool {
 	if err == nil {
 		return false
 	}
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
+	if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
 		return true
 	}
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
@@ -261,20 +260,17 @@ func isCertificateError(err error) bool {
 	if err == nil {
 		return false
 	}
-	var verifyErr *tls.CertificateVerificationError
-	if errors.As(err, &verifyErr) {
+	if _, ok := errors.AsType[*tls.CertificateVerificationError](err); ok {
 		return true
 	}
-	var unknown x509.UnknownAuthorityError
-	if errors.As(err, &unknown) {
+	if _, ok := errors.AsType[x509.UnknownAuthorityError](err); ok {
 		return true
 	}
-	var hostname x509.HostnameError
-	if errors.As(err, &hostname) {
+	if _, ok := errors.AsType[x509.HostnameError](err); ok {
 		return true
 	}
-	var invalid x509.CertificateInvalidError
-	return errors.As(err, &invalid)
+	_, ok := errors.AsType[x509.CertificateInvalidError](err)
+	return ok
 }
 
 // insecureClient 复制客户端并把证书校验关掉，仅用于用户显式许可的主机。

@@ -1,9 +1,10 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/unbox/unbox/internal/config"
@@ -75,11 +76,11 @@ func (r Report) Text() string {
 		for k := range r.ByKind {
 			kinds = append(kinds, k)
 		}
-		sort.Slice(kinds, func(i, j int) bool {
-			if r.ByKind[kinds[i]] != r.ByKind[kinds[j]] {
-				return r.ByKind[kinds[i]] > r.ByKind[kinds[j]]
+		slices.SortFunc(kinds, func(a, b string) int {
+			if r.ByKind[a] != r.ByKind[b] {
+				return cmp.Compare(r.ByKind[b], r.ByKind[a])
 			}
-			return kinds[i] < kinds[j]
+			return cmp.Compare(a, b)
 		})
 		b.WriteString("按类型\n")
 		for _, k := range kinds {

@@ -3,11 +3,12 @@
 package probe
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -83,15 +84,17 @@ func (p *Prober) Rank(ctx context.Context, urls []string, headers map[string]str
 	for i, u := range urls {
 		items[i] = scored{url: u, res: p.Probe(ctx, u, headers)}
 	}
-	sort.SliceStable(items, func(i, j int) bool {
-		ri, rj := items[i].res, items[j].res
-		if ri.Reachable != rj.Reachable {
-			return ri.Reachable
+	slices.SortStableFunc(items, func(a, b scored) int {
+		if a.res.Reachable != b.res.Reachable {
+			if a.res.Reachable {
+				return -1
+			}
+			return 1
 		}
-		if ri.Speed != rj.Speed {
-			return ri.Speed > rj.Speed
+		if a.res.Speed != b.res.Speed {
+			return cmp.Compare(b.res.Speed, a.res.Speed)
 		}
-		return ri.Latency < rj.Latency
+		return cmp.Compare(a.res.Latency, b.res.Latency)
 	})
 	out := make([]string, len(items))
 	for i, it := range items {

@@ -52,9 +52,9 @@ func parseExtinf(line string) Entry {
 	var e Entry
 	rest := strings.TrimPrefix(line, "#EXTINF")
 	// 去掉时长字段（到第一个逗号为止），剩余是属性段
-	if i := strings.Index(rest, ","); i >= 0 {
-		e.Name = strings.TrimSpace(rest[i+1:])
-		rest = rest[:i]
+	if before, after, ok := strings.Cut(rest, ","); ok {
+		e.Name = strings.TrimSpace(after)
+		rest = before
 	}
 	e.ID = attr(rest, "tvg-id")
 	e.Logo = attr(rest, "tvg-logo")
@@ -65,16 +65,15 @@ func parseExtinf(line string) Entry {
 // attr 从 `key="value"` 形式的属性串中取值；不存在返回 ""。
 func attr(s, key string) string {
 	needle := key + "="
-	i := strings.Index(s, needle)
-	if i < 0 {
+	_, s, found := strings.Cut(s, needle)
+	if !found {
 		return ""
 	}
-	s = s[i+len(needle):]
 	s = strings.TrimLeft(s, " \t")
 	if strings.HasPrefix(s, `"`) {
 		s = strings.TrimPrefix(s, `"`)
-		if j := strings.Index(s, `"`); j >= 0 {
-			return s[:j]
+		if before, _, ok := strings.Cut(s, `"`); ok {
+			return before
 		}
 	}
 	if j := strings.IndexAny(s, " \t"); j >= 0 {
@@ -111,11 +110,11 @@ func ParseTXT(raw []byte) []Entry {
 
 // hasURLScheme 判断地址是否带协议头（http://、rtmp://、udp:// 等）。
 func hasURLScheme(raw string) bool {
-	idx := strings.Index(raw, "://")
-	if idx <= 0 {
+	scheme, _, ok := strings.Cut(raw, "://")
+	if !ok || scheme == "" {
 		return false
 	}
-	for i, r := range raw[:idx] {
+	for i, r := range scheme {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
 		case (r >= '0' && r <= '9' || r == '+' || r == '-' || r == '.') && i > 0:

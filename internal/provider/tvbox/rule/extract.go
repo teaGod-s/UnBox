@@ -17,24 +17,23 @@ func Cut(s, spec string) string {
 	}
 	prefix, suffix, ok := strings.Cut(spec, "&&")
 	if !ok {
-		if i := strings.Index(s, prefix); i >= 0 {
-			return strings.TrimSpace(s[i+len(prefix):])
+		if _, after, found := strings.Cut(s, prefix); found {
+			return strings.TrimSpace(after)
 		}
 		return ""
 	}
-	i := strings.Index(s, prefix)
-	if i < 0 {
+	_, rest, found := strings.Cut(s, prefix)
+	if !found {
 		return ""
 	}
-	rest := s[i+len(prefix):]
 	if suffix == "" {
 		return strings.TrimSpace(rest)
 	}
-	j := strings.Index(rest, suffix)
-	if j < 0 {
+	before, _, found := strings.Cut(rest, suffix)
+	if !found {
 		return ""
 	}
-	return strings.TrimSpace(rest[:j])
+	return strings.TrimSpace(before)
 }
 
 // CutList 按 "A&&B" 数组规则切分：以 A 分段，每段截到 B。
@@ -54,8 +53,8 @@ func CutList(s, spec string) []string {
 	out := make([]string, 0, len(parts)-1)
 	for _, p := range parts[1:] {
 		if suffix != "" {
-			if j := strings.Index(p, suffix); j >= 0 {
-				p = p[:j]
+			if before, _, found := strings.Cut(p, suffix); found {
+				p = before
 			}
 		}
 		if p = strings.TrimSpace(p); p != "" {

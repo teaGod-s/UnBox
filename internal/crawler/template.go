@@ -310,8 +310,8 @@ func (e *Engine) VodDetail(id string) (*Detail, error) {
 // 拆不开就会把「分类+id 粘在一起」的串填进 ?id=，站点直接拒绝。
 // 没有 "$" 时退回规则里的首个分类，保持既有行为。
 func splitDetailID(id string, rule *Rule) (fyclass, detailID string) {
-	if i := strings.Index(id, "$"); i >= 0 {
-		return id[:i], id[i+1:]
+	if before, after, ok := strings.Cut(id, "$"); ok {
+		return before, after
 	}
 	return detailCategoryID(rule), id
 }
@@ -320,7 +320,7 @@ func detailCategoryID(rule *Rule) string {
 	if rule == nil {
 		return ""
 	}
-	for _, id := range strings.Split(rule.ClassURL, "&") {
+	for id := range strings.SplitSeq(rule.ClassURL, "&") {
 		if id = strings.TrimSpace(id); id != "" {
 			return id
 		}
@@ -640,9 +640,9 @@ func decodeHostEscapes(raw string) (string, error) {
 	// 拆 scheme://authority
 	rest := raw
 	scheme := ""
-	if i := strings.Index(raw, "://"); i >= 0 {
-		scheme = raw[:i+3]
-		rest = raw[i+3:]
+	if prefix, suffix, ok := strings.Cut(raw, "://"); ok {
+		scheme = prefix + "://"
+		rest = suffix
 	}
 	authorityEnd := strings.IndexAny(rest, "/?#")
 	authority := rest

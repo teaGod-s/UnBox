@@ -93,18 +93,18 @@ func normalizeTLSHost(raw string) string {
 	if host == "" {
 		return ""
 	}
-	if i := strings.Index(host, "://"); i >= 0 {
-		host = host[i+3:]
+	if _, after, ok := strings.Cut(host, "://"); ok {
+		host = after
 	}
 	if i := strings.IndexAny(host, "/?#"); i >= 0 {
 		host = host[:i]
 	}
 	if strings.HasPrefix(host, "[") {
-		if i := strings.Index(host, "]"); i >= 0 {
-			host = host[:i+1]
+		if before, _, ok := strings.Cut(host, "]"); ok {
+			host = before + "]"
 		}
-	} else if i := strings.LastIndex(host, ":"); i > 0 {
-		host = host[:i]
+	} else if before, _, ok := strings.CutLast(host, ":"); ok && before != "" {
+		host = before
 	}
 	return strings.Trim(host, "[]")
 }

@@ -207,11 +207,12 @@ func xpathAttrPredicate(pred string) string {
 // xpathSplitAttr 拆 "@name" 与 "@name='v'"。
 func xpathSplitAttr(raw string) (name, val string, hasVal bool) {
 	raw = strings.TrimSpace(raw)
-	if q := strings.IndexByte(raw, '='); q >= 0 {
-		name = strings.TrimSpace(raw[:q])
-		v := strings.TrimSpace(raw[q+1:])
-		v = strings.Trim(v, `'"`)
-		return name, v, true
+	name, val, ok := strings.Cut(raw, "=")
+	if ok {
+		name = strings.TrimSpace(name)
+		val = strings.TrimSpace(val)
+		val = strings.Trim(val, `'"`)
+		return name, val, true
 	}
 	return raw, "", false
 }

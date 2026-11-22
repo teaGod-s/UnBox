@@ -32,8 +32,8 @@ func describeExit(code int) string {
 // mpvExitError 把「进程提前退出」转成可读错误。取不到退出码（例如被信号终止）
 // 时退回不带码的通用说明，仍保持 errors.Is 可判定。
 func mpvExitError(waitErr error) error {
-	var exitErr *exec.ExitError
-	if !errors.As(waitErr, &exitErr) {
+	exitErr, ok := errors.AsType[*exec.ExitError](waitErr)
+	if !ok {
 		return errMPVExitedEarly
 	}
 	return fmt.Errorf("%w（%s）", errMPVExitedEarly, describeExit(exitErr.ExitCode()))

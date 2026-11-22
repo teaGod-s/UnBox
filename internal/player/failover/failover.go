@@ -29,19 +29,27 @@ type Player struct {
 	candidates []string      // 当前会话候选（主源在前）
 	stream     player.Stream // 当前会话原始流（含 Headers/Kind）
 	index      int           // 当前已加载候选下标
-	closeOnce  sync.Once
-	closeErr   error
+	closeOnce  func() error  // 用 OnceValue 初始化：首次 Close 执行，之后幂等
 }
 
 // New 返回自动切换包装器，并启动单一事件循环。prober 为 nil 时按原始顺序切换。
 func New(inner player.Player, prober *probe.Prober) player.Player {
 	p := &Player{
-		inner:    inner,
-		prober:   prober,
-		done:     make(chan struct{}),
-		loopDone: make(chan struct{}),
-		events:   make(chan player.Event, 64),
+		inner:  inner,
+		prober: prober,
+		done:   make(chan struct{}),
+		events: make(chan player.Event, 64),
 	}
+	p.loopDone = make(chan struct{})
+	p.closeOnce = sync.OnceValue(func() error {
+		close(p.done)
+		err := p.inner.Close()
+		select {
+		case <-p.loopDone:
+		case <-time.After(loopExitTimeout):
+		}
+		return err
+	})
 	go p.loop()
 	return p
 }
@@ -137,13 +145,5 @@ func (p *Player) SelectTrack(k player.TrackKind, id int) error {
 func (p *Player) State() player.State         { return p.inner.State() }
 func (p *Player) Events() <-chan player.Event { return p.events }
 func (p *Player) Close() error {
-	p.closeOnce.Do(func() {
-		close(p.done)
-		p.closeErr = p.inner.Close()
-		select {
-		case <-p.loopDone:
-		case <-time.After(loopExitTimeout):
-		}
-	})
-	return p.closeErr
+	return p.closeOnce()
 }

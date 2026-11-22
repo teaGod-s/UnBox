@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -8,7 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -199,11 +200,11 @@ func decodeDonationEntry(data []byte) (donationCacheEntry, error) {
 
 func donationLeaderboardFromCache(entry donationCacheEntry) DonationLeaderboard {
 	donors := append([]donationDonor(nil), entry.Donors...)
-	sort.SliceStable(donors, func(i, j int) bool {
-		if donors[i].Amount != donors[j].Amount {
-			return donors[i].Amount > donors[j].Amount
+	slices.SortStableFunc(donors, func(a, b donationDonor) int {
+		if a.Amount != b.Amount {
+			return cmp.Compare(b.Amount, a.Amount)
 		}
-		return donors[i].Name < donors[j].Name
+		return cmp.Compare(a.Name, b.Name)
 	})
 
 	out := make([]DonorInfo, len(donors))

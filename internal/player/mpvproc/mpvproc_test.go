@@ -149,11 +149,12 @@ func TestWaitMediaReadyWaitsForSignal(t *testing.T) {
 	p := &mpvProc{}
 	p.lifecycleMu.Lock()
 	p.ready = make(chan struct{})
+	p.loadFailed = make(chan struct{})
 	p.lifecycleMu.Unlock()
 
 	done := make(chan struct{})
 	go func() {
-		p.waitMediaReady()
+		p.waitMediaReady() // 返回 nil
 		close(done)
 	}()
 
@@ -180,11 +181,12 @@ func TestWaitMediaReadyReturnsWhenAlreadyReady(t *testing.T) {
 	p.lifecycleMu.Lock()
 	p.ready = make(chan struct{})
 	close(p.ready)
+	p.loadFailed = make(chan struct{})
 	p.lifecycleMu.Unlock()
 
 	done := make(chan struct{})
 	go func() {
-		p.waitMediaReady()
+		p.waitMediaReady() // 返回 nil
 		close(done)
 	}()
 	select {
@@ -194,7 +196,8 @@ func TestWaitMediaReadyReturnsWhenAlreadyReady(t *testing.T) {
 	}
 }
 
-// waitMediaReady 测试：死源等不到就绪时，到上限照常放行（交给 send 如实报错）。
+// waitMediaReady 测试：死源等不到就绪也不报失败时，到上限照常放行
+// （交给 send 如实报错）。
 func TestWaitMediaReadyTimesOut(t *testing.T) {
 	old := seekReadyTimeout
 	seekReadyTimeout = 20 * time.Millisecond
@@ -203,17 +206,69 @@ func TestWaitMediaReadyTimesOut(t *testing.T) {
 	p := &mpvProc{}
 	p.lifecycleMu.Lock()
 	p.ready = make(chan struct{})
+	p.loadFailed = make(chan struct{})
 	p.lifecycleMu.Unlock()
 
 	done := make(chan struct{})
 	go func() {
-		p.waitMediaReady()
+		p.waitMediaReady() // 超时放行，返回 nil
 		close(done)
 	}()
 	select {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("等不到就绪时应超时放行")
+	}
+}
+
+// waitMediaReady 测试：媒体加载失败（end-file error → loadFailed 关闭）时
+// 返回明确错误，seek 不再发注定被拒的命令。
+func TestWaitMediaReadyReturnsErrorOnLoadFailed(t *testing.T) {
+	p := &mpvProc{}
+	p.lifecycleMu.Lock()
+	p.ready = make(chan struct{})
+	p.loadFailed = make(chan struct{})
+	p.lifecycleMu.Unlock()
+
+	evt := make(chan error, 1)
+	go func() {
+		evt <- p.waitMediaReady()
+	}()
+
+	// 未失败未就绪：应还在等。
+	select {
+	case <-evt:
+		t.Fatal("加载尚未失败时 waitMediaReady 不应返回")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	p.lifecycleMu.Lock()
+	close(p.loadFailed)
+	p.lifecycleMu.Unlock()
+
+	select {
+	case err := <-evt:
+		if err == nil || !strings.Contains(err.Error(), "加载失败") {
+			t.Fatalf("加载失败后应返回加载错误，got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("加载失败信号后 waitMediaReady 未返回")
+	}
+}
+
+// waitMediaReady 测试：ready 与 loadFailed 都关闭时，就绪优先——一旦媒体加载
+// 成功过，后续 seek 永远放行，不被播放中途的 end-file(error) 误伤。
+func TestWaitMediaReadyPrefersReadyOverLateFailure(t *testing.T) {
+	p := &mpvProc{}
+	p.lifecycleMu.Lock()
+	p.ready = make(chan struct{})
+	close(p.ready)
+	p.loadFailed = make(chan struct{})
+	close(p.loadFailed)
+	p.lifecycleMu.Unlock()
+
+	if err := p.waitMediaReady(); err != nil {
+		t.Fatalf("就绪后应放行且不报失败，got %v", err)
 	}
 }
 
@@ -228,6 +283,7 @@ func TestSeekWaitsForMediaReadyViaReadLoop(t *testing.T) {
 	p.lifecycleMu.Lock()
 	p.ready = make(chan struct{})
 	ready := p.ready
+	p.loadFailed = make(chan struct{})
 	p.lifecycleMu.Unlock()
 
 	// 先备好成功应答，再放行 seek：避免 send 等 15s 应答超时拖慢测试。
@@ -263,6 +319,45 @@ func TestSeekWaitsForMediaReadyViaReadLoop(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+// Seek 测试：媒体加载失败时 seek 直接返回加载错误，不写命令。
+func TestSeekReturnsErrorOnLoadFailed(t *testing.T) {
+	p := &mpvProc{
+		conn:      &recordingConn{writes: make(chan string, 16)},
+		responses: make(chan response, 16),
+		events:    make(chan player.Event, 64),
+		session:   1,
+	}
+	p.lifecycleMu.Lock()
+	p.ready = make(chan struct{})
+	p.loadFailed = make(chan struct{})
+	p.lifecycleMu.Unlock()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- p.Seek(30)
+	}()
+
+	// 加载失败信号到达 → seek 应返回加载错误且从未写命令。
+	p.lifecycleMu.Lock()
+	close(p.loadFailed)
+	p.lifecycleMu.Unlock()
+
+	select {
+	case err := <-errCh:
+		if err == nil || !strings.Contains(err.Error(), "加载失败") {
+			t.Fatalf("加载失败后 Seek 应返回加载错误，got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("加载失败后 Seek 未返回")
+	}
+
+	select {
+	case w := <-p.conn.(*recordingConn).writes:
+		t.Fatalf("加载失败后不应写入 seek 命令，got %q", w)
+	default:
+	}
 }
 
 // recordingConn 记录写入的命令行；读取立即 EOF，供 seek 走到 send 后不挂死。

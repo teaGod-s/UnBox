@@ -33,10 +33,12 @@ const ipcConnectTimeout = 5 * time.Second
 var cmdResponseTimeout = 15 * time.Second
 
 // seekReadyTimeout 是首次 seek 等待 mpv 媒体就绪（file-loaded）的上限。
-// mpv 在文件加载完成前执行 seek 会回 error running command（WSL/慢源常见），
-// 就绪后立即发。死源/加载失败等不到就绪时，到上限照发 seek，不做无限等待。
-// 用 var 而非 const，便于测试缩短等待验证超时兜底。
-var seekReadyTimeout = 5 * time.Second
+// mpv 在文件加载完成前执行 seek 会回 error running command（WSL/慢源常见）。
+// 正常慢源会在该时间内发出 file-loaded；加载失败会经 loadFailed 更早打断，
+// 这个兜底只防「既不成功也不报失败」的异常滞留。设到 mpv 的
+// --network-timeout（15s）之上，保证能等到慢源的 file-loaded。
+// 用 var 而非 const，便于测试缩短等待验证各分支。
+var seekReadyTimeout = 20 * time.Second
 
 // response 是 readLoop 路由给 send 的一条命令应答，携带会话代际，
 // 供 send 丢弃跨会话串味的迟到应答。
@@ -66,6 +68,11 @@ type mpvProc struct {
 	// 此后 seek 等依赖媒体的命令才被接受。由 lifecycleMu 守护：
 	// Load 每建新会话就重建，旧会话迟到的 file-loaded 关的是旧的 channel。
 	ready chan struct{}
+
+	// loadFailed 是媒体加载失败信号：mpv 回 end-file(reason=error) 后关闭。
+	// Seek 等就绪时若先收到失败，直接返回明确错误，不再发注定被拒的 seek；
+	// 与 ready 同生命周期（每次 Load 重建）。
+	loadFailed chan struct{}
 
 	stateMu sync.Mutex
 	state   player.State
@@ -147,13 +154,15 @@ func (p *mpvProc) Load(ctx context.Context, s player.Stream) error {
 	// 不能让新会话直接跳过等待（新 URL 还没加载完成时 seek 会被 mpv 拒绝）。
 	p.ready = make(chan struct{})
 	ready := p.ready
+	p.loadFailed = make(chan struct{})
+	loadFailed := p.loadFailed
 	p.lifecycleMu.Unlock()
 	p.stateMu.Lock()
 	p.state = player.State{Playing: player.StatePlaying, Duration: -1, Volume: 80}
 	p.paused = false
 	p.stateMu.Unlock()
 
-	go p.readLoop(conn, sess, ready)
+	go p.readLoop(conn, sess, ready, loadFailed)
 
 	// 观察位置、缓存暂停状态与用户暂停。观察失败不影响播放，故忽略错误。
 	// pause 只用来屏蔽暂停期间的缓存事件，不会自己映射成缓冲信号。
@@ -250,26 +259,44 @@ func (p *mpvProc) Play() error  { return p.send("set_property", "pause", false) 
 func (p *mpvProc) Pause() error { return p.send("set_property", "pause", true) }
 
 // Seek 跳转到指定秒。首次 seek（断点续播、跳片头片尾）在 mpv 媒体未就绪时
-// 会被拒（error running command），这里先等 file-loaded 信号再发命令；
-// 等不到就绪（死源/加载失败）时到 seekReadyTimeout 上限照发，交由 mpv 应答
-// 如实反馈，不静默吞错误。
+// 会被拒（error running command），这里先等媒体加载结果：
+//   - file-loaded（成功）→ 立即发 seek，位置正确恢复；
+//   - end-file(reason=error)（媒体加载失败）→ 返回明确错误，
+//     不再发一条注定被拒的 seek；
+//   - seekReadyTimeout 兜底（异常滞留）→ 照发，交由 mpv 应答如实反馈。
 func (p *mpvProc) Seek(sec float64) error {
-	p.waitMediaReady()
+	if err := p.waitMediaReady(); err != nil {
+		return err
+	}
 	return p.send("seek", sec, "absolute")
 }
 
-// waitMediaReady 等本会话 mpv 媒体就绪（ready 关闭）。无会话（未 Load）时
-// 直接放行，让 send 自己报「尚未 Load」；已就绪时立即返回。
-func (p *mpvProc) waitMediaReady() {
+// waitMediaReady 等本会话 mpv 媒体加载结果。无会话（未 Load）时放行，由
+// send 报「尚未 Load」；已就绪立即返回 nil；加载失败返回加载错误。
+func (p *mpvProc) waitMediaReady() error {
 	p.lifecycleMu.Lock()
 	ready := p.ready
+	loadFailed := p.loadFailed
 	p.lifecycleMu.Unlock()
 	if ready == nil {
-		return
+		return nil
 	}
+
+	// 已就绪优先：ready 一旦关闭就永远视为就绪，即使之后播放中途再出现
+	// end-file(error)（loadFailed 关闭）也不影响此刻放行 seek。
 	select {
 	case <-ready:
+		return nil
+	default:
+	}
+
+	select {
+	case <-ready:
+		return nil
+	case <-loadFailed:
+		return errors.New("mpv 媒体加载失败，无法定位续播位置")
 	case <-time.After(seekReadyTimeout):
+		return nil
 	}
 }
 func (p *mpvProc) SetVolume(v int) error {
@@ -405,9 +432,9 @@ func (p *mpvProc) send(args ...any) error {
 // readLoop 是连接上唯一的读取者。mpv 连接建立后不会主动发握手行，命令
 // 应答与异步事件在同一流上交错，必须由单一 reader 分路，否则多个带预读
 // 的 reader（bufio.Reader/Scanner）会互相抢字节。
-// conn/sess/ready 由 Load 传入并固定：每条命令应答都标上本会话代际，
-// 媒体就绪事件只关本会话的 ready channel（避免误关新会话）。
-func (p *mpvProc) readLoop(conn io.ReadWriteCloser, sess int64, ready chan struct{}) {
+// conn/sess/ready/loadFailed 由 Load 传入并固定：每条命令应答都标上本会话代际，
+// 媒体就绪/失败事件只关本会话的对应 channel（避免误关新会话）。
+func (p *mpvProc) readLoop(conn io.ReadWriteCloser, sess int64, ready, loadFailed chan struct{}) {
 	sc := bufio.NewScanner(conn)
 	// 单行可能较长（如音轨/字幕列表），给足缓冲：起始 64KB、上限 1MB，
 	// 避免 ReadBytes 默认 4096B 缓冲触顶误杀读循环。
@@ -426,6 +453,21 @@ func (p *mpvProc) readLoop(conn io.ReadWriteCloser, sess int64, ready chan struc
 				case <-ready:
 				default:
 					close(ready)
+				}
+			}
+			// 媒体加载失败（end-file + error 原因）：seek 等就绪的调用方
+			// 据此返回明确错误，而不是等超时后发一条注定被拒的 seek。
+			if probe.Event == "end-file" {
+				var ef struct {
+					Reason string `json:"reason"`
+				}
+				_ = json.Unmarshal(line, &ef)
+				if ef.Reason == "error" {
+					select {
+					case <-loadFailed:
+					default:
+						close(loadFailed)
+					}
 				}
 			}
 			if paused, ok := parsePauseProperty(line); ok {
